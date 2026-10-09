@@ -1,0 +1,198 @@
+/* Custom styles & Print styles for POS */
+
+:root {
+  --primary-color: #2563eb;
+  --primary-dark: #1d4ed8;
+  --success-color: #10b981;
+  --accent-color: #f59e0b;
+}
+
+body {
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Product Card animations */
+.product-card {
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+.product-card:active {
+  transform: scale(0.98);
+}
+
+/* Cart item transition */
+.cart-item {
+  animation: fadeIn 0.2s ease-in-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Modal animation */
+.modal-enter {
+  animation: modalScale 0.2s ease-out forwards;
+}
+@keyframes modalScale {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Mobile Cart Drawer */
+@media (max-width: 1023px) {
+  #posCartPanel {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 440px;
+    z-index: 45;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  #posCartPanel.drawer-open {
+    transform: translateX(0);
+  }
+  #mobileCartBackdrop.drawer-open {
+    display: block;
+  }
+}
+
+/* Fast Key badge */
+.kbd-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  color: #64748b;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.25rem;
+  box-shadow: 0 1px 0 #94a3b8;
+}
+
+/* ============================================================
+   THERMAL RECEIPT PRINT STYLES (80mm / 58mm POS standard)
+   ============================================================ */
+#printable-receipt {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+
+  #printable-receipt {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    margin: 0;
+    padding: 8mm 4mm;
+    background: #fff;
+    color: #000;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  .receipt-title {
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .receipt-header {
+    text-align: center;
+    font-size: 11px;
+    margin-bottom: 10px;
+    border-bottom: 1px dashed #000;
+    padding-bottom: 8px;
+  }
+
+  .receipt-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+  }
+
+  .receipt-table th {
+    border-bottom: 1px dashed #000;
+    text-align: left;
+    padding: 4px 0;
+    font-size: 11px;
+  }
+
+  .receipt-table td {
+    padding: 3px 0;
+    font-size: 11px;
+    vertical-align: top;
+  }
+
+  .receipt-divider {
+    border-bottom: 1px dashed #000;
+    margin: 6px 0;
+  }
+
+  .receipt-summary {
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .receipt-summary td {
+    padding: 2px 0;
+    font-size: 12px;
+  }
+
+  .receipt-total {
+    font-size: 15px;
+    font-weight: bold;
+    border-top: 1px dashed #000;
+    border-bottom: 1px dashed #000;
+    padding: 6px 0;
+  }
+
+  .receipt-footer {
+    text-align: center;
+    font-size: 11px;
+    margin-top: 12px;
+    padding-top: 6px;
+  }
+}
