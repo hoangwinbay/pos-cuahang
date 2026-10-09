@@ -10,7 +10,8 @@ const PORT = process.env.PORT || 3000;
 const AUTH_SECRET = 'pos_secret_key_' + (process.env.AUTH_SECRET || 'antigravity_pos_2026');
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // -------------------------------------------------------------
@@ -359,7 +360,7 @@ app.post('/api/products', requireAdmin, (req, res) => {
       name.trim(),
       category_id || null,
       Number(price) || 0,
-      image || '☕'
+      image || ''
     );
 
     const newProd = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
@@ -375,22 +376,24 @@ app.put('/api/products/:id', requireAdmin, (req, res) => {
     const { name, category_id, price, image } = req.body;
     const prodId = req.params.id;
 
+    const existing = db.prepare('SELECT * FROM products WHERE id = ?').get(prodId);
+    if (!existing) return res.status(404).json({ error: 'Không tìm thấy món ăn' });
+
+    const newName = name !== undefined ? name.trim() : existing.name;
+    const newCat = category_id !== undefined ? (category_id || null) : existing.category_id;
+    const newPrice = price !== undefined ? Number(price) : existing.price;
+    const newImage = image !== undefined ? image : existing.image;
+
     const stmt = db.prepare(`
       UPDATE products SET
-        name = COALESCE(?, name),
+        name = ?,
         category_id = ?,
-        price = COALESCE(?, price),
-        image = COALESCE(?, image)
+        price = ?,
+        image = ?
       WHERE id = ?
     `);
 
-    stmt.run(
-      name ? name.trim() : null,
-      category_id || null,
-      price !== undefined ? Number(price) : null,
-      image || null,
-      prodId
-    );
+    stmt.run(newName, newCat, newPrice, newImage, prodId);
 
     const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(prodId);
     res.json(updated);

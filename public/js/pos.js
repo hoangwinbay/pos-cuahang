@@ -6,6 +6,11 @@ let currentSelectedCategory = 'all';
 let currentPaymentMethod = 'vietqr';
 let tempOrderCode = '';
 
+// Kiểm tra chuỗi có phải ảnh thực sự (base64 hoặc URL)
+function isActualImage(str) {
+  return typeof str === 'string' && (str.startsWith('data:image') || str.startsWith('http') || str.startsWith('/'));
+}
+
 // Initialize POS view
 async function initPos() {
   await Promise.all([loadPosCategories(), loadPosProducts()]);
@@ -79,7 +84,7 @@ async function loadPosCategories() {
         class="cat-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap transition-colors" 
         data-id="${cat.id}"
       >
-        <span>${cat.icon || '☕'} ${cat.name}</span>
+        <span>${cat.name}</span>
       </button>
     `).join('');
 
@@ -149,6 +154,7 @@ function renderPosProducts(productsToRender) {
     const cartItem = state.cart.find(c => c.id === p.id);
     const hasInCart = !!cartItem;
     const qty = cartItem ? cartItem.quantity : 0;
+    const hasImage = isActualImage(p.image);
 
     return `
       <div 
@@ -156,15 +162,21 @@ function renderPosProducts(productsToRender) {
         class="product-card relative bg-white border ${hasInCart ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/10' : 'border-slate-200 hover:border-blue-300'} rounded-2xl p-3 flex flex-col justify-between cursor-pointer shadow-xs select-none transition-all"
       >
         ${hasInCart ? `
-          <span class="absolute top-2 right-2 bg-blue-600 text-white text-[11px] font-black w-6 h-6 rounded-full flex items-center justify-center shadow-xs">
+          <span class="absolute top-2 right-2 bg-blue-600 text-white text-[11px] font-black w-6 h-6 rounded-full flex items-center justify-center shadow-xs z-10">
             ${qty}
           </span>
         ` : ''}
 
-        <!-- Icon / Emoji món -->
-        <div class="h-16 w-full rounded-xl bg-slate-50 flex items-center justify-center text-3xl sm:text-4xl mb-2">
-          ${p.image || '☕'}
-        </div>
+        <!-- Ảnh món hoặc khung giữ chỗ -->
+        ${hasImage ? `
+          <div class="h-28 w-full rounded-xl overflow-hidden bg-slate-100 mb-2 border border-slate-100 shadow-2xs">
+            <img src="${p.image}" alt="${p.name}" class="w-full h-full object-cover">
+          </div>
+        ` : `
+          <div class="h-24 w-full rounded-xl bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center text-slate-300 mb-2">
+            <i class="fa-regular fa-image text-2xl"></i>
+          </div>
+        `}
 
         <div>
           <h4 class="font-bold text-xs sm:text-sm text-slate-800 line-clamp-2 leading-snug">
@@ -220,7 +232,7 @@ function handleProductClick(prodId) {
       id: product.id,
       name: product.name,
       price: product.price,
-      image: product.image || '☕',
+      image: product.image || '',
       quantity: 1
     });
   }
@@ -292,10 +304,15 @@ function updateCartUI() {
   if (btnCheckout) btnCheckout.disabled = false;
 
   if (itemsContainer) {
-    itemsContainer.innerHTML = state.cart.map(item => `
+    itemsContainer.innerHTML = state.cart.map(item => {
+      const hasImage = isActualImage(item.image);
+
+      return `
       <div class="cart-item bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-2">
-        <div class="flex items-center space-x-2 min-w-0 flex-1">
-          <span class="text-xl shrink-0">${item.image || '☕'}</span>
+        <div class="flex items-center space-x-2.5 min-w-0 flex-1">
+          ${hasImage ? `
+            <img src="${item.image}" alt="${item.name}" class="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-200 shadow-2xs">
+          ` : ''}
           <div class="truncate">
             <h5 class="text-xs font-bold text-slate-800 truncate">${item.name}</h5>
             <div class="text-[11px] font-semibold text-blue-600">${formatMoney(item.price)}</div>
@@ -321,7 +338,8 @@ function updateCartUI() {
           </button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   applyPosFilters(); // Update badges on product cards

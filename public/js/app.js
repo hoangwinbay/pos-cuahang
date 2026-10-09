@@ -124,14 +124,18 @@ function applyUserRolePermissions() {
   const nameDisplay = document.getElementById('userNameDisplay');
 
   if (!user) {
-    if (roleIcon) roleIcon.textContent = '❓';
+    if (roleIcon) roleIcon.innerHTML = '<i class="fa-solid fa-circle-question text-slate-400"></i>';
     if (nameDisplay) nameDisplay.textContent = 'Đăng nhập';
     return;
   }
 
   const isAdmin = user.role === 'admin';
 
-  if (roleIcon) roleIcon.textContent = isAdmin ? '👑' : '👤';
+  if (roleIcon) {
+    roleIcon.innerHTML = isAdmin 
+      ? '<i class="fa-solid fa-user-shield text-blue-600"></i>' 
+      : '<i class="fa-solid fa-user text-emerald-600"></i>';
+  }
   if (nameDisplay) nameDisplay.textContent = isAdmin ? 'Chủ Quán' : 'Nhân Viên';
 
   // Only Owner sees Thống Kê & Thực Đơn
@@ -159,7 +163,7 @@ async function fastLogin(accountType) {
 
     closeLoginModal();
     applyUserRolePermissions();
-    showToast(`Đã chuyển vai trò: ${res.user.role === 'admin' ? '👑 Chủ Quán' : '👤 Nhân Viên'}`);
+    showToast(`Đã chuyển vai trò: ${res.user.role === 'admin' ? 'Chủ Quán' : 'Nhân Viên'}`);
 
     if (state.activeTab === 'pos') {
       if (typeof loadPosProducts === 'function') loadPosProducts();
