@@ -339,35 +339,27 @@ app.get('/api/products/:id', (req, res) => {
   }
 });
 
-// Admin only: Create product
+// Admin only: Create product (Tối giản: chỉ cần tên, giá, ảnh, danh mục)
 app.post('/api/products', requireAdmin, (req, res) => {
   try {
-    const { barcode, name, category_id, cost_price, price, stock, unit, image } = req.body;
+    const { name, category_id, price, image } = req.body;
     if (!name || price === undefined) {
-      return res.status(400).json({ error: 'Tên sản phẩm và giá bán là bắt buộc' });
+      return res.status(400).json({ error: 'Tên món và giá tiền là bắt buộc' });
     }
 
-    const code = barcode && barcode.trim() !== '' ? barcode.trim() : 'SP' + Date.now().toString().slice(-8);
-
-    const existing = db.prepare('SELECT id FROM products WHERE barcode = ?').get(code);
-    if (existing) {
-      return res.status(400).json({ error: 'Mã vạch / mã sản phẩm này đã tồn tại' });
-    }
+    const code = 'M' + Date.now().toString().slice(-6);
 
     const stmt = db.prepare(`
       INSERT INTO products (barcode, name, category_id, cost_price, price, stock, unit, image)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, 0, ?, 9999, 'phần', ?)
     `);
 
     const result = stmt.run(
       code,
       name.trim(),
       category_id || null,
-      Number(cost_price) || 0,
       Number(price) || 0,
-      Number(stock) || 0,
-      unit ? unit.trim() : 'cái',
-      image || '📦'
+      image || '☕'
     );
 
     const newProd = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
@@ -380,37 +372,22 @@ app.post('/api/products', requireAdmin, (req, res) => {
 // Admin only: Update product
 app.put('/api/products/:id', requireAdmin, (req, res) => {
   try {
-    const { barcode, name, category_id, cost_price, price, stock, unit, image } = req.body;
+    const { name, category_id, price, image } = req.body;
     const prodId = req.params.id;
-
-    if (barcode) {
-      const dup = db.prepare('SELECT id FROM products WHERE barcode = ? AND id != ?').get(barcode, prodId);
-      if (dup) {
-        return res.status(400).json({ error: 'Mã vạch này đã bị trùng với sản phẩm khác' });
-      }
-    }
 
     const stmt = db.prepare(`
       UPDATE products SET
-        barcode = COALESCE(?, barcode),
         name = COALESCE(?, name),
         category_id = ?,
-        cost_price = COALESCE(?, cost_price),
         price = COALESCE(?, price),
-        stock = COALESCE(?, stock),
-        unit = COALESCE(?, unit),
         image = COALESCE(?, image)
       WHERE id = ?
     `);
 
     stmt.run(
-      barcode || null,
       name ? name.trim() : null,
       category_id || null,
-      cost_price !== undefined ? Number(cost_price) : null,
       price !== undefined ? Number(price) : null,
-      stock !== undefined ? Number(stock) : null,
-      unit || null,
       image || null,
       prodId
     );
@@ -540,14 +517,14 @@ app.get('/api/orders/:id', (req, res) => {
 // Create Order (Both Admin & Staff can checkout)
 app.post('/api/orders', (req, res) => {
   try {
-    const { items, discount = 0, discount_type = 'amount', cash_given = 0, payment_method = 'cash', customer_name, customer_phone, note } = req.body;
+    const { items, discount = 0, discount_type = 'amount', cash_given = 0, payment_method = 'vietqr', customer_name, customer_phone, note, table_name } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Giỏ hàng trống!' });
     }
 
     const cashierId = req.user ? req.user.id : null;
-    const cashierName = req.user ? req.user.name : 'Thu ngân';
+    const cashierName = req.user ? req.user.name : 'Nhân viên';
 
     db.exec('BEGIN TRANSACTION;');
 
@@ -567,9 +544,9 @@ app.post('/api/orders', (req, res) => {
         verifiedItems.push({
           product_id: prod.id,
           product_name: prod.name,
-          barcode: prod.barcode,
-          unit: prod.unit,
-          cost_price: prod.cost_price || 0,
+          barcode: prod.barcode || '',
+          unit: prod.unit || 'phần',
+          cost_price: 0,
           price: prod.price,
           quantity: qty,
           total: itemTotal,
@@ -591,8 +568,8 @@ app.post('/api/orders', (req, res) => {
       const orderCode = generateOrderCode();
 
       const insertOrder = db.prepare(`
-        INSERT INTO orders (order_code, subtotal, discount, discount_type, total, cash_given, change_returned, payment_method, customer_name, customer_phone, note, status, cashier_id, cashier_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)
+        INSERT INTO orders (order_code, subtotal, discount, discount_type, total, cash_given, change_returned, payment_method, customer_name, customer_phone, note, status, cashier_id, cashier_name, table_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)
       `);
 
       const orderResult = insertOrder.run(
@@ -604,11 +581,12 @@ app.post('/api/orders', (req, res) => {
         cash,
         changeReturned,
         payment_method,
-        customer_name || 'Khách lẻ',
+        customer_name || 'Khách',
         customer_phone || '',
         note || '',
         cashierId,
-        cashierName
+        cashierName,
+        table_name || 'Mang về'
       );
 
       const orderId = orderResult.lastInsertRowid;

@@ -76,12 +76,15 @@ function initDatabase() {
     );
   `);
 
-  // Ensure cashier columns exist in orders table
+  // Ensure cashier and table_name columns exist in orders table
   try {
     db.exec('ALTER TABLE orders ADD COLUMN cashier_id INTEGER;');
   } catch (e) {}
   try {
     db.exec('ALTER TABLE orders ADD COLUMN cashier_name TEXT DEFAULT "Thu ngân";');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE orders ADD COLUMN table_name TEXT DEFAULT "";');
   } catch (e) {}
 
   // Seed default users if empty

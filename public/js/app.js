@@ -1,17 +1,17 @@
-// Global State & Core Helper functions
+// =============================================================
+// POS ORDER - CORE APP & STATE MANAGEMENT
+// =============================================================
 
 const state = {
   activeTab: 'pos',
+  selectedTable: 'Bàn 1',
   products: [],
   categories: [],
   cart: [],
   settings: {},
   banks: [],
-  users: [],
   currentUser: null,
-  token: localStorage.getItem('pos_token') || null,
-  networkInfo: null,
-  currentOrderInView: null
+  token: localStorage.getItem('pos_token') || null
 };
 
 // Format currency in Vietnamese Dong (VND)
@@ -42,7 +42,7 @@ function showToast(message, type = 'success') {
   const bgClass = type === 'success' ? 'bg-emerald-600 text-white' : type === 'error' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-white';
   const icon = type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info';
 
-  toast.className = `${bgClass} px-4 py-2.5 rounded-xl shadow-lg flex items-center space-x-2 text-xs sm:text-sm pointer-events-auto transform transition-all duration-300 translate-y-2 opacity-0 z-50`;
+  toast.className = `${bgClass} px-3.5 py-2 rounded-xl shadow-lg flex items-center space-x-2 text-xs font-semibold pointer-events-auto transform transition-all duration-300 translate-y-2 opacity-0 z-50`;
   toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
 
   container.appendChild(toast);
@@ -54,7 +54,7 @@ function showToast(message, type = 'success') {
   setTimeout(() => {
     toast.classList.add('opacity-0', 'translate-y-2');
     setTimeout(() => toast.remove(), 300);
-  }, 3200);
+  }, 3000);
 }
 
 // API Helper with Bearer token injection
@@ -88,7 +88,7 @@ async function api(url, options = {}) {
 }
 
 // =============================================================
-// AUTHENTICATION & ROLE-BASED ACCESS CONTROL (RBAC)
+// AUTHENTICATION & ROLE MANAGEMENT (Chủ quán vs Nhân viên)
 // =============================================================
 async function initAuth() {
   try {
@@ -96,7 +96,7 @@ async function initAuth() {
       const data = await api('/api/auth/me');
       state.currentUser = data.user;
     } else {
-      // Default auto-login to Admin on first local PC visit
+      // Default auto-login to Admin
       const res = await api('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ pin: '9999' })
@@ -115,57 +115,36 @@ async function initAuth() {
   applyUserRolePermissions();
 }
 
-// Apply permissions to UI elements based on role (Admin vs Staff)
+// Apply role permissions to UI
 function applyUserRolePermissions() {
   const user = state.currentUser;
   const tabReports = document.getElementById('tab-reports');
-  const tabSettings = document.getElementById('tab-settings');
-  const btnQuickAdd = document.getElementById('btnQuickAddProduct');
-  const prodAdminBtns = document.getElementById('productAdminButtons');
-  const cancelOrderBtn = document.getElementById('btnCancelOrder');
-
+  const tabMenu = document.getElementById('tab-menu');
   const roleIcon = document.getElementById('userRoleIcon');
   const nameDisplay = document.getElementById('userNameDisplay');
-  const roleDisplay = document.getElementById('userRoleDisplay');
 
   if (!user) {
     if (roleIcon) roleIcon.textContent = '❓';
-    if (nameDisplay) nameDisplay.textContent = 'Chưa đăng nhập';
-    if (roleDisplay) roleDisplay.textContent = 'Bấm để đăng nhập';
+    if (nameDisplay) nameDisplay.textContent = 'Đăng nhập';
     return;
   }
 
   const isAdmin = user.role === 'admin';
 
-  // Update header badge
   if (roleIcon) roleIcon.textContent = isAdmin ? '👑' : '👤';
-  if (nameDisplay) nameDisplay.textContent = user.name;
-  if (roleDisplay) {
-    roleDisplay.textContent = isAdmin ? 'Chủ quán (Toàn quyền)' : 'Nhân viên thu ngân';
-    roleDisplay.className = `text-[10px] font-semibold leading-none ${isAdmin ? 'text-blue-600' : 'text-emerald-600'}`;
-  }
+  if (nameDisplay) nameDisplay.textContent = isAdmin ? 'Chủ Quán' : 'Nhân Viên';
 
-  // Hide or show Owner-only tabs
+  // Only Owner sees Thống Kê & Thực Đơn
   if (tabReports) tabReports.style.display = isAdmin ? 'flex' : 'none';
-  if (tabSettings) tabSettings.style.display = isAdmin ? 'flex' : 'none';
-  if (btnQuickAdd) btnQuickAdd.style.display = isAdmin ? 'flex' : 'none';
-  if (prodAdminBtns) prodAdminBtns.style.display = isAdmin ? 'flex' : 'none';
-  if (cancelOrderBtn) cancelOrderBtn.style.display = isAdmin ? 'flex' : 'none';
+  if (tabMenu) tabMenu.style.display = isAdmin ? 'flex' : 'none';
 
-  // Hide cost price & action columns if staff
-  const costHeaders = document.querySelectorAll('.col-cost-price');
-  costHeaders.forEach(el => el.style.display = isAdmin ? '' : 'none');
-
-  const actionHeaders = document.querySelectorAll('.col-product-actions');
-  actionHeaders.forEach(el => el.style.display = isAdmin ? '' : 'none');
-
-  // If staff is currently viewing a restricted tab, redirect to POS
-  if (!isAdmin && (state.activeTab === 'reports' || state.activeTab === 'settings')) {
+  // If staff is currently on restricted tab, switch back to pos
+  if (!isAdmin && (state.activeTab === 'reports' || state.activeTab === 'menu')) {
     switchTab('pos');
   }
 }
 
-// Fast demo login
+// Fast switch between Admin and Staff role
 async function fastLogin(accountType) {
   try {
     const pin = accountType === 'admin' ? '9999' : '1234';
@@ -180,158 +159,36 @@ async function fastLogin(accountType) {
 
     closeLoginModal();
     applyUserRolePermissions();
-    showToast(`Đã chuyển sang tài khoản: ${res.user.name} (${res.user.role === 'admin' ? 'Chủ quán' : 'Nhân viên'})`);
+    showToast(`Đã chuyển vai trò: ${res.user.role === 'admin' ? '👑 Chủ Quán' : '👤 Nhân Viên'}`);
 
-    // Reload products & reports
-    if (typeof loadPosProducts === 'function') loadPosProducts();
-    if (state.activeTab === 'products' && typeof loadProductsTable === 'function') loadProductsTable();
+    if (state.activeTab === 'pos') {
+      if (typeof loadPosProducts === 'function') loadPosProducts();
+    } else if (state.activeTab === 'reports') {
+      if (typeof loadDashboardReports === 'function') loadDashboardReports();
+    } else if (state.activeTab === 'menu') {
+      if (typeof loadMenuDishes === 'function') loadMenuDishes();
+    }
   } catch (err) {
     showToast(err.message, 'error');
   }
-}
-
-// PIN Login handler
-async function handlePinLogin(e) {
-  e.preventDefault();
-  const pin = document.getElementById('loginPinInput').value.trim();
-  if (!pin) {
-    showToast('Vui lòng nhập mã PIN', 'error');
-    return;
-  }
-
-  try {
-    const res = await api('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ pin })
-    });
-
-    state.token = res.token;
-    state.currentUser = res.user;
-    localStorage.setItem('pos_token', res.token);
-
-    document.getElementById('loginPinInput').value = '';
-    closeLoginModal();
-    applyUserRolePermissions();
-    showToast(`Xin chào ${res.user.name}!`);
-
-    if (typeof loadPosProducts === 'function') loadPosProducts();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-// Username / Password Login handler
-async function handlePassLogin(e) {
-  e.preventDefault();
-  const username = document.getElementById('loginUsername').value.trim();
-  const password = document.getElementById('loginPassword').value;
-
-  if (!username || !password) {
-    showToast('Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu', 'error');
-    return;
-  }
-
-  try {
-    const res = await api('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password })
-    });
-
-    state.token = res.token;
-    state.currentUser = res.user;
-    localStorage.setItem('pos_token', res.token);
-
-    closeLoginModal();
-    applyUserRolePermissions();
-    showToast(`Xin chào ${res.user.name}!`);
-
-    if (typeof loadPosProducts === 'function') loadPosProducts();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-function handleLogout() {
-  state.currentUser = null;
-  state.token = null;
-  localStorage.removeItem('pos_token');
-  applyUserRolePermissions();
-  showToast('Đã đăng xuất tài khoản');
-  openLoginModal();
 }
 
 function openLoginModal() {
-  document.getElementById('loginModal').classList.remove('hidden');
-  const pinInput = document.getElementById('loginPinInput');
-  if (pinInput) setTimeout(() => pinInput.focus(), 100);
+  const modal = document.getElementById('loginModal');
+  if (modal) modal.classList.remove('hidden');
 }
 
 function closeLoginModal() {
-  document.getElementById('loginModal').classList.add('hidden');
-}
-
-function setLoginMethod(method) {
-  const pinTab = document.getElementById('tabLoginPin');
-  const passTab = document.getElementById('tabLoginPassword');
-  const pinForm = document.getElementById('pinLoginForm');
-  const passForm = document.getElementById('passLoginForm');
-
-  if (method === 'pin') {
-    pinTab.className = 'py-1.5 rounded-lg text-xs font-bold bg-white text-blue-600 shadow-2xs transition-all';
-    passTab.className = 'py-1.5 rounded-lg text-xs font-semibold text-slate-600 transition-all';
-    pinForm.classList.remove('hidden');
-    passForm.classList.add('hidden');
-    document.getElementById('loginPinInput').focus();
-  } else {
-    passTab.className = 'py-1.5 rounded-lg text-xs font-bold bg-white text-blue-600 shadow-2xs transition-all';
-    pinTab.className = 'py-1.5 rounded-lg text-xs font-semibold text-slate-600 transition-all';
-    passForm.classList.remove('hidden');
-    pinForm.classList.add('hidden');
-    document.getElementById('loginUsername').focus();
-  }
-}
-
-// =============================================================
-// MOBILE CONNECTION MODAL & LAN QR CODE
-// =============================================================
-async function openMobileConnectModal() {
-  try {
-    if (!state.networkInfo) {
-      state.networkInfo = await api('/api/network/info');
-    }
-
-    const mobileUrl = state.networkInfo.mobileUrl;
-    document.getElementById('mobileUrlDisplay').value = mobileUrl;
-
-    // Use reliable dynamic QR generator API
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(mobileUrl)}`;
-    document.getElementById('mobileQrImg').src = qrApiUrl;
-
-    document.getElementById('mobileConnectModal').classList.remove('hidden');
-  } catch (err) {
-    showToast('Không thể lấy thông tin mạng nội bộ: ' + err.message, 'error');
-  }
-}
-
-function closeMobileConnectModal() {
-  document.getElementById('mobileConnectModal').classList.add('hidden');
-}
-
-function copyMobileUrl() {
-  const input = document.getElementById('mobileUrlDisplay');
-  input.select();
-  navigator.clipboard.writeText(input.value).then(() => {
-    showToast('Đã sao chép liên kết vào bộ nhớ tạm!');
-  }).catch(() => {
-    document.execCommand('copy');
-    showToast('Đã sao chép liên kết!');
-  });
+  const modal = document.getElementById('loginModal');
+  if (modal) modal.classList.add('hidden');
 }
 
 // Mobile Slide-over Drawer toggle
 function toggleMobileCart(open) {
   const drawer = document.getElementById('posCartPanel');
   const backdrop = document.getElementById('mobileCartBackdrop');
+  if (!drawer || !backdrop) return;
+
   if (open) {
     drawer.classList.add('drawer-open');
     backdrop.classList.add('drawer-open');
@@ -342,160 +199,32 @@ function toggleMobileCart(open) {
 }
 
 // =============================================================
-// USER ACCOUNTS MANAGEMENT (ADMIN ONLY)
+// TAB NAVIGATION (Gọi Món / Thống Kê / Thực Đơn)
 // =============================================================
-async function loadUsersList() {
-  if (!state.currentUser || state.currentUser.role !== 'admin') return;
-  try {
-    const users = await api('/api/users');
-    state.users = users;
-
-    const tbody = document.getElementById('usersTableBody');
-    if (!tbody) return;
-
-    tbody.innerHTML = users.map(u => {
-      const isMe = u.id === state.currentUser.id;
-      const isAdmin = u.role === 'admin';
-      return `
-        <tr class="hover:bg-slate-50 transition-colors">
-          <td class="px-3 py-2 font-bold text-slate-800">
-            ${u.name} ${isMe ? '<span class="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded font-semibold ml-1">Đang dùng</span>' : ''}
-          </td>
-          <td class="px-3 py-2 font-mono font-semibold text-slate-600">${u.username}</td>
-          <td class="px-3 py-2 text-center">
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isAdmin ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}">
-              ${isAdmin ? '👑 Chủ quán' : '👤 Nhân viên'}
-            </span>
-          </td>
-          <td class="px-3 py-2 text-center font-mono font-bold text-slate-700">${u.pin || '----'}</td>
-          <td class="px-3 py-2 text-center">
-            <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${u.active ? 'text-emerald-700 bg-emerald-50' : 'text-slate-400 bg-slate-100'}">
-              ${u.active ? 'Hoạt động' : 'Tạm khóa'}
-            </span>
-          </td>
-          <td class="px-3 py-2 text-center">
-            <div class="inline-flex items-center space-x-1.5">
-              <button onclick="editUser(${u.id})" class="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Sửa thông tin">
-                <i class="fa-solid fa-pen"></i>
-              </button>
-              ${!isMe ? `
-              <button onclick="deleteUser(${u.id}, '${u.name.replace(/'/g, "\\'")}')" class="p-1 text-rose-500 hover:bg-rose-50 rounded" title="Xóa tài khoản">
-                <i class="fa-regular fa-trash-can"></i>
-              </button>
-              ` : ''}
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  } catch (err) {
-    console.error('Failed to load users list:', err);
-  }
-}
-
-function openCreateUserModal() {
-  document.getElementById('userForm').reset();
-  document.getElementById('userEditId').value = '';
-  document.getElementById('userModalTitle').textContent = 'Thêm Tài Khoản Nhân Viên';
-  document.getElementById('userFormUsername').readOnly = false;
-  document.getElementById('userFormRole').value = 'staff';
-  document.getElementById('userFormPin').value = String(Math.floor(1000 + Math.random() * 9000));
-  document.getElementById('userModal').classList.remove('hidden');
-}
-
-function editUser(id) {
-  const u = state.users.find(item => item.id === id);
-  if (!u) return;
-
-  document.getElementById('userEditId').value = u.id;
-  document.getElementById('userModalTitle').textContent = 'Chỉnh Sửa Tài Khoản';
-  document.getElementById('userFormName').value = u.name;
-  document.getElementById('userFormUsername').value = u.username;
-  document.getElementById('userFormUsername').readOnly = true;
-  document.getElementById('userFormPassword').value = '';
-  document.getElementById('userFormPassword').placeholder = '(Để trống nếu giữ nguyên)';
-  document.getElementById('userFormPin').value = u.pin || '';
-  document.getElementById('userFormRole').value = u.role;
-
-  document.getElementById('userModal').classList.remove('hidden');
-}
-
-function closeUserModal() {
-  document.getElementById('userModal').classList.add('hidden');
-}
-
-async function saveUser(e) {
-  e.preventDefault();
-  const id = document.getElementById('userEditId').value;
-  const name = document.getElementById('userFormName').value.trim();
-  const username = document.getElementById('userFormUsername').value.trim();
-  const password = document.getElementById('userFormPassword').value;
-  const pin = document.getElementById('userFormPin').value.trim();
-  const role = document.getElementById('userFormRole').value;
-
-  try {
-    if (id) {
-      const payload = { name, role, pin };
-      if (password) payload.password = password;
-      await api(`/api/users/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload)
-      });
-      showToast('Cập nhật tài khoản thành công!');
-    } else {
-      if (!password) {
-        showToast('Vui lòng nhập mật khẩu', 'error');
-        return;
-      }
-      await api('/api/users', {
-        method: 'POST',
-        body: JSON.stringify({ name, username, password, pin, role })
-      });
-      showToast('Đã thêm tài khoản nhân viên thành công!');
-    }
-
-    closeUserModal();
-    loadUsersList();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
-async function deleteUser(id, name) {
-  if (confirm(`Bạn có chắc muốn xóa tài khoản nhân viên "${name}"?`)) {
-    try {
-      await api(`/api/users/${id}`, { method: 'DELETE' });
-      showToast(`Đã xóa tài khoản "${name}"`);
-      loadUsersList();
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-}
-
-// Tab navigation
 function switchTab(tabName) {
-  // Check permission for staff
-  if (state.currentUser && state.currentUser.role === 'staff') {
-    if (tabName === 'reports' || tabName === 'settings') {
-      showToast('Chỉ tài khoản Chủ Cửa Hàng mới có quyền truy cập mục này!', 'error');
+  // Permission check: only admin can access reports and menu
+  if (state.currentUser && state.currentUser.role !== 'admin') {
+    if (tabName === 'reports' || tabName === 'menu') {
+      showToast('Mục này chỉ dành cho tài khoản Chủ Quán!', 'error');
       return;
     }
   }
 
   state.activeTab = tabName;
-  
+
+  // Update tab buttons
   document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.remove('active', 'bg-white', 'text-blue-600', 'shadow-sm');
+    btn.classList.remove('active', 'bg-white', 'text-blue-600', 'shadow-xs');
     btn.classList.add('text-slate-600');
   });
 
   const activeBtn = document.getElementById(`tab-${tabName}`);
   if (activeBtn) {
-    activeBtn.classList.add('active', 'bg-white', 'text-blue-600', 'shadow-sm');
+    activeBtn.classList.add('active', 'bg-white', 'text-blue-600', 'shadow-xs');
     activeBtn.classList.remove('text-slate-600');
   }
 
+  // Update tab views
   document.querySelectorAll('.tab-view').forEach(view => {
     view.classList.add('hidden');
     view.classList.remove('flex');
@@ -507,43 +236,27 @@ function switchTab(tabName) {
     activeView.classList.add('flex');
   }
 
+  // Tab specific lifecycle actions
   if (tabName === 'pos') {
-    const searchInput = document.getElementById('posSearchInput');
-    if (searchInput) searchInput.focus();
-  } else if (tabName === 'products') {
-    loadProductsTable();
-  } else if (tabName === 'orders') {
-    loadOrdersList();
+    const search = document.getElementById('posSearchInput');
+    if (search && window.innerWidth >= 1024) search.focus();
   } else if (tabName === 'reports') {
-    loadDashboardReports();
-  } else if (tabName === 'settings') {
-    populateSettingsForm();
-    loadUsersList();
+    if (typeof loadDashboardReports === 'function') loadDashboardReports();
+    if (typeof loadOrdersList === 'function') loadOrdersList();
+  } else if (tabName === 'menu') {
+    if (typeof loadMenuDishes === 'function') loadMenuDishes();
+    if (typeof populateVietQrSettings === 'function') populateVietQrSettings();
   }
 }
 
-// Live Clock updater
-function initLiveClock() {
-  const clockEl = document.getElementById('liveClock');
-  if (!clockEl) return;
-  function update() {
-    const now = new Date();
-    clockEl.textContent = now.toLocaleTimeString('vi-VN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
-  }
-  update();
-  setInterval(update, 1000);
-}
-
-// Load and apply store settings
+// =============================================================
+// LOAD STORE SETTINGS
+// =============================================================
 async function loadSettings() {
   try {
     const data = await api('/api/settings');
     state.settings = data;
-    
+
     const headerEl = document.getElementById('headerStoreName');
     if (headerEl && data.store_name) {
       headerEl.textContent = data.store_name;
@@ -553,166 +266,20 @@ async function loadSettings() {
   }
 }
 
-// Populate Settings Form
-async function populateSettingsForm() {
-  try {
-    await loadSettings();
-    document.getElementById('setting_store_name').value = state.settings.store_name || '';
-    document.getElementById('setting_store_address').value = state.settings.store_address || '';
-    document.getElementById('setting_store_phone').value = state.settings.store_phone || '';
-    document.getElementById('setting_store_greeting').value = state.settings.store_greeting || '';
-    document.getElementById('setting_paper_size').value = state.settings.paper_size || '80mm';
-
-    const banksSelect = document.getElementById('setting_bank_id');
-    if (banksSelect && state.banks.length > 0) {
-      banksSelect.innerHTML = state.banks.map(b => `
-        <option value="${b.code}" ${b.code === state.settings.bank_id ? 'selected' : ''}>${b.name}</option>
-      `).join('');
-    }
-
-    document.getElementById('setting_bank_account_no').value = state.settings.bank_account_no || '';
-    document.getElementById('setting_bank_account_name').value = state.settings.bank_account_name || '';
-  } catch (err) {
-    showToast('Lỗi khi tải cài đặt', 'error');
-  }
-}
-
-// Save Settings Form
-async function saveSettings(e) {
-  e.preventDefault();
-  try {
-    const data = {
-      store_name: document.getElementById('setting_store_name').value.trim(),
-      store_address: document.getElementById('setting_store_address').value.trim(),
-      store_phone: document.getElementById('setting_store_phone').value.trim(),
-      store_greeting: document.getElementById('setting_store_greeting').value.trim(),
-      paper_size: document.getElementById('setting_paper_size').value,
-      bank_id: document.getElementById('setting_bank_id').value,
-      bank_account_no: document.getElementById('setting_bank_account_no').value.trim(),
-      bank_account_name: document.getElementById('setting_bank_account_name').value.trim().toUpperCase()
-    };
-
-    await api('/api/settings', {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-
-    state.settings = { ...state.settings, ...data };
-    document.getElementById('headerStoreName').textContent = data.store_name;
-    showToast('Đã lưu cấu hình cửa hàng thành công!');
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-}
-
 // Global Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    closeCheckoutModal();
-    closeProductModal();
-    closeOrderDetailModal();
-    closeMobileConnectModal();
+    if (typeof closeCheckoutModal === 'function') closeCheckoutModal();
+    if (typeof closeDishModal === 'function') closeDishModal();
+    if (typeof closePrinterModal === 'function') closePrinterModal();
     closeLoginModal();
-    closeUserModal();
     toggleMobileCart(false);
-    return;
-  }
-
-  if (e.key === 'F1') {
-    e.preventDefault();
-    switchTab('pos');
-    return;
-  }
-
-  if (e.key === 'F2') {
-    e.preventDefault();
-    if (state.activeTab === 'pos') {
-      const search = document.getElementById('posSearchInput');
-      if (search) search.focus();
-    } else {
-      switchTab('products');
-    }
-    return;
-  }
-
-  if (e.key === 'F3') {
-    e.preventDefault();
-    switchTab('orders');
-    return;
-  }
-
-  if (e.key === 'F4') {
-    e.preventDefault();
-    switchTab('reports');
-    return;
-  }
-
-  if (e.key === 'F9') {
-    e.preventDefault();
-    if (state.activeTab === 'pos' && state.cart.length > 0) {
-      openCheckoutModal();
-    }
-    return;
   }
 });
 
-// Download DB backup file
-function downloadDatabaseBackup() {
-  if (!state.currentUser || state.currentUser.role !== 'admin') {
-    showToast('Chỉ chủ cửa hàng mới có quyền sao lưu dữ liệu!', 'error');
-    return;
-  }
-  const token = state.token;
-  fetch('/api/backup/download', {
-    headers: { 'Authorization': `Bearer ${token}` }
-  })
-    .then(res => {
-      if (!res.ok) throw new Error('Lỗi khi tải file backup');
-      return res.blob();
-    })
-    .then(blob => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `pos_backup_${new Date().toISOString().slice(0, 10)}.db`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast('Đã tải file sao lưu cơ sở dữ liệu về máy thành công!');
-    })
-    .catch(err => showToast(err.message, 'error'));
-}
-
-// Export JSON backup file
-function exportJsonBackup() {
-  if (!state.currentUser || state.currentUser.role !== 'admin') {
-    showToast('Chỉ chủ cửa hàng mới có quyền sao lưu dữ liệu!', 'error');
-    return;
-  }
-  const token = state.token;
-  fetch('/api/backup/export-json', {
-    headers: { 'Authorization': `Bearer ${token}` }
-  })
-    .then(res => {
-      if (!res.ok) throw new Error('Lỗi khi xuất dữ liệu');
-      return res.blob();
-    })
-    .then(blob => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `pos_data_${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast('Đã xuất toàn bộ dữ liệu ra file JSON thành công!');
-    })
-    .catch(err => showToast(err.message, 'error'));
-}
-
 // App Initialization
 document.addEventListener('DOMContentLoaded', async () => {
-  initLiveClock();
-  
-  // Register Service Worker for Mobile PWA
+  // Service Worker for Mobile PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
@@ -723,5 +290,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await initAuth();
   await loadSettings();
-  await initPos();
+  if (typeof initPos === 'function') {
+    await initPos();
+  }
 });

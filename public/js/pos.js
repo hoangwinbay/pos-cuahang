@@ -1,41 +1,91 @@
-// POS Checkout Screen Logic
+// =============================================================
+// POS ORDER - WEB ORDER PAD & CHECKOUT LOGIC
+// =============================================================
 
 let currentSelectedCategory = 'all';
-let currentPaymentMethod = 'cash';
+let currentPaymentMethod = 'vietqr';
 let tempOrderCode = '';
 
 // Initialize POS view
 async function initPos() {
   await Promise.all([loadPosCategories(), loadPosProducts()]);
   setupPosListeners();
+  selectTable(state.selectedTable || 'Bàn 1');
   updateCartUI();
 }
 
-// Load Categories for POS pills
+// =============================================================
+// TABLE SELECTOR (BÀN 1..5 / MANG VỀ)
+// =============================================================
+function selectTable(tableName) {
+  state.selectedTable = tableName;
+
+  // Update header in cart
+  const currentTableEl = document.getElementById('currentTableDisplay');
+  if (currentTableEl) currentTableEl.textContent = tableName;
+
+  const mobileTableEl = document.getElementById('mobileFloatingTable');
+  if (mobileTableEl) mobileTableEl.textContent = tableName;
+
+  const checkoutTableEl = document.getElementById('checkoutModalTable');
+  if (checkoutTableEl) checkoutTableEl.textContent = tableName;
+
+  // Check if custom table pill exists, if not, create one
+  const container = document.getElementById('quickTablePills');
+  let matched = false;
+  const pills = document.querySelectorAll('#quickTablePills .table-pill');
+  pills.forEach(btn => {
+    if (btn.textContent.trim() === tableName) {
+      matched = true;
+      btn.className = 'table-pill active px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-xs';
+    } else {
+      btn.className = 'table-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors';
+    }
+  });
+
+  if (!matched && container) {
+    const newBtn = document.createElement('button');
+    newBtn.onclick = () => selectTable(tableName);
+    newBtn.className = 'table-pill active px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-xs';
+    newBtn.textContent = tableName;
+    // Insert before the last button (+ Bàn...)
+    const lastBtn = container.querySelector('button:last-child');
+    container.insertBefore(newBtn, lastBtn);
+  }
+}
+
+function promptCustomTable() {
+  const custom = prompt('Nhập số bàn hoặc tên gọi (VD: Bàn 6, Bàn VIP, Sân thượng...):', '');
+  if (custom && custom.trim()) {
+    selectTable(custom.trim());
+    showToast(`Đã chọn: ${custom.trim()}`);
+  }
+}
+
+// =============================================================
+// CATEGORIES & PRODUCTS RENDER
+// =============================================================
 async function loadPosCategories() {
   try {
     const cats = await api('/api/categories');
     state.categories = cats;
 
     const container = document.getElementById('posCategoryPills');
-    const totalCount = state.products.length;
-    document.getElementById('catTotalCount').textContent = totalCount;
+    if (!container) return;
 
-    // Render pills
     const pillsHtml = cats.map(cat => `
       <button 
         onclick="filterPosCategory(${cat.id})" 
-        class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap transition-all" 
+        class="cat-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap transition-colors" 
         data-id="${cat.id}"
       >
-        <span>${cat.icon || '📦'} ${cat.name}</span>
-        <span class="text-slate-400 font-normal">(${cat.product_count})</span>
+        <span>${cat.icon || '☕'} ${cat.name}</span>
       </button>
     `).join('');
 
     container.innerHTML = `
-      <button onclick="filterPosCategory('all')" class="cat-pill active px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white whitespace-nowrap shadow-sm transition-all" data-id="all">
-        ✨ Tất cả (<span id="catTotalCount">${totalCount}</span>)
+      <button onclick="filterPosCategory('all')" class="cat-pill active px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-white whitespace-nowrap shadow-xs transition-colors" data-id="all">
+        Tất cả
       </button>
       ${pillsHtml}
     `;
@@ -44,196 +94,133 @@ async function loadPosCategories() {
   }
 }
 
-// Load Products for POS Grid
-async function loadPosProducts() {
-  try {
-    const products = await api('/api/products');
-    state.products = products;
-    renderPosProducts(products);
-
-    const totalCountEl = document.getElementById('catTotalCount');
-    if (totalCountEl) totalCountEl.textContent = products.length;
-  } catch (err) {
-    console.error('Failed to load products:', err);
-  }
-}
-
-// Render Products Grid
-function renderPosProducts(productsToRender) {
-  const grid = document.getElementById('posProductGrid');
-  const emptyState = document.getElementById('posNoProducts');
-
-  if (!productsToRender || productsToRender.length === 0) {
-    grid.innerHTML = '';
-    emptyState.classList.remove('hidden');
-    return;
-  }
-
-  emptyState.classList.add('hidden');
-
-  grid.innerHTML = productsToRender.map(p => {
-    const isOutOfStock = p.stock <= 0;
-    const isLowStock = p.stock > 0 && p.stock <= 10;
-
-    let stockBadge = `<span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Còn ${p.stock}</span>`;
-    if (isOutOfStock) {
-      stockBadge = `<span class="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">Hết hàng</span>`;
-    } else if (isLowStock) {
-      stockBadge = `<span class="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">Còn ${p.stock}</span>`;
-    }
-
-    return `
-      <div 
-        onclick="${isOutOfStock ? `showToast('Sản phẩm đã hết hàng trong kho!', 'error')` : `handleProductClick(${p.id})`}"
-        class="product-card bg-white border ${isOutOfStock ? 'opacity-60 border-slate-200 cursor-not-allowed' : 'border-slate-200/90 hover:border-blue-400 cursor-pointer'} rounded-xl p-3 flex flex-col justify-between shadow-sm relative group select-none"
-      >
-        <div>
-          <!-- Icon / Image display -->
-          <div class="h-16 w-full rounded-lg bg-slate-50 flex items-center justify-center text-3xl mb-2 group-hover:scale-105 transition-transform">
-            ${p.image || '📦'}
-          </div>
-
-          <div class="flex items-center justify-between gap-1 mb-1">
-            <span class="text-[10px] font-mono text-slate-400 truncate max-w-[90px]">${p.barcode}</span>
-            ${stockBadge}
-          </div>
-
-          <h4 class="font-bold text-xs text-slate-800 line-clamp-2 leading-snug group-hover:text-blue-600 transition-colors">
-            ${p.name}
-          </h4>
-        </div>
-
-        <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
-          <span class="text-xs font-black text-blue-600">${formatMoney(p.price)}</span>
-          <span class="text-[10px] text-slate-400">/${p.unit || 'cái'}</span>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-// Filter products by category
 function filterPosCategory(catId) {
   currentSelectedCategory = catId;
 
-  // Update pills UI
-  document.querySelectorAll('.cat-pill').forEach(btn => {
+  document.querySelectorAll('#posCategoryPills .cat-pill').forEach(btn => {
     if (btn.dataset.id == String(catId)) {
-      btn.classList.add('bg-blue-600', 'text-white', 'shadow-sm');
-      btn.classList.remove('bg-slate-100', 'text-slate-700', 'hover:bg-slate-200');
+      btn.className = 'cat-pill active px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-white whitespace-nowrap shadow-xs';
     } else {
-      btn.classList.remove('bg-blue-600', 'text-white', 'shadow-sm');
-      btn.classList.add('bg-slate-100', 'text-slate-700', 'hover:bg-slate-200');
+      btn.className = 'cat-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap transition-colors';
     }
   });
 
   applyPosFilters();
 }
 
-// Apply Category & Search filter together
+async function loadPosProducts() {
+  try {
+    const products = await api('/api/products');
+    state.products = products;
+    applyPosFilters();
+  } catch (err) {
+    console.error('Failed to load products:', err);
+  }
+}
+
 function applyPosFilters() {
-  const searchTerm = (document.getElementById('posSearchInput').value || '').trim().toLowerCase();
+  const searchTerm = (document.getElementById('posSearchInput')?.value || '').trim().toLowerCase();
 
   const filtered = state.products.filter(p => {
     const matchesCat = currentSelectedCategory === 'all' || p.category_id == currentSelectedCategory;
-    const matchesSearch = !searchTerm || 
-      p.name.toLowerCase().includes(searchTerm) || 
-      p.barcode.toLowerCase().includes(searchTerm);
+    const matchesSearch = !searchTerm || p.name.toLowerCase().includes(searchTerm);
     return matchesCat && matchesSearch;
   });
 
   renderPosProducts(filtered);
 }
 
-// Setup search & barcode scanner listeners
+// Render Menu Cards (Tối giản, trực quan, ảnh to, giá rõ ràng)
+function renderPosProducts(productsToRender) {
+  const grid = document.getElementById('posProductGrid');
+  const emptyState = document.getElementById('posNoProducts');
+  if (!grid) return;
+
+  if (!productsToRender || productsToRender.length === 0) {
+    grid.innerHTML = '';
+    if (emptyState) emptyState.classList.remove('hidden');
+    return;
+  }
+
+  if (emptyState) emptyState.classList.add('hidden');
+
+  grid.innerHTML = productsToRender.map(p => {
+    // Check if dish is already in current cart
+    const cartItem = state.cart.find(c => c.id === p.id);
+    const hasInCart = !!cartItem;
+    const qty = cartItem ? cartItem.quantity : 0;
+
+    return `
+      <div 
+        onclick="handleProductClick(${p.id})"
+        class="product-card relative bg-white border ${hasInCart ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/10' : 'border-slate-200 hover:border-blue-300'} rounded-2xl p-3 flex flex-col justify-between cursor-pointer shadow-xs select-none transition-all"
+      >
+        ${hasInCart ? `
+          <span class="absolute top-2 right-2 bg-blue-600 text-white text-[11px] font-black w-6 h-6 rounded-full flex items-center justify-center shadow-xs">
+            ${qty}
+          </span>
+        ` : ''}
+
+        <!-- Icon / Emoji món -->
+        <div class="h-16 w-full rounded-xl bg-slate-50 flex items-center justify-center text-3xl sm:text-4xl mb-2">
+          ${p.image || '☕'}
+        </div>
+
+        <div>
+          <h4 class="font-bold text-xs sm:text-sm text-slate-800 line-clamp-2 leading-snug">
+            ${p.name}
+          </h4>
+        </div>
+
+        <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
+          <span class="text-xs sm:text-sm font-black text-blue-600">${formatMoney(p.price)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function setupPosListeners() {
   const searchInput = document.getElementById('posSearchInput');
   const clearBtn = document.getElementById('posClearSearch');
 
-  searchInput.addEventListener('input', () => {
-    if (searchInput.value.trim().length > 0) {
-      clearBtn.classList.remove('hidden');
-    } else {
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      if (searchInput.value.trim().length > 0) {
+        clearBtn?.classList.remove('hidden');
+      } else {
+        clearBtn?.classList.add('hidden');
+      }
+      applyPosFilters();
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
       clearBtn.classList.add('hidden');
-    }
-    applyPosFilters();
-  });
-
-  clearBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    clearBtn.classList.add('hidden');
-    applyPosFilters();
-    searchInput.focus();
-  });
-
-  // Handle Enter key for Barcode Scanner
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      const term = searchInput.value.trim();
-      if (!term) return;
-
-      // Check exact barcode match first
-      const exactProduct = state.products.find(p => p.barcode.toLowerCase() === term.toLowerCase());
-      if (exactProduct) {
-        if (exactProduct.stock <= 0) {
-          showToast(`Sản phẩm "${exactProduct.name}" đã hết hàng!`, 'error');
-        } else {
-          addToCart(exactProduct);
-          showToast(`Đã thêm "${exactProduct.name}"`);
-        }
-        searchInput.value = '';
-        clearBtn.classList.add('hidden');
-        applyPosFilters();
-        return;
-      }
-
-      // Check if single matching product
-      const matches = state.products.filter(p => 
-        p.name.toLowerCase().includes(term.toLowerCase()) || 
-        p.barcode.toLowerCase().includes(term.toLowerCase())
-      );
-      if (matches.length === 1) {
-        if (matches[0].stock <= 0) {
-          showToast(`Sản phẩm "${matches[0].name}" đã hết hàng!`, 'error');
-        } else {
-          addToCart(matches[0]);
-          showToast(`Đã thêm "${matches[0].name}"`);
-        }
-        searchInput.value = '';
-        clearBtn.classList.add('hidden');
-        applyPosFilters();
-      }
-    }
-  });
+      applyPosFilters();
+      searchInput?.focus();
+    });
+  }
 }
 
-// Handle clicking on product card
+// =============================================================
+// CART LOGIC (GỌI MÓN THEO BÀN)
+// =============================================================
 function handleProductClick(prodId) {
   const product = state.products.find(p => p.id === prodId);
   if (!product) return;
 
-  addToCart(product);
-}
-
-// Add product to cart
-function addToCart(product) {
   const existing = state.cart.find(item => item.id === product.id);
   if (existing) {
-    if (existing.quantity >= product.stock) {
-      showToast(`Số lượng vượt quá tồn kho hiện có (${product.stock})`, 'error');
-      return;
-    }
     existing.quantity += 1;
   } else {
     state.cart.push({
       id: product.id,
       name: product.name,
-      barcode: product.barcode,
       price: product.price,
-      cost_price: product.cost_price || 0,
-      unit: product.unit || 'cái',
-      stock: product.stock,
-      image: product.image || '📦',
+      image: product.image || '☕',
       quantity: 1
     });
   }
@@ -241,13 +228,6 @@ function addToCart(product) {
   updateCartUI();
 }
 
-// Remove item from cart
-function removeFromCart(productId) {
-  state.cart = state.cart.filter(item => item.id !== productId);
-  updateCartUI();
-}
-
-// Update item quantity
 function updateCartQty(productId, delta) {
   const item = state.cart.find(i => i.id === productId);
   if (!item) return;
@@ -258,173 +238,117 @@ function updateCartQty(productId, delta) {
     return;
   }
 
-  if (newQty > item.stock) {
-    showToast(`Kho chỉ còn ${item.stock} ${item.unit}`, 'error');
-    return;
-  }
-
   item.quantity = newQty;
   updateCartUI();
 }
 
-// Set exact quantity via input
-function setExactCartQty(productId, val) {
-  const item = state.cart.find(i => i.id === productId);
-  if (!item) return;
-
-  let qty = parseInt(val, 10);
-  if (isNaN(qty) || qty <= 0) qty = 1;
-  if (qty > item.stock) {
-    qty = item.stock;
-    showToast(`Kho chỉ còn ${item.stock} ${item.unit}`, 'error');
-  }
-
-  item.quantity = qty;
+function removeFromCart(productId) {
+  state.cart = state.cart.filter(item => item.id !== productId);
   updateCartUI();
 }
 
-// Clear cart
 function clearCart() {
   if (state.cart.length === 0) return;
-  if (confirm('Bạn có chắc muốn làm trống giỏ hàng này?')) {
+  if (confirm(`Hủy toàn bộ món đang chọn cho ${state.selectedTable}?`)) {
     state.cart = [];
-    document.getElementById('cartDiscountValue').value = 0;
+    const note = document.getElementById('orderNoteInput');
+    if (note) note.value = '';
     updateCartUI();
-    showToast('Đã làm trống giỏ hàng');
+    showToast('Đã làm trống order');
   }
 }
 
-// Update Cart UI & Calculation
 function updateCartUI() {
   const itemsContainer = document.getElementById('cartItemsList');
   const emptyState = document.getElementById('cartEmptyState');
   const badgeCount = document.getElementById('cartBadgeCount');
   const btnCheckout = document.getElementById('btnOpenCheckout');
+  const finalTotalEl = document.getElementById('cartFinalTotal');
 
   const totalItemCount = state.cart.reduce((sum, item) => sum + item.quantity, 0);
-  badgeCount.textContent = `${totalItemCount} món`;
-  document.getElementById('cartTotalItemsCount').textContent = totalItemCount;
+  const totalAmount = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  if (badgeCount) badgeCount.textContent = `${totalItemCount} món`;
+  if (finalTotalEl) finalTotalEl.textContent = formatMoney(totalAmount);
+
+  // Update mobile floating bar
+  const mobileBadge = document.getElementById('mobileFloatingBadge');
+  const mobileTotal = document.getElementById('mobileFloatingTotal');
+  const mobileTable = document.getElementById('mobileFloatingTable');
+
+  if (mobileBadge) mobileBadge.textContent = totalItemCount;
+  if (mobileTotal) mobileTotal.textContent = formatMoney(totalAmount);
+  if (mobileTable) mobileTable.textContent = state.selectedTable;
 
   if (state.cart.length === 0) {
-    itemsContainer.innerHTML = '';
-    emptyState.classList.remove('hidden');
-    btnCheckout.disabled = true;
-    updateCartTotals();
+    if (itemsContainer) itemsContainer.innerHTML = '';
+    if (emptyState) emptyState.classList.remove('hidden');
+    if (btnCheckout) btnCheckout.disabled = true;
+    applyPosFilters(); // Update badges on grid
     return;
   }
 
-  emptyState.classList.add('hidden');
-  btnCheckout.disabled = false;
+  if (emptyState) emptyState.classList.add('hidden');
+  if (btnCheckout) btnCheckout.disabled = false;
 
-  itemsContainer.innerHTML = state.cart.map(item => `
-    <div class="cart-item bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between gap-2 hover:bg-slate-100/60 transition-colors">
-      <!-- Item info -->
-      <div class="flex-1 min-w-0">
-        <h5 class="text-xs font-bold text-slate-800 truncate">${item.name}</h5>
-        <div class="text-[11px] text-slate-500 flex items-center space-x-1.5 mt-0.5">
-          <span class="text-blue-600 font-semibold">${formatMoney(item.price)}</span>
-          <span>•</span>
-          <span class="text-slate-400 font-mono text-[10px]">${item.barcode}</span>
+  if (itemsContainer) {
+    itemsContainer.innerHTML = state.cart.map(item => `
+      <div class="cart-item bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-2">
+        <div class="flex items-center space-x-2 min-w-0 flex-1">
+          <span class="text-xl shrink-0">${item.image || '☕'}</span>
+          <div class="truncate">
+            <h5 class="text-xs font-bold text-slate-800 truncate">${item.name}</h5>
+            <div class="text-[11px] font-semibold text-blue-600">${formatMoney(item.price)}</div>
+          </div>
+        </div>
+
+        <!-- Tăng giảm số lượng -->
+        <div class="flex items-center space-x-1 shrink-0 bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs">
+          <button onclick="updateCartQty(${item.id}, -1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 text-xs">
+            <i class="fa-solid fa-minus"></i>
+          </button>
+          <span class="w-6 text-center text-xs font-bold text-slate-800">${item.quantity}</span>
+          <button onclick="updateCartQty(${item.id}, 1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 text-xs">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
+
+        <!-- Tổng tiền món & Xóa -->
+        <div class="text-right shrink-0 min-w-[60px]">
+          <div class="text-xs font-black text-slate-800">${formatMoney(item.price * item.quantity)}</div>
+          <button onclick="removeFromCart(${item.id})" class="text-[11px] text-rose-500 hover:text-rose-700 transition-colors p-0.5">
+            <i class="fa-regular fa-trash-can"></i>
+          </button>
         </div>
       </div>
-
-      <!-- Qty controls -->
-      <div class="flex items-center space-x-1 shrink-0 bg-white border border-slate-300 rounded-lg p-0.5 shadow-2xs">
-        <button onclick="updateCartQty(${item.id}, -1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 text-xs">
-          <i class="fa-solid fa-minus"></i>
-        </button>
-        <input 
-          type="number" 
-          value="${item.quantity}" 
-          min="1" 
-          max="${item.stock}" 
-          class="w-10 text-center text-xs font-bold bg-transparent focus:outline-none"
-          onchange="setExactCartQty(${item.id}, this.value)"
-        >
-        <button onclick="updateCartQty(${item.id}, 1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:bg-slate-100 active:bg-slate-200 text-xs">
-          <i class="fa-solid fa-plus"></i>
-        </button>
-      </div>
-
-      <!-- Item Total & Delete -->
-      <div class="text-right shrink-0 min-w-[70px]">
-        <div class="text-xs font-black text-slate-800">${formatMoney(item.price * item.quantity)}</div>
-        <button onclick="removeFromCart(${item.id})" class="text-[11px] text-rose-500 hover:text-rose-700 transition-colors mt-0.5 inline-block">
-          <i class="fa-regular fa-trash-can"></i>
-        </button>
-      </div>
-    </div>
-  `).join('');
-
-  updateCartTotals();
-}
-
-// Compute cart totals
-function updateCartTotals() {
-  const subtotal = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const discountInput = Number(document.getElementById('cartDiscountValue').value) || 0;
-  const discountType = document.getElementById('cartDiscountType').value;
-
-  let discountAmount = 0;
-  if (discountType === 'percent') {
-    discountAmount = Math.round((subtotal * Math.min(100, Math.max(0, discountInput))) / 100);
-  } else {
-    discountAmount = Math.min(subtotal, Math.max(0, discountInput));
+    `).join('');
   }
 
-  const finalTotal = Math.max(0, subtotal - discountAmount);
-
-  document.getElementById('cartSubtotal').textContent = formatMoney(subtotal);
-  document.getElementById('cartFinalTotal').textContent = formatMoney(finalTotal);
-
-  // Update Mobile Floating Cart
-  const floatingBadge = document.getElementById('mobileFloatingBadge');
-  const floatingTotal = document.getElementById('mobileFloatingTotal');
-  const totalItemCount = state.cart.reduce((sum, item) => sum + item.quantity, 0);
-  if (floatingBadge) floatingBadge.textContent = totalItemCount;
-  if (floatingTotal) floatingTotal.textContent = formatMoney(finalTotal);
-
-  return { subtotal, discountAmount, discountType, discountInput, finalTotal };
+  applyPosFilters(); // Update badges on product cards
 }
 
 // =============================================================
-// CHECKOUT MODAL FLOW
+// CHECKOUT & VIETQR PAYMENT MODAL
 // =============================================================
 function openCheckoutModal() {
   if (state.cart.length === 0) return;
 
-  const { finalTotal } = updateCartTotals();
-  const customerName = document.getElementById('customerNameInput').value.trim() || 'Khách lẻ';
-  const totalItemCount = state.cart.reduce((sum, item) => sum + item.quantity, 0);
+  const totalAmount = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  // Generate temporary order code for QR code memo
+  // Generate short temporary order code
   const now = new Date();
   const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
-  tempOrderCode = `HD-${dateStr}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+  tempOrderCode = `HD-${dateStr}-${String(Math.floor(100 + Math.random() * 900))}`;
 
-  document.getElementById('checkoutOrderCodePreview').textContent = `Mã đơn dự kiến: ${tempOrderCode}`;
-  document.getElementById('checkoutModalTotal').textContent = formatMoney(finalTotal);
-  document.getElementById('checkoutModalItemCount').textContent = totalItemCount;
-  document.getElementById('checkoutModalCustomer').textContent = customerName;
+  document.getElementById('checkoutModalTable').textContent = state.selectedTable;
+  document.getElementById('checkoutOrderCodePreview').textContent = `${tempOrderCode} • ${state.selectedTable}`;
+  document.getElementById('checkoutModalTotal').textContent = formatMoney(totalAmount);
 
-  const cashierEl = document.getElementById('checkoutModalCashier');
-  if (cashierEl) {
-    cashierEl.textContent = state.currentUser ? state.currentUser.name : 'Thu ngân';
-  }
+  // Dynamic VietQR code
+  setupVietQRDisplay(totalAmount, tempOrderCode);
 
-  // Setup Cash payment default
-  const cashInput = document.getElementById('cashGivenInput');
-  cashInput.value = finalTotal.toLocaleString('vi-VN');
-  handleCashGivenInput(String(finalTotal));
-
-  // Render quick cash buttons
-  renderQuickCashButtons(finalTotal);
-
-  // Setup VietQR
-  setupVietQRDisplay(finalTotal, tempOrderCode);
-
-  // Reset to default payment method
-  setPaymentMethod('cash');
+  // Default to QR payment
+  setPaymentMethod('vietqr');
 
   document.getElementById('checkoutModal').classList.remove('hidden');
 }
@@ -436,120 +360,50 @@ function closeCheckoutModal() {
 function setPaymentMethod(method) {
   currentPaymentMethod = method;
 
-  const btnCash = document.getElementById('btnMethodCash');
   const btnVietQR = document.getElementById('btnMethodVietQR');
-  const secCash = document.getElementById('paySectionCash');
-  const secVietQR = document.getElementById('paySectionVietQR');
+  const btnCash = document.getElementById('btnMethodCash');
 
-  if (method === 'cash') {
-    btnCash.className = 'py-2.5 rounded-lg text-sm font-bold flex items-center justify-center space-x-2 transition-all bg-white text-emerald-600 shadow-sm';
-    btnVietQR.className = 'py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center space-x-2 transition-all text-slate-600 hover:text-slate-900';
-    secCash.classList.remove('hidden');
-    secVietQR.classList.add('hidden');
+  if (method === 'vietqr') {
+    btnVietQR.className = 'py-2 rounded-xl text-xs font-bold border-2 border-blue-600 bg-blue-50 text-blue-700';
+    btnCash.className = 'py-2 rounded-xl text-xs font-semibold border border-slate-300 text-slate-700';
   } else {
-    btnVietQR.className = 'py-2.5 rounded-lg text-sm font-bold flex items-center justify-center space-x-2 transition-all bg-white text-blue-600 shadow-sm';
-    btnCash.className = 'py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center space-x-2 transition-all text-slate-600 hover:text-slate-900';
-    secVietQR.classList.remove('hidden');
-    secCash.classList.add('hidden');
+    btnCash.className = 'py-2 rounded-xl text-xs font-bold border-2 border-emerald-600 bg-emerald-50 text-emerald-700';
+    btnVietQR.className = 'py-2 rounded-xl text-xs font-semibold border border-slate-300 text-slate-700';
   }
 }
 
-// Generate VietQR Image URL
+// Generate Dynamic VietQR Image URL
 function setupVietQRDisplay(amount, orderCode) {
   const bankId = state.settings.bank_id || 'MB';
   const accountNo = state.settings.bank_account_no || '0909888999';
   const accountName = state.settings.bank_account_name || 'NGUYEN VAN POS';
-  const memo = orderCode;
+  const memo = `${orderCode} ${state.selectedTable}`.trim();
 
-  // Standard Napas VietQR compact2 image URL
+  // Napas standard dynamic VietQR API
   const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(accountName)}`;
 
-  document.getElementById('vietQrImg').src = qrUrl;
-  document.getElementById('vietQrBankDisplay').textContent = bankId;
-  document.getElementById('vietQrAccountDisplay').textContent = accountNo;
-  document.getElementById('vietQrNameDisplay').textContent = accountName;
-  document.getElementById('vietQrMemoDisplay').textContent = memo;
+  const qrImg = document.getElementById('vietQrImg');
+  if (qrImg) qrImg.src = qrUrl;
 }
 
-// Quick Cash Buttons
-function renderQuickCashButtons(total) {
-  const container = document.getElementById('quickCashButtons');
-  
-  // Standard preset denominations
-  const presets = [
-    { label: 'Đúng tiền', val: total },
-    { label: '20.000 ₫', val: 20000 },
-    { label: '50.000 ₫', val: 50000 },
-    { label: '100.000 ₫', val: 100000 },
-    { label: '200.000 ₫', val: 200000 },
-    { label: '500.000 ₫', val: 500000 },
-    { label: '1.000.000 ₫', val: 1000000 },
-    { label: '2.000.000 ₫', val: 2000000 }
-  ];
-
-  container.innerHTML = presets.map(p => `
-    <button 
-      type="button" 
-      onclick="setCashGiven(${p.val})" 
-      class="py-1.5 px-2 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 transition-colors"
-    >
-      ${p.label}
-    </button>
-  `).join('');
-}
-
-function setCashGiven(val) {
-  document.getElementById('cashGivenInput').value = val.toLocaleString('vi-VN');
-  handleCashGivenInput(String(val));
-}
-
-function handleCashGivenInput(rawVal) {
-  const cleanNum = Number(String(rawVal).replace(/\D/g, '')) || 0;
-  const { finalTotal } = updateCartTotals();
-  const change = cleanNum - finalTotal;
-
-  const changeEl = document.getElementById('cashChangeReturn');
-  if (change >= 0) {
-    changeEl.className = 'text-xl font-black text-emerald-600';
-    changeEl.textContent = formatMoney(change);
-  } else {
-    changeEl.className = 'text-xl font-black text-rose-600';
-    changeEl.textContent = `Thiếu ${formatMoney(Math.abs(change))}`;
-  }
-}
-
-// Complete Order Checkout
+// Complete order checkout
 async function completeCheckoutOrder() {
   const btnConfirm = document.getElementById('btnConfirmPayment');
   btnConfirm.disabled = true;
 
   try {
-    const { finalTotal, discountAmount, discountType, discountInput } = updateCartTotals();
-    const customerName = document.getElementById('customerNameInput').value.trim() || 'Khách lẻ';
-    const customerPhone = document.getElementById('customerPhoneInput').value.trim();
-
-    let cashGiven = finalTotal;
-    if (currentPaymentMethod === 'cash') {
-      const rawCash = document.getElementById('cashGivenInput').value;
-      cashGiven = Number(String(rawCash).replace(/\D/g, '')) || finalTotal;
-      if (cashGiven < finalTotal) {
-        showToast('Số tiền khách đưa không đủ!', 'error');
-        btnConfirm.disabled = false;
-        return;
-      }
-    }
+    const totalAmount = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const note = document.getElementById('orderNoteInput')?.value.trim() || '';
 
     const payload = {
       items: state.cart.map(item => ({
         id: item.id,
         quantity: item.quantity
       })),
-      discount: discountInput,
-      discount_type: discountType,
-      cash_given: cashGiven,
+      table_name: state.selectedTable,
+      note: note,
       payment_method: currentPaymentMethod,
-      customer_name: customerName,
-      customer_phone: customerPhone
+      cash_given: totalAmount
     };
 
     const newOrder = await api('/api/orders', {
@@ -558,35 +412,26 @@ async function completeCheckoutOrder() {
     });
 
     closeCheckoutModal();
+    toggleMobileCart(false);
 
-    // Trigger celebration confetti
+    // Confetti celebration
     try {
       if (typeof confetti === 'function') {
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
+        confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
       }
     } catch (e) {}
 
-    showToast(`Đã thanh toán thành công đơn hàng ${newOrder.order_code}!`);
-
-    // Auto print receipt if checked
-    const shouldPrint = document.getElementById('autoPrintReceiptCheck').checked;
-    if (shouldPrint) {
-      printReceipt(newOrder);
-    }
+    showToast(`Thanh toán thành công ${state.selectedTable}!`);
 
     // Reset Cart
     state.cart = [];
-    document.getElementById('customerNameInput').value = 'Khách lẻ';
-    document.getElementById('customerPhoneInput').value = '';
-    document.getElementById('cartDiscountValue').value = 0;
+    const noteInput = document.getElementById('orderNoteInput');
+    if (noteInput) noteInput.value = '';
     updateCartUI();
 
-    // Reload products to update current stock
-    await loadPosProducts();
+    // Reload products & reports
+    loadPosProducts();
+    if (typeof loadOrdersList === 'function') loadOrdersList();
 
   } catch (err) {
     showToast(err.message, 'error');
@@ -595,44 +440,71 @@ async function completeCheckoutOrder() {
   }
 }
 
+// In phiếu đối chiếu từ modal thanh toán
+function printCheckoutReceipt() {
+  if (state.cart.length === 0) return;
+
+  const totalAmount = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const note = document.getElementById('orderNoteInput')?.value.trim() || '';
+
+  const orderForPrint = {
+    order_code: tempOrderCode || 'ORDER-TAM',
+    created_at: new Date().toISOString(),
+    table_name: state.selectedTable,
+    cashier_name: state.currentUser ? state.currentUser.name : 'Chủ Quán',
+    note: note,
+    payment_method: currentPaymentMethod,
+    subtotal: totalAmount,
+    discount: 0,
+    total: totalAmount,
+    items: state.cart.map(item => ({
+      product_name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      total: item.price * item.quantity
+    }))
+  };
+
+  printReceipt(orderForPrint);
+}
+
 // =============================================================
-// THERMAL RECEIPT PRINTING (80mm / 58mm)
+// THERMAL RECEIPT PRINTING (PHIẾU ĐỐI CHIẾU 80mm / 58mm)
 // =============================================================
 function generateReceiptHtml(order) {
-  const storeName = state.settings.store_name || 'CỬA HÀNG TẠP HÓA POS';
-  const storeAddress = state.settings.store_address || '';
-  const storePhone = state.settings.store_phone || '';
-  const storeGreeting = state.settings.store_greeting || 'Cảm ơn quý khách và hẹn gặp lại!';
+  const storeName = state.settings.store_name || 'QUÁN ĂN - CÀ PHÊ';
+  const tableName = order.table_name || 'Bàn 1';
+  const methodText = order.payment_method === 'vietqr' ? 'Chuyển khoản (VietQR)' : 'Tiền mặt';
 
   const itemsHtml = (order.items || []).map((item, idx) => `
     <tr>
-      <td colspan="3" style="font-weight: bold; padding-top: 4px;">${idx + 1}. ${item.product_name}</td>
+      <td colspan="2" style="font-weight: bold; padding-top: 4px;">${idx + 1}. ${item.product_name}</td>
     </tr>
     <tr>
-      <td style="padding-left: 12px;">${item.quantity} x ${formatMoney(item.price)}</td>
+      <td style="padding-left: 10px;">${item.quantity} phần x ${formatMoney(item.price)}</td>
       <td style="text-align: right; font-weight: bold;">${formatMoney(item.total)}</td>
     </tr>
   `).join('');
 
-  const methodText = order.payment_method === 'vietqr' ? 'Chuyển khoản (VietQR)' : 'Tiền mặt';
-
   return `
     <div class="receipt-title">${storeName}</div>
     <div class="receipt-header">
-      ${storeAddress ? `<div>${storeAddress}</div>` : ''}
-      ${storePhone ? `<div>ĐT: ${storePhone}</div>` : ''}
-      <div style="margin-top: 4px; font-weight: bold; font-size: 13px;">HÓA ĐƠN BÁN HÀNG</div>
-      <div style="font-family: monospace;">Số HĐ: ${order.order_code}</div>
-      <div>Ngày: ${formatDateTime(order.created_at)}</div>
-      <div>Thu ngân: <strong>${order.cashier_name || 'Thu ngân'}</strong></div>
-      <div>Khách hàng: ${order.customer_name || 'Khách lẻ'} ${order.customer_phone ? `(${order.customer_phone})` : ''}</div>
+      <div style="font-size: 14px; font-weight: 900; margin: 4px 0; text-transform: uppercase;">
+        PHIẾU GỌI MÓN / ĐỐI CHIẾU
+      </div>
+      <div style="font-size: 15px; font-weight: 900; color: #000; margin: 2px 0;">
+        📍 ${tableName}
+      </div>
+      <div>Mã đơn: <strong>${order.order_code}</strong></div>
+      <div>Giờ: ${formatDateTime(order.created_at)}</div>
+      ${order.note ? `<div style="font-style: italic; margin-top: 2px;">Ghi chú: ${order.note}</div>` : ''}
     </div>
 
     <table class="receipt-table">
       <thead>
         <tr>
-          <th>Tên hàng / SL x Đơn giá</th>
-          <th style="text-align: right;">Thành tiền</th>
+          <th>Món / SL x Giá</th>
+          <th style="text-align: right;">Tiền</th>
         </tr>
       </thead>
       <tbody>
@@ -643,60 +515,31 @@ function generateReceiptHtml(order) {
     <div class="receipt-divider"></div>
 
     <table class="receipt-summary">
-      <tr>
-        <td>Tạm tính:</td>
-        <td style="text-align: right;">${formatMoney(order.subtotal)}</td>
-      </tr>
-      ${order.discount > 0 ? `
-      <tr>
-        <td>Giảm giá:</td>
-        <td style="text-align: right;">-${formatMoney(order.discount)}</td>
-      </tr>
-      ` : ''}
       <tr class="receipt-total">
         <td>TỔNG CỘNG:</td>
         <td style="text-align: right;">${formatMoney(order.total)}</td>
       </tr>
       <tr>
-        <td>Hình thức:</td>
+        <td>Thanh toán:</td>
         <td style="text-align: right; font-weight: bold;">${methodText}</td>
       </tr>
-      ${order.payment_method === 'cash' ? `
-      <tr>
-        <td>Tiền khách đưa:</td>
-        <td style="text-align: right;">${formatMoney(order.cash_given)}</td>
-      </tr>
-      <tr>
-        <td>Tiền thừa trả lại:</td>
-        <td style="text-align: right; font-weight: bold;">${formatMoney(order.change_returned)}</td>
-      </tr>
-      ` : ''}
     </table>
 
     <div class="receipt-footer">
-      <div>${storeGreeting}</div>
-      <div style="margin-top: 4px; font-size: 10px;">Phần mềm POS Pro • Hotline: ${storePhone}</div>
+      <div>Cảm ơn quý khách và hẹn gặp lại!</div>
     </div>
   `;
 }
 
-// =============================================================
-// WEB BLUETOOTH ESC/POS MOBILE THERMAL PRINTING
-// =============================================================
+// Web Bluetooth ESC/POS Printing
 let bluetoothDevice = null;
 let bluetoothCharacteristic = null;
 
-// Remove accents helper for thermal printer compatibility
 function removeVietnameseAccents(str) {
   if (!str) return '';
-  return str
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D');
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 }
 
-// Format line with left and right columns (e.g. 32 chars for 58mm, 48 chars for 80mm)
 function formatLineColumns(left, right, width = 32) {
   const l = removeVietnameseAccents(String(left));
   const r = removeVietnameseAccents(String(right));
@@ -704,28 +547,24 @@ function formatLineColumns(left, right, width = 32) {
   return l + ' '.repeat(spaceCount) + r + '\n';
 }
 
-// Connect to Bluetooth Thermal Printer
 async function connectBluetoothPrinter() {
   if (!navigator.bluetooth) {
-    showToast('Trình duyệt này chưa hỗ trợ Web Bluetooth. Vui lòng dùng Google Chrome trên điện thoại Android, hoặc in qua máy in Wi-Fi!', 'error');
+    showToast('Trình duyệt chưa hỗ trợ Bluetooth. Hãy mở bằng Chrome trên Android hoặc dùng in qua Wi-Fi!', 'error');
     return;
   }
 
   try {
-    showToast('Đang quét tìm máy in Bluetooth gần bạn...');
+    showToast('Đang tìm máy in Bluetooth...');
     const device = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: [
-        '000018f0-0000-1000-8000-00805f9b34fb', // OEM standard
-        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC transparent
-        '0000ff00-0000-1000-8000-00805f9b34fb',
-        'e7810a71-73ae-499d-8c15-faa9aef0c3f2'
+        '000018f0-0000-1000-8000-00805f9b34fb',
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+        '0000ff00-0000-1000-8000-00805f9b34fb'
       ]
     });
 
     const server = await device.gatt.connect();
-    
-    // Search for writable characteristic
     let foundChar = null;
     const services = await server.getPrimaryServices();
     for (const service of services) {
@@ -739,121 +578,55 @@ async function connectBluetoothPrinter() {
       if (foundChar) break;
     }
 
-    if (!foundChar) {
-      throw new Error('Không tìm thấy cổng ghi dữ liệu in trên thiết bị này');
-    }
+    if (!foundChar) throw new Error('Không tìm thấy cổng in trên thiết bị');
 
     bluetoothDevice = device;
     bluetoothCharacteristic = foundChar;
 
-    device.addEventListener('gattserverdisconnected', () => {
-      bluetoothDevice = null;
-      bluetoothCharacteristic = null;
-      updatePrinterStatusBadge();
-      showToast('Máy in Bluetooth đã ngắt kết nối', 'error');
-    });
-
-    updatePrinterStatusBadge();
-    showToast(`Đã kết nối máy in: ${device.name || 'Bluetooth Printer'}`);
+    closePrinterModal();
+    showToast(`Đã kết nối máy in: ${device.name || 'Bluetooth'}`);
   } catch (err) {
-    console.error('Bluetooth error:', err);
-    showToast('Lỗi kết nối Bluetooth: ' + (err.message || 'Hủy chọn'), 'error');
+    showToast('Lỗi Bluetooth: ' + err.message, 'error');
   }
 }
 
-function updatePrinterStatusBadge() {
-  const badge = document.getElementById('printerStatusBtn');
-  if (!badge) return;
-
-  if (bluetoothCharacteristic) {
-    badge.className = 'px-2.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-semibold border border-emerald-300 transition-colors flex items-center space-x-1.5';
-    badge.innerHTML = `<i class="fa-solid fa-print text-emerald-600"></i><span class="hidden sm:inline">Máy in:</span> <span>${bluetoothDevice.name || 'Sẵn sàng'}</span>`;
-  } else {
-    badge.className = 'px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-xs font-semibold border border-slate-200 transition-colors flex items-center space-x-1.5';
-    badge.innerHTML = `<i class="fa-solid fa-print text-slate-400"></i><span class="hidden sm:inline">Kết nối</span> <span>Máy In</span>`;
-  }
-}
-
-// Send ESC/POS commands over Bluetooth
 async function printEscPosBluetooth(order) {
-  if (!bluetoothCharacteristic) {
-    throw new Error('Chưa kết nối máy in Bluetooth');
-  }
+  if (!bluetoothCharacteristic) throw new Error('Chưa kết nối máy in');
 
-  const storeName = state.settings.store_name || 'CUA HANG TAP HOA POS';
-  const storeAddress = state.settings.store_address || '';
-  const storePhone = state.settings.store_phone || '';
-  const is58mm = (state.settings.paper_size || '80mm') === '58mm';
-  const lineWidth = is58mm ? 32 : 48;
+  const storeName = state.settings.store_name || 'POS ORDER';
+  const lineWidth = 32;
   const divider = '-'.repeat(lineWidth) + '\n';
 
-  // Construct raw ESC/POS text
-  let content = '';
+  let content = '\x1B\x40'; // Reset
+  content += '\x1B\x61\x01'; // Center
+  content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\n';
+  content += 'PHIEU DOI CHIEU MON\n';
+  content += `BAN: ${removeVietnameseAccents(order.table_name || 'BAN 1')}\n`;
+  content += '\x1B\x45\x00';
+  content += `Ma HD: ${order.order_code}\n`;
+  content += `Gio: ${formatDateTime(order.created_at)}\n`;
+  if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
-  // Initialize printer
-  content += '\x1B\x40'; // ESC @ (Reset)
-  
-  // Center alignment for Header
-  content += '\x1B\x61\x01'; // ESC a 1 (Align Center)
-  content += '\x1B\x45\x01'; // Bold ON
-  content += '\x1D\x21\x01'; // Double height
-  content += removeVietnameseAccents(storeName) + '\n';
-  content += '\x1D\x21\x00'; // Normal size
-  content += '\x1B\x45\x00'; // Bold OFF
-
-  if (storeAddress) content += removeVietnameseAccents(storeAddress) + '\n';
-  if (storePhone) content += 'DT: ' + storePhone + '\n';
-  
-  content += '\x1B\x45\x01'; // Bold ON
-  content += 'HOA DON BAN HANG\n';
-  content += '\x1B\x45\x00'; // Bold OFF
-  content += 'So HD: ' + order.order_code + '\n';
-  content += 'Ngay: ' + formatDateTime(order.created_at) + '\n';
-  content += 'Thu ngan: ' + removeVietnameseAccents(order.cashier_name || 'Thu ngan') + '\n';
-  content += 'Khach hang: ' + removeVietnameseAccents(order.customer_name || 'Khach le') + '\n';
-
-  content += '\x1B\x61\x00'; // ESC a 0 (Align Left)
+  content += '\x1B\x61\x00'; // Left
   content += divider;
-  content += formatLineColumns('TEN HANG / SL', 'THANH TIEN', lineWidth);
+  content += formatLineColumns('MON / SL', 'TIEN', lineWidth);
   content += divider;
 
-  for (let i = 0; i < (order.items || []).length; i++) {
-    const it = order.items[i];
+  (order.items || []).forEach((it, i) => {
     content += `${i + 1}. ${removeVietnameseAccents(it.product_name)}\n`;
-    const qtyPrice = `   ${it.quantity} ${removeVietnameseAccents(it.unit || '')} x ${formatMoney(it.price)}`;
-    const lineTotal = formatMoney(it.total);
-    content += formatLineColumns(qtyPrice, lineTotal, lineWidth);
-  }
+    content += formatLineColumns(`   ${it.quantity} phan`, formatMoney(it.total), lineWidth);
+  });
 
   content += divider;
-  content += formatLineColumns('Tam tinh:', formatMoney(order.subtotal), lineWidth);
-  if (order.discount > 0) {
-    content += formatLineColumns('Giam gia:', '-' + formatMoney(order.discount), lineWidth);
-  }
-  content += '\x1B\x45\x01'; // Bold ON
+  content += '\x1B\x45\x01';
   content += formatLineColumns('TONG CONG:', formatMoney(order.total), lineWidth);
-  content += '\x1B\x45\x00'; // Bold OFF
-
-  const methodText = order.payment_method === 'vietqr' ? 'Chuyen khoan VietQR' : 'Tien mat';
-  content += formatLineColumns('Hinh thuc:', methodText, lineWidth);
-  if (order.payment_method === 'cash') {
-    content += formatLineColumns('Tien khach dua:', formatMoney(order.cash_given), lineWidth);
-    content += formatLineColumns('Tien thua:', formatMoney(order.change_returned), lineWidth);
-  }
-
+  content += '\x1B\x45\x00';
+  content += formatLineColumns('Thanh toan:', order.payment_method === 'vietqr' ? 'VietQR' : 'Tien mat', lineWidth);
   content += divider;
-  content += '\x1B\x61\x01'; // Align Center
-  content += removeVietnameseAccents(state.settings.store_greeting || 'Cam on quy khach va hen gap lai!') + '\n';
-  content += 'Hotline: ' + storePhone + '\n';
-  
-  // Feed lines & cut paper
-  content += '\n\n\n\n\x1D\x56\x01'; // GS V 1 (Feed and partial cut)
+  content += '\x1B\x61\x01Cam on quy khach!\n\n\n\n\x1D\x56\x01';
 
-  // Convert string to Uint8Array
   const encoder = new TextEncoder();
   const data = encoder.encode(content);
-
-  // Send chunks of 100 bytes to avoid Bluetooth buffer overflow
   const chunkSize = 100;
   for (let offset = 0; offset < data.length; offset += chunkSize) {
     const chunk = data.slice(offset, offset + chunkSize);
@@ -862,93 +635,50 @@ async function printEscPosBluetooth(order) {
     } else {
       await bluetoothCharacteristic.writeValue(chunk);
     }
-    // Small delay between chunks
-    await new Promise(r => setTimeout(r, 25));
+    await new Promise(r => setTimeout(r, 20));
   }
 }
 
-// Print Receipt (Auto decides Bluetooth vs Browser Print)
 async function printReceipt(order) {
   if (bluetoothCharacteristic) {
     try {
-      showToast('Đang gửi lệnh in tới máy in Bluetooth...');
+      showToast('Đang in phiếu qua Bluetooth...');
       await printEscPosBluetooth(order);
-      showToast('Đã in hóa đơn thành công!');
+      showToast('Đã in phiếu đối chiếu thành công!');
       return;
     } catch (err) {
-      console.warn('Bluetooth print failed, falling back to window.print:', err);
-      showToast('Lỗi in Bluetooth, chuyển sang in qua trình duyệt: ' + err.message, 'error');
+      console.warn('Bluetooth print failed, falling back to window.print', err);
     }
   }
 
-  // Fallback to standard thermal receipt window.print() (works on iOS AirPrint, Wi-Fi printers, PC)
-  const receiptContainer = document.getElementById('printable-receipt');
-  if (receiptContainer) {
-    receiptContainer.innerHTML = generateReceiptHtml(order);
+  // Fallback to window.print()
+  const container = document.getElementById('printable-receipt');
+  if (container) {
+    container.innerHTML = generateReceiptHtml(order);
     window.print();
   }
 }
 
-// Open/Close Printer Modal
 function openPrinterModal() {
-  const tag = document.getElementById('bluetoothStatusTag');
-  if (tag) {
-    if (bluetoothCharacteristic) {
-      tag.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800';
-      tag.textContent = bluetoothDevice ? bluetoothDevice.name || 'Đã kết nối' : 'Đã kết nối';
-    } else {
-      tag.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600';
-      tag.textContent = 'Chưa kết nối';
-    }
-  }
-
-  const paperSelect = document.getElementById('quickPaperSizeSelect');
-  if (paperSelect) {
-    paperSelect.value = state.settings.paper_size || '80mm';
-  }
-
-  document.getElementById('printerModal').classList.remove('hidden');
+  document.getElementById('printerModal')?.classList.remove('hidden');
 }
 
 function closePrinterModal() {
-  document.getElementById('printerModal').classList.add('hidden');
+  document.getElementById('printerModal')?.classList.add('hidden');
 }
 
-// Change Paper Size on the fly
-async function changeQuickPaperSize(val) {
-  state.settings.paper_size = val;
-  try {
-    if (state.currentUser && state.currentUser.role === 'admin') {
-      await api('/api/settings', {
-        method: 'PUT',
-        body: JSON.stringify({ paper_size: val })
-      });
-    }
-    showToast(`Đã chuyển sang khổ giấy: ${val}`);
-  } catch (e) {
-    showToast(`Đã chọn khổ giấy: ${val}`);
-  }
-}
-
-// Test Print Sample Receipt
 function testPrintSample() {
   const sampleOrder = {
-    order_code: 'HD-TEST-SAMPLE',
+    order_code: 'HD-MAU',
     created_at: new Date().toISOString(),
-    cashier_name: state.currentUser ? state.currentUser.name : 'Thu ngân',
-    customer_name: 'Khách thử nghiệm',
-    customer_phone: '0901234567',
-    subtotal: 35000,
-    discount: 5000,
-    total: 30000,
-    payment_method: 'cash',
-    cash_given: 50000,
-    change_returned: 20000,
+    table_name: 'Bàn 1 (Thử nghiệm)',
+    note: 'Ít đá, ít ngọt',
+    payment_method: 'vietqr',
+    total: 45000,
     items: [
-      { product_name: 'Coca Cola 320ml', unit: 'lon', quantity: 2, price: 10000, total: 20000 },
-      { product_name: 'Bánh Snack Oishi', unit: 'gói', quantity: 1, price: 15000, total: 15000 }
+      { product_name: 'Cà phê sữa đá', quantity: 1, price: 25000, total: 25000 },
+      { product_name: 'Trà đào cam sả', quantity: 1, price: 20000, total: 20000 }
     ]
   };
-
   printReceipt(sampleOrder);
 }
