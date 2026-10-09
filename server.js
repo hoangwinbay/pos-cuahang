@@ -118,6 +118,11 @@ app.get('/api/network/info', (req, res) => {
   });
 });
 
+// Lightweight health check endpoint for cron-job.org / uptime monitoring
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 // -------------------------------------------------------------
 // AUTH & USERS API
 // -------------------------------------------------------------
