@@ -671,6 +671,24 @@ function printKitchenSlip() {
   if (totalEl) totalEl.textContent = formatMoney(totalAmount);
   if (countEl) countEl.textContent = `${totalCount} món`;
 
+  // Render danh sách đầy đủ các món để nhân viên xác định
+  const itemsListEl = document.getElementById('kitchenConfirmItemsList');
+  if (itemsListEl) {
+    itemsListEl.innerHTML = items.map((it, idx) => `
+      <div class="py-2 flex items-center justify-between text-xs">
+        <div class="truncate pr-2">
+          <div class="font-bold text-slate-800 truncate">${idx + 1}. ${it.name}</div>
+          <div class="text-[11px] text-slate-500 font-semibold">
+            SL: ${it.quantity} phần x ${formatMoney(it.price)}
+          </div>
+        </div>
+        <div class="font-black text-slate-800 shrink-0 text-sm">
+          ${formatMoney(it.price * it.quantity)}
+        </div>
+      </div>
+    `).join('');
+  }
+
   document.getElementById('kitchenConfirmModal')?.classList.remove('hidden');
 }
 
