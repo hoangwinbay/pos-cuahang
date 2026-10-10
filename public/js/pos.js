@@ -1385,9 +1385,9 @@ function setupVietQRDisplay() {}
 // IN HÓA ĐƠN NHIỆT / PHIẾU BÁO BẾP (80mm / 58mm & BLUETOOTH)
 // =============================================================
 function generateReceiptHtml(order) {
-  const storeName = state.settings.store_name || 'QUÁN ĂN - CÀ PHÊ';
+  const storeName = state.settings.store_name || 'BÚN MẮM MIỀN TÂY';
   const tableName = order.table_name || 'Bàn 1';
-  const footerText = state.settings.receipt_footer || 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán';
+  const footerText = state.settings.receipt_footer || 'Quý khách vui lòng kiểm tra lại hóa đơn khi thanh toán';
 
   const itemsHtml = (order.items || []).map((item, idx) => `
     <tr>
@@ -1402,13 +1402,13 @@ function generateReceiptHtml(order) {
   return `
     <div class="receipt-title">${storeName}</div>
     <div class="receipt-header">
-      <div style="font-size: 15px; font-weight: 900; margin: 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">
-        PHIẾU BÁO BẾP / GỌI MÓN
+      <div style="font-size: 16px; font-weight: 900; margin: 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">
+        HÓA ĐƠN THANH TOÁN
       </div>
       <div style="font-size: 20px; font-weight: 900; color: #000; margin: 4px 0; padding: 2px 0; border: 1px dashed #000;">
         📍 ${tableName}
       </div>
-      <div>Mã phiếu: <strong>${order.order_code}</strong></div>
+      <div>Mã hóa đơn: <strong>${order.order_code}</strong></div>
       <div>Giờ: ${formatDateTime(order.created_at)}</div>
       ${order.note ? `<div style="font-style: italic; font-weight: bold; margin-top: 2px;">Ghi chú: ${order.note}</div>` : ''}
     </div>
@@ -1429,7 +1429,7 @@ function generateReceiptHtml(order) {
 
     <table class="receipt-summary">
       <tr class="receipt-total">
-        <td>TỔNG TẠM TÍNH:</td>
+        <td>TỔNG CỘNG:</td>
         <td style="text-align: right;">${formatMoney(order.total)}</td>
       </tr>
     </table>
@@ -1503,17 +1503,17 @@ async function connectBluetoothPrinter() {
 async function printEscPosBluetooth(order) {
   if (!bluetoothCharacteristic) throw new Error('Chưa kết nối máy in');
 
-  const storeName = state.settings.store_name || 'POS ORDER';
+  const storeName = state.settings.store_name || 'BUN MAM MIEN TAY';
   const lineWidth = 32;
   const divider = '-'.repeat(lineWidth) + '\n';
 
   let content = '\x1B\x40';
   content += '\x1B\x61\x01';
   content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\n';
-  content += 'PHIEU BAO BEP / GOI MON\n';
+  content += 'HOA DON THANH TOAN\n';
   content += `BAN: ${removeVietnameseAccents(order.table_name || 'BAN 1')}\n`;
   content += '\x1B\x45\x00';
-  content += `Ma phieu: ${order.order_code}\n`;
+  content += `Ma HD: ${order.order_code}\n`;
   content += `Gio: ${formatDateTime(order.created_at)}\n`;
   if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
@@ -1529,10 +1529,10 @@ async function printEscPosBluetooth(order) {
 
   content += divider;
   content += '\x1B\x45\x01';
-  content += formatLineColumns('TONG TAM TINH:', formatMoney(order.total), lineWidth);
+  content += formatLineColumns('TONG CONG:', formatMoney(order.total), lineWidth);
   content += '\x1B\x45\x00';
   content += divider;
-  content += '\x1B\x61\x01Vui long mang phieu ra quay\nkhi thanh toan!\nCam on quy khach!\n\n\n\n\x1D\x56\x01';
+  content += '\x1B\x61\x01Cam on quy khach va hen gap lai!\n\n\n\n\x1D\x56\x01';
 
   const encoder = new TextEncoder();
   const data = encoder.encode(content);
@@ -1623,7 +1623,7 @@ function printViaIsolatedIframe(receiptHtml) {
     <html lang="vi">
     <head>
       <meta charset="utf-8">
-      <title>Phiếu Báo Bếp</title>
+      <title>Hóa Đơn Thanh Toán</title>
       <style>
         @page {
           margin: 0;
@@ -1748,7 +1748,7 @@ function openReceiptPrintWindow() {
     <html lang="vi">
     <head>
       <meta charset="utf-8">
-      <title>Phiếu Báo Bếp - ${lastPrintedOrder.table_name || 'Bàn'}</title>
+      <title>Hóa Đơn Thanh Toán - ${lastPrintedOrder.table_name || 'Bàn'}</title>
       <style>
         @page { size: 80mm auto; margin: 0; }
         body {
@@ -1798,7 +1798,7 @@ function openReceiptPrintWindow() {
       </style>
     </head>
     <body>
-      <button class="btn-print" onclick="window.print()">🖨️ BẤM VÀO ĐÂY ĐỂ IN PHIẾU BÁO BẾP</button>
+      <button class="btn-print" onclick="window.print()">🖨️ BẤM VÀO ĐÂY ĐỂ IN HÓA ĐƠN THANH TOÁN</button>
       <div class="receipt-container">
         ${receiptHtml}
       </div>
@@ -1864,18 +1864,18 @@ function copyReceiptTextToClipboard() {
   }
   const o = lastPrintedOrder;
   const itemsText = (o.items || []).map((it, idx) => `${idx + 1}. ${it.product_name || it.name} x${it.quantity} = ${formatMoney(it.total || it.price * it.quantity)}`).join('\n');
-  const text = `📋 PHIẾU BÁO BẾP: ${o.table_name || 'Bàn'}\n` +
+  const text = `📋 HÓA ĐƠN THANH TOÁN: ${o.table_name || 'Bàn'}\n` +
                `Mã: ${o.order_code || ''}\n` +
                `Thời gian: ${formatDateTime(o.created_at || new Date())}\n` +
                (o.note ? `Ghi chú: ${o.note}\n` : '') +
                `-------------------------\n` +
                `${itemsText}\n` +
                `-------------------------\n` +
-               `TỔNG TIỀN: ${formatMoney(o.total || 0)}`;
+               `TỔNG CỘNG: ${formatMoney(o.total || 0)}`;
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
-      showToast('Đã sao chép nội dung phiếu! Bạn có thể dán vào Zalo gửi bếp.', 'success');
+      showToast('Đã sao chép nội dung hóa đơn!', 'success');
     }).catch(() => {
       fallbackCopyText(text);
     });
@@ -1894,9 +1894,9 @@ function fallbackCopyText(text) {
   ta.select();
   try {
     document.execCommand('copy');
-    showToast('Đã sao chép nội dung phiếu! Bạn có thể dán vào Zalo gửi bếp.', 'success');
+    showToast('Đã sao chép nội dung hóa đơn!', 'success');
   } catch (e) {
-    showToast('Đã chọn nội dung phiếu, hãy nhấn Sao chép', 'info');
+    showToast('Đã chọn nội dung hóa đơn, hãy nhấn Sao chép', 'info');
   }
   document.body.removeChild(ta);
 }
@@ -1912,15 +1912,15 @@ function closePrinterModal() {
 function testPrintSample() {
   closePrinterModal();
   const sampleOrder = {
-    order_code: 'BEP-MAU-01',
+    order_code: 'HD-MAU-01',
     created_at: new Date().toISOString(),
     table_name: 'Bàn 1 (In Thử Nghiệm)',
-    note: 'Ít đá, ít cay',
+    note: 'Ít ớt, bún thêm',
     payment_method: 'cash',
-    total: 45000,
+    total: 95000,
     items: [
-      { product_name: 'Cà phê sữa đá', quantity: 1, price: 25000, total: 25000 },
-      { product_name: 'Trà đào cam sả', quantity: 1, price: 20000, total: 20000 }
+      { product_name: 'Bún mắm chả cá đặc biệt', quantity: 1, price: 65000, total: 65000 },
+      { product_name: 'Trà đá đường sâm dứa', quantity: 2, price: 15000, total: 30000 }
     ]
   };
   printReceipt(sampleOrder);

@@ -122,19 +122,28 @@ function initDatabase() {
   if (settingCount === 0) {
     const insertSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)');
     const defaultSettings = [
-      ['store_name', 'CỬA HÀNG TẠP HÓA POS PRO'],
+      ['store_name', 'BÚN MẮM MIỀN TÂY'],
       ['store_address', '123 Đường Lê Lợi, Phường Bến Thành, Quận 1, TP. HCM'],
       ['store_phone', '0909 888 999'],
       ['store_greeting', 'Cảm ơn quý khách và hẹn gặp lại! Hotline hỗ trợ: 0909 888 999'],
       ['bank_id', 'MB'],
       ['bank_account_no', '0909888999'],
-      ['bank_account_name', 'NGUYEN VAN POS'],
+      ['bank_account_name', 'BUN MAM MIEN TAY'],
       ['paper_size', '80mm']
     ];
     for (const [k, v] of defaultSettings) {
       insertSetting.run(k, v);
     }
   }
+
+  // Cập nhật tên quán sang BÚN MẮM MIỀN TÂY nếu còn lưu tên cũ
+  try {
+    db.exec(`
+      UPDATE settings 
+      SET value = 'BÚN MẮM MIỀN TÂY' 
+      WHERE key = 'store_name' AND (value = 'CỬA HÀNG TẠP HÓA POS PRO' OR value = 'QUÁN ĂN - CÀ PHÊ' OR value = 'POS ORDER' OR value = '' OR value IS NULL);
+    `);
+  } catch (e) {}
 
   // Clean up legacy emoji icons from categories and products
   try {
