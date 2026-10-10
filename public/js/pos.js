@@ -1135,9 +1135,9 @@ function executePrintKitchenSlip() {
     printReceipt(orderForPrint);
   }
 
-  // Phát lệnh từ xa lên quầy nếu đang thao tác trên thiết bị di động (Zalo Mini App / điện thoại)
+  // Chỉ phát lệnh in từ xa lên quầy nếu người dùng BẬT tự động in (đã có máy in bill)
   const isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobileDev) {
+  if (isMobileDev && isAutoPrintEnabled()) {
     const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
     api('/api/print-job', {
       method: 'POST',
@@ -1724,6 +1724,12 @@ async function printEscPosBluetooth(order) {
 let lastPrintedOrder = null;
 
 function printReceipt(order) {
+  // Nếu tự động in đang tắt và không có máy in Bluetooth -> Không gọi window.print() để tuyệt đối không mở File Explorer
+  if (!isAutoPrintEnabled() && !bluetoothCharacteristic) {
+    console.log('Chế độ tự động in đang tắt, bỏ qua lệnh in để không mở File Explorer');
+    return;
+  }
+
   if (Date.now() - (window._lastPrintTimestamp || 0) < 2000) {
     console.log('Chặn in trùng lặp trong 2s');
     return;
@@ -1737,7 +1743,7 @@ function printReceipt(order) {
       showToast('Đã in phiếu thành công!');
     }).catch(err => {
       console.warn('Bluetooth print failed, falling back to window.print', err);
-      executeWindowPrint(order);
+      if (isAutoPrintEnabled()) executeWindowPrint(order);
     });
     return;
   }
@@ -1766,6 +1772,11 @@ function playOrderNotificationSound() {
 }
 
 function executeWindowPrint(order) {
+  // Chỉ gọi window.print nếu người dùng BẬT tự động in hoặc có máy in Bluetooth
+  if (!isAutoPrintEnabled() && !bluetoothCharacteristic) {
+    console.log('Chế độ in đang tắt, bỏ qua executeWindowPrint để không mở File Explorer');
+    return;
+  }
   const receiptHtml = generateReceiptHtml(order);
 
   // 1. Cập nhật DOM chính #printable-receipt để in
@@ -1788,6 +1799,10 @@ function executeWindowPrint(order) {
 }
 
 function printViaIsolatedIframe(receiptHtml) {
+  if (!isAutoPrintEnabled() && !bluetoothCharacteristic) {
+    console.log('Chế độ in đang tắt, bỏ qua printViaIsolatedIframe để không mở File Explorer');
+    return;
+  }
   let iframe = document.getElementById('pos-print-isolated-iframe');
   if (!iframe) {
     iframe = document.createElement('iframe');
