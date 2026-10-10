@@ -1583,27 +1583,27 @@ function executeWindowPrint(order) {
     container.innerHTML = receiptHtml;
   }
 
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isZalo = /Zalo/i.test(navigator.userAgent);
+  if (isZalo) {
+    openMobileReceiptModal(order, receiptHtml, true);
+    return;
+  }
 
-  if (isMobile) {
-    // 2. TRÊN THIẾT BỊ DI ĐỘNG (IPHONE / ANDROID):
-    // Luôn mở giao diện xem phiếu nhiệt trực quan trước mắt nhân viên
-    openMobileReceiptModal(order, receiptHtml, isZalo);
+  // Tạm thời mở overflow trên body & html để Safari iOS WebKit đo lường và mở AirPrint
+  document.body.classList.remove('overflow-hidden', 'h-screen');
+  document.documentElement.style.overflow = 'visible';
+  document.documentElement.style.height = 'auto';
 
-    // Kích hoạt hộp thoại in hệ thống (AirPrint trên iPhone / Spooler trên Android)
-    if (!isZalo) {
-      setTimeout(() => {
-        try {
-          window.print();
-        } catch (e) {
-          console.warn('Lỗi gọi window.print trên mobile:', e);
-        }
-      }, 350);
-    }
-  } else {
-    // 3. TRÊN MÁY TÍNH (PC):
+  try {
+    // GỌI IN TRỰC TIẾP ĐỒNG BỘ TRONG SỰ KIỆN CLICK (BẮT BUỘC TRÊN SAFARI IOS)
     window.print();
+  } catch (err) {
+    console.warn('Lỗi gọi window.print:', err);
+    openMobileReceiptModal(order, receiptHtml, false);
+  } finally {
+    document.body.classList.add('overflow-hidden', 'h-screen');
+    document.documentElement.style.overflow = '';
+    document.documentElement.style.height = '';
   }
 }
 
@@ -1638,10 +1638,17 @@ function triggerDirectSystemPrint() {
     const container = document.getElementById('printable-receipt');
     if (container) container.innerHTML = receiptHtml;
   }
+  document.body.classList.remove('overflow-hidden', 'h-screen');
+  document.documentElement.style.overflow = 'visible';
+  document.documentElement.style.height = 'auto';
   try {
     window.print();
   } catch (e) {
     showToast('Trình duyệt chưa hỗ trợ in trực tiếp. Bạn có thể sao chép phiếu để gửi cho bếp!', 'warning');
+  } finally {
+    document.body.classList.add('overflow-hidden', 'h-screen');
+    document.documentElement.style.overflow = '';
+    document.documentElement.style.height = '';
   }
 }
 
