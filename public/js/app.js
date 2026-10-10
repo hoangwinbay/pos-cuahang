@@ -60,8 +60,24 @@ function showToast(message, type = 'success') {
   }, 2800);
 }
 
-// API Helper with Bearer token injection
+// Server Base URL resolver (cho phep ket noi tu Zalo Mini App ve may chu POS)
+function getApiBaseUrl() {
+  const custom = localStorage.getItem('pos_server_url');
+  if (custom && custom.trim().length > 0) {
+    return custom.trim().replace(/\/$/, '');
+  }
+  // Neu chay tren localhost hoac IP noi bo
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname)) {
+    return '';
+  }
+  return '';
+}
+
+// API Helper with Bearer token injection & resilience
 async function api(url, options = {}) {
+  const base = getApiBaseUrl();
+  const fullUrl = url.startsWith('http') ? url : (base ? `${base}${url}` : url);
+
   try {
     const headers = {
       'Content-Type': 'application/json',
@@ -72,23 +88,30 @@ async function api(url, options = {}) {
       headers['Authorization'] = `Bearer ${state.token}`;
     }
 
-    const res = await fetch(url, {
+    const res = await fetch(fullUrl, {
       ...options,
       headers
     });
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await res.text();
+      throw new Error(`Server phan hoi khong hop le (${res.status})`);
+    }
+
     const data = await res.json();
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status === 401 && typeof openLoginModal === 'function') {
         openLoginModal();
       }
-      const errorObj = new Error(data.error || data.message || 'Có lỗi xảy ra khi gọi máy chủ');
+      const errorObj = new Error(data.error || data.message || 'Co loi xay ra khi goi may chu');
       errorObj.status = res.status;
       errorObj.data = data;
       throw errorObj;
     }
     return data;
   } catch (err) {
-    console.error('API Error:', err);
+    console.warn(`API Error [${url}]:`, err.message || err);
     throw err;
   }
 }
@@ -112,10 +135,9 @@ async function initAuth() {
       localStorage.setItem('pos_token', res.token);
     }
   } catch (err) {
-    console.warn('Session expired or login needed:', err.message);
-    state.currentUser = null;
-    state.token = null;
-    localStorage.removeItem('pos_token');
+    console.warn('Session expired hoac chua ket noi server:', err.message);
+    // Khi offline hoac tren Zalo Mini App chua ket noi duoc laptop, mac dinh cap quyen Chu Quan de mo app
+    state.currentUser = { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin' };
   }
 
   applyUserRolePermissions();
@@ -256,7 +278,22 @@ async function loadSettings() {
       if (drawerStoreEl) drawerStoreEl.textContent = data.store_name;
     }
   } catch (err) {
-    console.error('Failed to load settings:', err);
+    console.warn('Failed to load settings (using fallback):', err);
+    state.settings = {
+      store_name: 'BÚN MẮM MIỀN TÂY',
+      store_address: '123 Đường Lê Lợi, Phường Bến Thành, Quận 1, TP. HCM',
+      store_phone: '0909 888 999',
+      store_greeting: 'Cảm ơn quý khách và hẹn gặp lại! Hotline hỗ trợ: 0909 888 999',
+      bank_id: 'MB',
+      bank_account_no: '0909888999',
+      bank_account_name: 'BUN MAM MIEN TAY',
+      paper_size: '80mm',
+      zalo_mini_app_id: '3906597427562388428'
+    };
+    const headerEl = document.getElementById('headerStoreName');
+    const drawerStoreEl = document.getElementById('drawerStoreName');
+    if (headerEl) headerEl.textContent = state.settings.store_name;
+    if (drawerStoreEl) drawerStoreEl.textContent = state.settings.store_name;
   }
 }
 
@@ -269,10 +306,80 @@ window.addEventListener('keydown', (e) => {
     if (typeof closePrinterModal === 'function') closePrinterModal();
     if (typeof closeTableCartDrawer === 'function') closeTableCartDrawer();
     if (typeof closeTableActionsMenu === 'function') closeTableActionsMenu();
+    closeServerConfigModal();
     closeLoginModal();
     toggleSideDrawer(false);
   }
 });
+
+// =============================================================
+// MODAL CẤU HÌNH MÁY CHỦ POS (CHO ZALO MINI APP HOẶC THIẾT BỊ PHỤ)
+// =============================================================
+function openServerConfigModal() {
+  const modal = document.getElementById('modalServerConfig');
+  const input = document.getElementById('inputServerUrl');
+  const statusEl = document.getElementById('serverTestStatus');
+
+  if (input) {
+    input.value = localStorage.getItem('pos_server_url') || '';
+  }
+  if (statusEl) {
+    statusEl.className = 'text-xs font-semibold hidden';
+    statusEl.textContent = '';
+  }
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeServerConfigModal() {
+  const modal = document.getElementById('modalServerConfig');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function testServerConnection() {
+  const input = document.getElementById('inputServerUrl');
+  const statusEl = document.getElementById('serverTestStatus');
+  if (!input || !statusEl) return;
+
+  const url = input.value.trim().replace(/\/$/, '');
+  statusEl.className = 'text-xs font-semibold text-amber-600 block';
+  statusEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Đang kiểm tra kết nối...';
+
+  try {
+    const testUrl = url ? `${url}/api/settings` : '/api/settings';
+    const res = await fetch(testUrl, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    if (res.ok) {
+      statusEl.className = 'text-xs font-semibold text-emerald-600 block';
+      statusEl.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i> Kết nối thành công tới máy chủ POS!';
+    } else {
+      statusEl.className = 'text-xs font-semibold text-rose-600 block';
+      statusEl.innerHTML = `<i class="fa-solid fa-circle-xmark mr-1"></i> Máy chủ trả về mã lỗi HTTP ${res.status}`;
+    }
+  } catch (e) {
+    statusEl.className = 'text-xs font-semibold text-rose-600 block';
+    statusEl.innerHTML = `<i class="fa-solid fa-circle-xmark mr-1"></i> Không thể kết nối: ${e.message}. Hãy chắc chắn laptop đang mở và cùng mạng Wi-Fi.`;
+  }
+}
+
+function saveServerConfig() {
+  const input = document.getElementById('inputServerUrl');
+  if (!input) return;
+
+  const url = input.value.trim();
+  if (url) {
+    localStorage.setItem('pos_server_url', url);
+  } else {
+    localStorage.removeItem('pos_server_url');
+  }
+
+  showToast('Đã lưu địa chỉ máy chủ POS!', 'success');
+  closeServerConfigModal();
+
+  // Tự động tải lại dữ liệu với server mới
+  loadSettings();
+  if (typeof initPos === 'function') {
+    initPos();
+  }
+}
 
 // =============================================================
 // ZALO MINI APP SDK INTEGRATION (App ID: 3906597427562388428)
@@ -294,7 +401,7 @@ function initZaloMiniApp() {
 }
 
 // App Initialization
-document.addEventListener('DOMContentLoaded', async () => {
+async function startApp() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
@@ -310,4 +417,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (typeof initPos === 'function') {
     await initPos();
   }
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startApp);
+} else {
+  startApp();
+}

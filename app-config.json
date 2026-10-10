@@ -14,6 +14,7 @@
     "css/style.css"
   ],
   "listSyncJS": [
+    "js/mount.js",
     "js/app.js",
     "js/pos.js",
     "js/products.js",

@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "deploy:zalo": "npx zmp-cli deploy -e -o public -t -m \"Bun Mam Mien Tay POS\"",
+    "build": "node scripts/build-mount.js",
+    "deploy:zalo": "node scripts/build-mount.js && npx zmp-cli deploy -e -o public -t -m \"Bun Mam Mien Tay POS\"",
     "start:zalo": "npx zmp-cli start",
     "login:zalo": "npx zmp-cli login"
   },
