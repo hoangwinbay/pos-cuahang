@@ -353,33 +353,37 @@ function renderTableGrid() {
     const hasItems = order && order.items && order.items.length > 0;
 
     if (hasItems) {
-      // BÀN CÓ KHÁCH: Màu Xanh Ngọc nổi bật (khác màu xanh dương cũ)
+      // BÀN CÓ KHÁCH: Màu Xanh Ngọc (Tại chỗ) hoặc Màu Vàng Cam (Mang về)
       const totalAmount = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const totalCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
       const startTime = order.startTime || now;
       const elapsedMin = Math.max(1, Math.floor((now - startTime) / 60000));
+      const isMangVe = order.source === 'mangve';
 
       return `
         <div 
           onclick="openTableOrder('${tableName}')"
-          class="table-card bg-emerald-600 text-white rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between shadow-sm cursor-pointer aspect-square active:scale-95 transition-all"
+          class="table-card ${isMangVe ? 'bg-amber-600' : 'bg-emerald-600'} text-white rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between shadow-sm cursor-pointer aspect-square active:scale-95 transition-all"
         >
           <div class="flex items-center justify-between">
             <span class="font-black text-xs sm:text-sm tracking-tight text-white">${tableName}</span>
-            <span class="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>
+            ${isMangVe 
+              ? `<span class="text-[9px] font-black bg-amber-200 text-amber-950 px-1.5 py-0.5 rounded shadow-2xs">MANG VỀ</span>` 
+              : `<span class="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>`}
           </div>
 
           <div class="my-auto text-center py-1">
             <div class="text-xs sm:text-sm font-black text-white leading-tight">
               ${formatMoney(totalAmount)}
             </div>
-            <div class="text-[10px] sm:text-xs text-emerald-100 font-semibold mt-0.5">
+            <div class="text-[10px] sm:text-xs text-white/90 font-semibold mt-0.5">
               ${totalCount} Món
             </div>
           </div>
 
-          <div class="text-[10px] text-emerald-200 text-right font-medium">
-            ${elapsedMin} phút
+          <div class="flex items-center justify-between text-[10px] text-white/80 font-medium">
+            <span>${isMangVe ? 'Mang về' : 'Tại chỗ'}</span>
+            <span>${elapsedMin}p</span>
           </div>
         </div>
       `;
@@ -410,26 +414,93 @@ function openTableOrder(tableName) {
   if (screenTables) screenTables.classList.add('hidden');
   if (screenOrder) screenOrder.classList.remove('hidden');
 
-  // Cập nhật tiêu đề màn hình
-  const sourceLabel = state.currentSource === 'mangve' ? 'MANG VỀ' : 'TẠI CHỖ';
-  const titleEl = document.getElementById('orderScreenTitle');
-  if (titleEl) {
-    titleEl.textContent = `${tableName} • ${sourceLabel}`;
-  }
-
   // Khởi tạo đơn cho bàn nếu chưa có
   if (!state.tableOrders[tableName]) {
     state.tableOrders[tableName] = {
-      source: state.currentSource,
+      source: state.currentSource || 'taicho',
+      startTime: Date.now(),
+      note: '',
+      items: []
+    };
+  } else if (!state.tableOrders[tableName].source) {
+    state.tableOrders[tableName].source = state.currentSource || 'taicho';
+  }
+
+  // Cập nhật nguồn hiện tại theo bàn này
+  state.currentSource = state.tableOrders[tableName].source;
+
+  updateOrderScreenHeader();
+  renderOrderCategoriesPills();
+  renderGroupedDishList();
+  updateTableBottomBar();
+}
+
+function updateOrderScreenHeader() {
+  const currentTable = state.currentTable;
+  const tableOrder = state.tableOrders[currentTable];
+  const source = tableOrder?.source || state.currentSource || 'taicho';
+  const isMangVe = source === 'mangve';
+
+  const nameEl = document.getElementById('orderScreenTableName');
+  if (nameEl) nameEl.textContent = currentTable;
+
+  const btnEl = document.getElementById('orderScreenSourceBtn');
+  const textEl = document.getElementById('orderScreenSourceText');
+  if (btnEl && textEl) {
+    if (isMangVe) {
+      btnEl.className = 'px-2 py-0.5 rounded-lg text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-2xs transition-all flex items-center space-x-1 shrink-0';
+      textEl.textContent = 'MANG VỀ';
+    } else {
+      btnEl.className = 'px-2 py-0.5 rounded-lg text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-all flex items-center space-x-1 shrink-0';
+      textEl.textContent = 'TẠI CHỖ';
+    }
+  }
+
+  const titleEl = document.getElementById('orderScreenTitle');
+  if (titleEl) {
+    titleEl.textContent = `${currentTable} • ${isMangVe ? 'MANG VỀ' : 'TẠI CHỖ'}`;
+  }
+
+  const drawerTableTitle = document.getElementById('cartDrawerTableTitle');
+  if (drawerTableTitle) {
+    drawerTableTitle.textContent = `${currentTable} • ${isMangVe ? 'Mang về' : 'Tại chỗ'}`;
+  }
+}
+
+function toggleCurrentTableSource() {
+  const currentTable = state.currentTable;
+  if (!currentTable) return;
+
+  if (!state.tableOrders[currentTable]) {
+    state.tableOrders[currentTable] = {
+      source: state.currentSource || 'taicho',
       startTime: Date.now(),
       note: '',
       items: []
     };
   }
 
-  renderOrderCategoriesPills();
-  renderGroupedDishList();
+  const curSource = state.tableOrders[currentTable].source || 'taicho';
+  const newSource = curSource === 'mangve' ? 'taicho' : 'mangve';
+  state.tableOrders[currentTable].source = newSource;
+  state.currentSource = newSource;
+  localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+
+  updateOrderScreenHeader();
   updateTableBottomBar();
+  showToast(`Đã chuyển ${currentTable} sang: ${newSource === 'mangve' ? 'MANG VỀ' : 'TẠI CHỖ'}`);
+
+  // Nếu bàn đã có món, đồng bộ ngay sang các máy khác
+  if (state.tableOrders[currentTable].items && state.tableOrders[currentTable].items.length > 0) {
+    api('/api/tables/order', {
+      method: 'POST',
+      body: JSON.stringify({
+        table_name: currentTable,
+        order_data: state.tableOrders[currentTable],
+        check_conflict: false
+      })
+    }).catch(e => console.warn('Lỗi đồng bộ nguồn đơn:', e));
+  }
 }
 
 // Thanh danh mục cuộn ngang
@@ -688,9 +759,12 @@ function updateTableBottomBar() {
   const btnCheckout = document.getElementById('btnBottomCheckout');
   const btnKitchen = document.getElementById('btnPrintKitchen');
 
+  const source = tableOrder?.source || state.currentSource || 'taicho';
+  const sourceLabel = source === 'mangve' ? 'MANG VỀ' : 'TẠI CHỖ';
+
   if (badgeEl) badgeEl.textContent = totalCount;
   if (moneyEl) moneyEl.textContent = formatMoney(totalAmount);
-  if (labelEl) labelEl.textContent = currentTable;
+  if (labelEl) labelEl.textContent = `${currentTable} • ${sourceLabel}`;
 
   if (headerBadge) {
     if (totalCount > 0) {
@@ -729,8 +803,11 @@ function openTableCartDrawer() {
   if (!drawer || !backdrop) return;
 
   const currentTable = state.currentTable;
+  const tableOrder = state.tableOrders[currentTable];
+  const source = tableOrder?.source || state.currentSource || 'taicho';
+  const sourceLabel = source === 'mangve' ? 'Mang về' : 'Tại chỗ';
   const title = document.getElementById('cartDrawerTableTitle');
-  if (title) title.textContent = currentTable;
+  if (title) title.textContent = `${currentTable} (${sourceLabel})`;
 
   const noteInput = document.getElementById('orderNoteInput');
   if (noteInput) {
@@ -861,8 +938,11 @@ function openCheckoutModal() {
   tempOrderCode = tableOrder.orderCode || `HD-${dateStr}-${String(Math.floor(100 + Math.random() * 900))}`;
   tableOrder.orderCode = tempOrderCode;
 
-  document.getElementById('checkoutModalTable').textContent = currentTable;
-  document.getElementById('checkoutOrderCodePreview').textContent = `${tempOrderCode} • ${currentTable}`;
+  const source = tableOrder?.source || state.currentSource || 'taicho';
+  const sourceLabel = source === 'mangve' ? 'Mang về' : 'Tại chỗ';
+
+  document.getElementById('checkoutModalTable').textContent = `${currentTable} (${sourceLabel})`;
+  document.getElementById('checkoutOrderCodePreview').textContent = `${tempOrderCode} • ${currentTable} • ${sourceLabel}`;
   document.getElementById('checkoutModalTotal').textContent = formatMoney(totalAmount);
 
   const countEl = document.getElementById('checkoutModalItemCount');
@@ -905,11 +985,14 @@ function printKitchenSlip() {
   const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const totalCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
+  const source = tableOrder?.source || state.currentSource || 'taicho';
+  const sourceLabel = source === 'mangve' ? 'MANG VỀ' : 'TẠI CHỖ';
+
   const tableEl = document.getElementById('kitchenConfirmTable');
   const totalEl = document.getElementById('kitchenConfirmTotal');
   const countEl = document.getElementById('kitchenConfirmCount');
 
-  if (tableEl) tableEl.textContent = currentTable;
+  if (tableEl) tableEl.textContent = `${currentTable} • ${sourceLabel}`;
   if (totalEl) totalEl.textContent = formatMoney(totalAmount);
   if (countEl) countEl.textContent = `${totalCount} món`;
 
@@ -985,6 +1068,7 @@ function executePrintKitchenSlip() {
     order_code: kitchenCode,
     created_at: new Date().toISOString(),
     table_name: currentTable,
+    source: tableOrder.source || state.currentSource || 'taicho',
     cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
     note: note,
     payment_method: 'cash',
@@ -1126,6 +1210,7 @@ async function resolveConflictMerge() {
       order_code: (state.tableOrders[tableName]?.orderCode || 'BEP-GOP') + '-THEM',
       created_at: new Date().toISOString(),
       table_name: tableName + ' (GỘP THÊM)',
+      source: incomingOrder.source || state.tableOrders[tableName]?.source || 'taicho',
       cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
       note: incomingOrder.note || 'Gọi thêm',
       payment_method: 'cash',
@@ -1225,6 +1310,7 @@ async function selectConflictNewTable(newTable) {
     order_code: incomingOrder.orderCode || 'BEP-CHUYEN',
     created_at: new Date().toISOString(),
     table_name: newTable,
+    source: incomingOrder.source || 'taicho',
     cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
     note: incomingOrder.note || '',
     payment_method: 'cash',
@@ -1300,12 +1386,15 @@ async function completeCheckoutOrder() {
     const totalAmount = tableOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const note = document.getElementById('orderNoteInput')?.value.trim() || tableOrder.note || '';
 
+    const source = tableOrder.source || state.currentSource || 'taicho';
+    const sourceLabel = source === 'mangve' ? 'Mang về' : 'Tại chỗ';
+
     const payload = {
       items: tableOrder.items.map(item => ({
         id: item.id,
         quantity: item.quantity
       })),
-      table_name: currentTable,
+      table_name: `${currentTable} (${sourceLabel})`,
       note: note,
       payment_method: 'cash',
       cash_given: totalAmount
@@ -1360,6 +1449,7 @@ function printCheckoutReceipt() {
     order_code: tableOrder?.orderCode || tempOrderCode || 'ORDER-TAM',
     created_at: new Date().toISOString(),
     table_name: currentTable,
+    source: tableOrder?.source || state.currentSource || 'taicho',
     cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
     note: note,
     payment_method: 'cash',
@@ -1389,13 +1479,27 @@ function generateReceiptHtml(order) {
   const tableName = order.table_name || 'Bàn 1';
   const footerText = state.settings.receipt_footer || 'Quý khách vui lòng kiểm tra lại hóa đơn khi thanh toán';
 
+  // Xác định hình thức: Mang về hay Tại chỗ
+  let orderSource = order.source;
+  if (!orderSource && order.table_name && state.tableOrders && state.tableOrders[order.table_name]) {
+    orderSource = state.tableOrders[order.table_name].source;
+  }
+  if (!orderSource) {
+    orderSource = state.currentSource || 'taicho';
+  }
+
+  const isMangVe = (orderSource === 'mangve') || 
+                   (order.order_type && order.order_type.toLowerCase().includes('mang')) ||
+                   (order.table_name && order.table_name.toLowerCase().includes('mang về'));
+  const sourceLabel = isMangVe ? 'MANG VỀ' : 'TẠI CHỖ';
+
   const itemsHtml = (order.items || []).map((item, idx) => `
     <tr>
-      <td colspan="2" style="font-weight: bold; padding-top: 4px;">${idx + 1}. ${item.product_name}</td>
+      <td colspan="2" style="font-weight: bold; padding-top: 4px;">${idx + 1}. ${item.product_name || item.name}</td>
     </tr>
     <tr>
       <td style="padding-left: 10px;">${item.quantity} phần x ${formatMoney(item.price)}</td>
-      <td style="text-align: right; font-weight: bold;">${formatMoney(item.total)}</td>
+      <td style="text-align: right; font-weight: bold;">${formatMoney(item.total || item.price * item.quantity)}</td>
     </tr>
   `).join('');
 
@@ -1405,11 +1509,17 @@ function generateReceiptHtml(order) {
       <div style="font-size: 16px; font-weight: 900; margin: 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">
         HÓA ĐƠN THANH TOÁN
       </div>
-      <div style="font-size: 20px; font-weight: 900; color: #000; margin: 4px 0; padding: 2px 0; border: 1px dashed #000;">
-        📍 ${tableName}
+      <div style="margin: 5px 0 3px 0; padding: 4px 0; border: 1px dashed #000;">
+        <div style="font-size: 20px; font-weight: 900; color: #000;">
+          📍 ${tableName}
+        </div>
+        <div style="font-size: 15px; font-weight: 900; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px;">
+          [ ${sourceLabel} ]
+        </div>
       </div>
+      <div style="margin-top: 4px;">Hình thức: <strong>${sourceLabel}</strong></div>
       <div>Mã hóa đơn: <strong>${order.order_code}</strong></div>
-      <div>Giờ: ${formatDateTime(order.created_at)}</div>
+      <div>Giờ: ${formatDateTime(order.created_at || new Date())}</div>
       ${order.note ? `<div style="font-style: italic; font-weight: bold; margin-top: 2px;">Ghi chú: ${order.note}</div>` : ''}
     </div>
 
@@ -1430,7 +1540,7 @@ function generateReceiptHtml(order) {
     <table class="receipt-summary">
       <tr class="receipt-total">
         <td>TỔNG CỘNG:</td>
-        <td style="text-align: right;">${formatMoney(order.total)}</td>
+        <td style="text-align: right;">${formatMoney(order.total || 0)}</td>
       </tr>
     </table>
 
@@ -1507,14 +1617,26 @@ async function printEscPosBluetooth(order) {
   const lineWidth = 32;
   const divider = '-'.repeat(lineWidth) + '\n';
 
+  let orderSource = order.source;
+  if (!orderSource && order.table_name && state.tableOrders && state.tableOrders[order.table_name]) {
+    orderSource = state.tableOrders[order.table_name].source;
+  }
+  if (!orderSource) orderSource = state.currentSource || 'taicho';
+  const isMangVe = (orderSource === 'mangve') || 
+                   (order.order_type && order.order_type.toLowerCase().includes('mang')) ||
+                   (order.table_name && order.table_name.toLowerCase().includes('mang ve'));
+  const sourceLabel = isMangVe ? 'MANG VE' : 'TAI CHO';
+
   let content = '\x1B\x40';
   content += '\x1B\x61\x01';
   content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\n';
   content += 'HOA DON THANH TOAN\n';
   content += `BAN: ${removeVietnameseAccents(order.table_name || 'BAN 1')}\n`;
+  content += `[ ${sourceLabel} ]\n`;
   content += '\x1B\x45\x00';
+  content += `Hinh thuc: ${sourceLabel}\n`;
   content += `Ma HD: ${order.order_code}\n`;
-  content += `Gio: ${formatDateTime(order.created_at)}\n`;
+  content += `Gio: ${formatDateTime(order.created_at || new Date())}\n`;
   if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
   content += '\x1B\x61\x00';
@@ -1743,12 +1865,20 @@ function openReceiptPrintWindow() {
     showToast('Trình duyệt chặn popup. Hãy bấm Cho phép mở popup để xem trang in riêng!', 'warning');
     return;
   }
+
+  let orderSource = lastPrintedOrder.source;
+  if (!orderSource && lastPrintedOrder.table_name && state.tableOrders && state.tableOrders[lastPrintedOrder.table_name]) {
+    orderSource = state.tableOrders[lastPrintedOrder.table_name].source;
+  }
+  if (!orderSource) orderSource = state.currentSource || 'taicho';
+  const sourceLabel = (orderSource === 'mangve' || (lastPrintedOrder.table_name && lastPrintedOrder.table_name.toLowerCase().includes('mang về'))) ? 'MANG VỀ' : 'TẠI CHỖ';
+
   win.document.write(`
     <!DOCTYPE html>
     <html lang="vi">
     <head>
       <meta charset="utf-8">
-      <title>Hóa Đơn Thanh Toán - ${lastPrintedOrder.table_name || 'Bàn'}</title>
+      <title>Hóa Đơn Thanh Toán - ${lastPrintedOrder.table_name || 'Bàn'} [${sourceLabel}]</title>
       <style>
         @page { size: 80mm auto; margin: 0; }
         body {
@@ -1819,7 +1949,14 @@ function openMobileReceiptModal(order, receiptHtml, isZalo = false) {
   const content = document.getElementById('mobileReceiptContent');
   const zaloNotice = document.getElementById('mobileZaloNotice');
 
-  if (tableTitle) tableTitle.innerText = order.table_name || 'Bàn';
+  let orderSource = order.source;
+  if (!orderSource && order.table_name && state.tableOrders && state.tableOrders[order.table_name]) {
+    orderSource = state.tableOrders[order.table_name].source;
+  }
+  if (!orderSource) orderSource = state.currentSource || 'taicho';
+  const sourceLabel = (orderSource === 'mangve' || (order.table_name && order.table_name.toLowerCase().includes('mang về'))) ? 'Mang về' : 'Tại chỗ';
+
+  if (tableTitle) tableTitle.innerText = `${order.table_name || 'Bàn'} (${sourceLabel})`;
   if (content) content.innerHTML = receiptHtml || generateReceiptHtml(order);
 
   if (zaloNotice) {
@@ -1863,8 +2000,16 @@ function copyReceiptTextToClipboard() {
     return;
   }
   const o = lastPrintedOrder;
+  let orderSource = o.source;
+  if (!orderSource && o.table_name && state.tableOrders && state.tableOrders[o.table_name]) {
+    orderSource = state.tableOrders[o.table_name].source;
+  }
+  if (!orderSource) orderSource = state.currentSource || 'taicho';
+  const sourceLabel = (orderSource === 'mangve' || (o.table_name && o.table_name.toLowerCase().includes('mang về'))) ? 'MANG VỀ' : 'TẠI CHỖ';
+
   const itemsText = (o.items || []).map((it, idx) => `${idx + 1}. ${it.product_name || it.name} x${it.quantity} = ${formatMoney(it.total || it.price * it.quantity)}`).join('\n');
-  const text = `📋 HÓA ĐƠN THANH TOÁN: ${o.table_name || 'Bàn'}\n` +
+  const text = `📋 HÓA ĐƠN THANH TOÁN: ${o.table_name || 'Bàn'} [${sourceLabel}]\n` +
+               `Hình thức: ${sourceLabel}\n` +
                `Mã: ${o.order_code || ''}\n` +
                `Thời gian: ${formatDateTime(o.created_at || new Date())}\n` +
                (o.note ? `Ghi chú: ${o.note}\n` : '') +
@@ -1915,6 +2060,7 @@ function testPrintSample() {
     order_code: 'HD-MAU-01',
     created_at: new Date().toISOString(),
     table_name: 'Bàn 1 (In Thử Nghiệm)',
+    source: 'taicho',
     note: 'Ít ớt, bún thêm',
     payment_method: 'cash',
     total: 95000,

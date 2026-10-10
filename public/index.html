@@ -102,9 +102,16 @@
         <button onclick="handleBackFromOrderScreen()" class="w-8 h-8 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-700 text-base active:bg-slate-200 shrink-0">
           <i class="fa-solid fa-arrow-left"></i>
         </button>
-        <h2 id="orderScreenTitle" class="font-black text-sm sm:text-base text-slate-800 truncate">
-          Bàn 1 • TẠI CHỖ
-        </h2>
+        <div class="flex items-center space-x-1.5 min-w-0">
+          <h2 id="orderScreenTableName" class="font-black text-sm sm:text-base text-slate-800 truncate">
+            Bàn 1
+          </h2>
+          <button onclick="toggleCurrentTableSource()" id="orderScreenSourceBtn" class="px-2 py-0.5 rounded-lg text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-all flex items-center space-x-1 shrink-0" title="Bấm để chuyển đổi Tại chỗ / Mang về">
+            <span id="orderScreenSourceText">TẠI CHỖ</span>
+            <i class="fa-solid fa-repeat text-[9px] opacity-80"></i>
+          </button>
+          <span id="orderScreenTitle" class="hidden">Bàn 1 • TẠI CHỖ</span>
+        </div>
       </div>
 
       <div class="flex items-center space-x-1.5">
