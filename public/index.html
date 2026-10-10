@@ -14,8 +14,12 @@
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden select-none">
 
+  <!-- Khung in hóa đơn nhiệt 80mm (Chỉ hiển thị khi bấm In) -->
+  <div id="printable-receipt"></div>
+
   <!-- ============================================================= -->
   <!-- MÀN HÌNH 1: SƠ ĐỒ BÀN (THEO MẪU FABiOrder - ẢNH 1) -->
+
   <!-- ============================================================= -->
   <div id="screen-tables" class="w-full h-full flex flex-col overflow-hidden">
     
@@ -830,8 +834,6 @@
   <!-- Toast Notification -->
   <div id="toastContainer" class="fixed bottom-16 sm:bottom-6 right-4 left-4 sm:left-auto z-50 flex flex-col space-y-2 pointer-events-none items-center sm:items-end"></div>
 
-  <!-- In Hóa Đơn Đối Chiếu -->
-  <div id="printable-receipt"></div>
 
   <!-- JavaScript Modules -->
   <script src="js/app.js"></script>

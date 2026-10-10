@@ -1583,27 +1583,30 @@ function executeWindowPrint(order) {
     container.innerHTML = receiptHtml;
   }
 
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isZalo = /Zalo/i.test(navigator.userAgent);
+
+  // 2. Nếu đang mở qua Zalo (Zalo WebView chặn window.print):
+  // Mở ngay modal xem phiếu nhiệt kèm thông báo và nút 1 chạm sao chép gửi Zalo
   if (isZalo) {
     openMobileReceiptModal(order, receiptHtml, true);
     return;
   }
 
-  // Tạm thời mở overflow trên body & html để Safari iOS WebKit đo lường và mở AirPrint
-  document.body.classList.remove('overflow-hidden', 'h-screen');
-  document.documentElement.style.overflow = 'visible';
-  document.documentElement.style.height = 'auto';
+  // 3. Nếu là thiết bị di động (iPhone / Android):
+  // Mở modal xem trước trên màn hình để nhân viên luôn kiểm tra được nội dung phiếu
+  if (isMobile) {
+    openMobileReceiptModal(order, receiptHtml, false);
+  }
 
+  // 4. Kích hoạt in hệ thống đồng bộ trực tiếp trong sự kiện bấm (chuẩn AirPrint iOS & Desktop)
   try {
-    // GỌI IN TRỰC TIẾP ĐỒNG BỘ TRONG SỰ KIỆN CLICK (BẮT BUỘC TRÊN SAFARI IOS)
     window.print();
   } catch (err) {
     console.warn('Lỗi gọi window.print:', err);
-    openMobileReceiptModal(order, receiptHtml, false);
-  } finally {
-    document.body.classList.add('overflow-hidden', 'h-screen');
-    document.documentElement.style.overflow = '';
-    document.documentElement.style.height = '';
+    if (!isMobile) {
+      openMobileReceiptModal(order, receiptHtml, false);
+    }
   }
 }
 
@@ -1638,17 +1641,11 @@ function triggerDirectSystemPrint() {
     const container = document.getElementById('printable-receipt');
     if (container) container.innerHTML = receiptHtml;
   }
-  document.body.classList.remove('overflow-hidden', 'h-screen');
-  document.documentElement.style.overflow = 'visible';
-  document.documentElement.style.height = 'auto';
   try {
     window.print();
   } catch (e) {
+    console.warn('Lỗi gọi window.print từ modal:', e);
     showToast('Trình duyệt chưa hỗ trợ in trực tiếp. Bạn có thể sao chép phiếu để gửi cho bếp!', 'warning');
-  } finally {
-    document.body.classList.add('overflow-hidden', 'h-screen');
-    document.documentElement.style.overflow = '';
-    document.documentElement.style.height = '';
   }
 }
 
