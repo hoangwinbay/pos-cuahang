@@ -130,7 +130,7 @@ function initDatabase() {
       ['bank_account_no', '0909888999'],
       ['bank_account_name', 'BUN MAM MIEN TAY'],
       ['paper_size', '80mm'],
-      ['zalo_mini_app_id', '2743297307107944554']
+      ['zalo_mini_app_id', '3906597427562388428']
     ];
     for (const [k, v] of defaultSettings) {
       insertSetting.run(k, v);
@@ -143,7 +143,7 @@ function initDatabase() {
       UPDATE settings 
       SET value = 'BÚN MẮM MIỀN TÂY' 
       WHERE key = 'store_name' AND (value = 'CỬA HÀNG TẠP HÓA POS PRO' OR value = 'QUÁN ĂN - CÀ PHÊ' OR value = 'POS ORDER' OR value = '' OR value IS NULL);
-      INSERT OR REPLACE INTO settings (key, value) VALUES ('zalo_mini_app_id', '2743297307107944554');
+      INSERT OR REPLACE INTO settings (key, value) VALUES ('zalo_mini_app_id', '3906597427562388428');
     `);
   } catch (e) {}
 

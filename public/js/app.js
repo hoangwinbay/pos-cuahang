@@ -275,7 +275,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // =============================================================
-// ZALO MINI APP SDK INTEGRATION (App ID: 2743297307107944554)
+// ZALO MINI APP SDK INTEGRATION (App ID: 3906597427562388428)
 // =============================================================
 function initZaloMiniApp() {
   const isZaloEnv = /Zalo/i.test(navigator.userAgent) || typeof window.zmp !== 'undefined';
