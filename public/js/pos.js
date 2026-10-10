@@ -218,8 +218,9 @@ function connectTableEventSource() {
             if (Date.now() - (window._lastPrintTimestamp || 0) < 2500) return;
             window._lastPrintTimestamp = Date.now();
             console.log('Quầy nhận lệnh in tự động từ di động:', payload.print_order);
-            showToast(`Đang in phiếu cho ${payload.print_order.table_name || 'Bàn'}...`, 'info');
-            printViaIsolatedIframe(generateReceiptHtml(payload.print_order));
+            showToast(`🖨️ Tự động in phiếu cho ${payload.print_order.table_name || 'Bàn'}...`, 'info');
+            playOrderNotificationSound();
+            executeWindowPrint(payload.print_order);
           }
         }
         updateSyncIndicator(true);
@@ -1746,6 +1747,26 @@ function printReceipt(order) {
   }
 
   executeWindowPrint(order);
+}
+
+function playOrderNotificationSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    // Ding-dong chime (880Hz then 1174Hz)
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1174.66, ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.45);
+  } catch (e) {}
 }
 
 function executeWindowPrint(order) {
