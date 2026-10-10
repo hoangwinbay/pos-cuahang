@@ -613,14 +613,6 @@
       </div>
 
       <div class="p-3.5 space-y-3 overflow-y-auto bg-slate-100 flex-1">
-        <div id="mobileZaloNotice" class="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-xl text-xs hidden">
-          <div class="font-bold flex items-center mb-1 text-amber-800">
-            <i class="fa-solid fa-triangle-exclamation mr-1.5 text-amber-600"></i>
-            Bạn đang mở qua Zalo
-          </div>
-          <p class="leading-relaxed">Zalo khóa tính năng mở hộp thoại in. Để in ra máy in như trên máy tính, vui lòng bấm vào nút <strong>(...)</strong> ở góc trên và chọn <strong>"Mở bằng trình duyệt" (Chrome / Safari)</strong>.</p>
-        </div>
-
         <!-- Khung hiển thị phiếu giấy in nhiệt trên màn hình -->
         <div id="mobileReceiptContent" class="receipt-paper bg-white shadow-md">
           <!-- Injected by pos.js -->
@@ -628,19 +620,22 @@
       </div>
 
       <div class="p-3 bg-white border-t border-slate-200 flex flex-col gap-2 shrink-0">
-        <button onclick="triggerDirectSystemPrint()" class="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black rounded-xl text-xs sm:text-sm flex items-center justify-center space-x-2 shadow-sm">
+        <button onclick="triggerDirectSystemPrint()" class="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black rounded-xl text-xs sm:text-sm flex items-center justify-center space-x-2 shadow-sm transition-all">
           <i class="fa-solid fa-print"></i>
-          <span>In Ra Giấy (Máy In / AirPrint)</span>
+          <span>In Ra Giấy (AirPrint / Máy In)</span>
         </button>
-        <button onclick="openReceiptPrintWindow()" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 border border-slate-200">
-          <i class="fa-solid fa-arrow-up-right-from-square text-emerald-600"></i>
-          <span>Mở Cửa Sổ In Khổ 80mm Riêng (Dự Phòng)</span>
+
+        <button onclick="sendPrintJobToServer()" class="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-sm transition-all">
+          <i class="fa-solid fa-desktop"></i>
+          <span>In Tự Động Qua Máy Tính Quầy</span>
         </button>
-        <button onclick="copyReceiptTextToClipboard()" class="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 border border-emerald-200">
+
+        <button onclick="copyReceiptTextToClipboard()" class="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 border border-slate-200 transition-all">
           <i class="fa-solid fa-copy text-emerald-600"></i>
-          <span>Sao Chép Hóa Đơn (Gửi Zalo)</span>
+          <span>Sao Chép Hóa Đơn (Gửi Zalo Cho Khách)</span>
         </button>
-        <button onclick="closeMobileReceiptModal()" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs text-center">
+
+        <button onclick="closeMobileReceiptModal()" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs text-center transition-all">
           <span>Xong (Về Sơ Đồ Bàn)</span>
         </button>
       </div>

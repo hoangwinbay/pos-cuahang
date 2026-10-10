@@ -202,6 +202,14 @@ function connectTableEventSource() {
         if (payload.all_table_orders !== undefined) {
           applyIncomingTableOrders(payload.all_table_orders);
         }
+        if (payload.type === 'print_job' && payload.print_order) {
+          const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+          if (!isMobile) {
+            console.log('Quầy nhận lệnh in tự động từ di động:', payload.print_order);
+            showToast(`Đang in phiếu cho ${payload.print_order.table_name || 'Bàn'}...`, 'info');
+            printViaIsolatedIframe(generateReceiptHtml(payload.print_order));
+          }
+        }
         updateSyncIndicator(true);
       } catch (e) {}
     };
@@ -1111,6 +1119,7 @@ function executePrintKitchenSlip() {
 
   // 2. KÍCH HOẠT IN NGAY LẬP TỨC (ĐỒNG BỘ TRONG USER GESTURE ĐỂ TRÌNH DUYỆT DI ĐỘNG KHÔNG BỊ CHẶN)
   printReceipt(orderForPrint);
+  api('/api/print-job', { method: 'POST', body: JSON.stringify({ order: orderForPrint }) }).catch(() => {});
 
   // 3. ĐỒNG BỘ NỀN LÊN SERVER (NON-BLOCKING)
   api('/api/tables/order', {
@@ -1724,19 +1733,17 @@ function executeWindowPrint(order) {
   // 2. Mở modal xem trước phiếu nhiệt trên màn hình (cả laptop và điện thoại)
   openMobileReceiptModal(order, receiptHtml, false);
 
-  const isZalo = /Zalo/i.test(navigator.userAgent);
-  if (isZalo) return;
-
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   if (isMobile) {
-    // Trên thiết bị di động (Safari iOS / Android):
+    // Trên thiết bị di động (Safari iOS / Android / Zalo):
     // Kích hoạt AirPrint hệ thống đồng bộ trực tiếp
     try {
       window.print();
     } catch (err) {
       console.warn('Lỗi gọi window.print trên mobile:', err);
     }
+    printViaIsolatedIframe(receiptHtml);
   } else {
     // Trên Laptop / Máy tính PC (Chrome / Edge / Firefox):
     // Dùng Iframe cách ly độc lập hoàn toàn để in sạch 100%, không bao giờ bị trắng trang
@@ -1966,7 +1973,8 @@ function openReceiptPrintWindow() {
   win.document.close();
 }
 
-function openMobileReceiptModal(order, receiptHtml, isZalo = false) {
+function openMobileReceiptModal(order, receiptHtml) {
+  lastPrintedOrder = order;
   const modal = document.getElementById('mobileReceiptModal');
   const tableTitle = document.getElementById('mobileReceiptTableTitle');
   const content = document.getElementById('mobileReceiptContent');
@@ -1982,10 +1990,8 @@ function openMobileReceiptModal(order, receiptHtml, isZalo = false) {
   if (tableTitle) tableTitle.innerText = `${order.table_name || 'Bàn'} (${sourceLabel})`;
   if (content) content.innerHTML = receiptHtml || generateReceiptHtml(order);
 
-  if (zaloNotice) {
-    if (isZalo) zaloNotice.classList.remove('hidden');
-    else zaloNotice.classList.add('hidden');
-  }
+  // Ẩn bảng thông báo Zalo gây hiểu nhầm
+  if (zaloNotice) zaloNotice.classList.add('hidden');
 
   if (modal) modal.classList.remove('hidden');
 }
@@ -1998,23 +2004,35 @@ function closeMobileReceiptModal() {
   }
 }
 
+async function sendPrintJobToServer() {
+  if (!lastPrintedOrder) {
+    showToast('Chưa có thông tin phiếu!', 'error');
+    return;
+  }
+  try {
+    showToast('Đang phát lệnh in tới máy tính quầy...');
+    await api('/api/print-job', {
+      method: 'POST',
+      body: JSON.stringify({ order: lastPrintedOrder })
+    });
+    showToast('Đã gửi lệnh in thành công tới máy tính quầy!', 'success');
+  } catch (err) {
+    showToast('Chưa kết nối máy tính quầy (Vui lòng kiểm tra IP trong Cài đặt)', 'warning');
+  }
+}
+
 function triggerDirectSystemPrint() {
   if (!lastPrintedOrder) {
     showToast('Chưa có thông tin phiếu!', 'error');
     return;
   }
   const receiptHtml = generateReceiptHtml(lastPrintedOrder);
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobile) {
-    try {
-      window.print();
-    } catch (e) {
-      console.warn('Lỗi gọi window.print từ modal:', e);
-      openReceiptPrintWindow();
-    }
-  } else {
-    printViaIsolatedIframe(receiptHtml);
+  try {
+    window.print();
+  } catch (e) {
+    console.warn('Lỗi gọi window.print từ modal:', e);
   }
+  printViaIsolatedIframe(receiptHtml);
 }
 
 function copyReceiptTextToClipboard() {

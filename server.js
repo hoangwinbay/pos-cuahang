@@ -1059,6 +1059,21 @@ app.post('/api/tables/custom', (req, res) => {
   }
 });
 
+// 6. POST /api/print-job: Nhận lệnh in từ thiết bị di động / Zalo Mini App và phát tới máy in tại quầy
+app.post('/api/print-job', (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!order) return res.status(400).json({ error: 'Thiếu thông tin đơn hàng để in!' });
+    broadcastTableUpdate({
+      type: 'print_job',
+      print_order: order
+    });
+    res.json({ success: true, message: 'Đã phát lệnh in thành công tới máy tính quầy!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Catch-all route to serve index.html
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
