@@ -1027,7 +1027,8 @@ app.get('/api/server-info', (req, res) => {
     local_ip: localIp,
     port: PORT,
     wifi_url: `http://${localIp}:${PORT}`,
-    tunnel_url: tunnelUrl
+    tunnel_url: tunnelUrl,
+    cloud_url: 'https://pos-cuahang.onrender.com'
   });
 });
 

@@ -249,17 +249,31 @@ function handleOfflineApi(url, options = {}) {
   return { success: true };
 }
 
-// Server Base URL resolver (cho phep ket noi tu Zalo Mini App ve may chu POS)
+const DEFAULT_CLOUD_SERVER = 'https://pos-cuahang.onrender.com';
+
+// Server Base URL resolver (Mặc định liên thông 100% với https://pos-cuahang.onrender.com)
 function getApiBaseUrl() {
-  const custom = localStorage.getItem('pos_server_url');
+  let custom = localStorage.getItem('pos_server_url');
+  // Tự động dọn dẹp các đường link tunnel cũ để ưu tiên đồng bộ theo Render
+  if (custom && custom.includes('trycloudflare.com')) {
+    localStorage.removeItem('pos_server_url');
+    custom = null;
+  }
+
   if (custom && custom.trim().length > 0) {
     return custom.trim().replace(/\/$/, '');
   }
-  // Neu chay tren localhost hoac IP noi bo
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname)) {
+
+  // Nếu đang mở trực tiếp trên chính web Render hoặc máy chủ nội bộ:
+  if (window.location.hostname === 'pos-cuahang.onrender.com' ||
+      window.location.hostname === 'localhost' || 
+      window.location.hostname === '127.0.0.1' || 
+      /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname)) {
     return '';
   }
-  return '';
+
+  // Mặc định cho Zalo Mini App: Kết nối trực tiếp về Render của quán!
+  return DEFAULT_CLOUD_SERVER;
 }
 
 // API Helper with Automatic Offline / Standalone Fallback
@@ -268,8 +282,7 @@ async function api(url, options = {}) {
   const isZaloCdn = window.location.hostname.includes('zdn.vn') || 
                     window.location.hostname.includes('zalo.me');
 
-  // Neu dang tren Zalo Mini App ma chua cau hinh dia chi may chu laptop:
-  // Xu ly ngay bang bo cuc bo de khong bao gio phat sinh loi
+  // Neu dang tren Zalo Mini App ma khong co base (hiem khi xay ra):
   if (!base && isZaloCdn) {
     return handleOfflineApi(url, options);
   }
@@ -863,18 +876,25 @@ async function testServerConnection() {
   }
 }
 
+function resetToRenderServer() {
+  localStorage.removeItem('pos_server_url');
+  const input = document.getElementById('inputServerUrl');
+  if (input) input.value = DEFAULT_CLOUD_SERVER;
+  saveServerConfig();
+}
+
 function saveServerConfig() {
   const input = document.getElementById('inputServerUrl');
   if (!input) return;
 
   const url = input.value.trim();
-  if (url) {
+  if (url && url !== DEFAULT_CLOUD_SERVER) {
     localStorage.setItem('pos_server_url', url);
   } else {
     localStorage.removeItem('pos_server_url');
   }
 
-  showToast('Đã lưu địa chỉ máy chủ POS!', 'success');
+  showToast('Đã lưu địa chỉ máy chủ Render!', 'success');
   closeServerConfigModal();
 
   // Tự động tải lại dữ liệu với server mới
