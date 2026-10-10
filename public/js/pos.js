@@ -1022,26 +1022,19 @@ function executePrintKitchenSlip() {
     }
   });
 
-  // 4. CHUYỂN VỀ SƠ ĐỒ BÀN
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (!isMobile) {
+  // 4. CHUYỂN VỀ SƠ ĐỒ BÀN (CHỜ SAU KHI XONG HỘP THOẠI IN ĐỂ TRÁNH XUNG ĐỘT RENDER)
+  const handleAfterPrint = () => {
+    window.removeEventListener('afterprint', handleAfterPrint);
     showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
-    showTableFloor();
-  } else {
-    // Trên điện thoại: chờ sau khi tương tác xong hộp thoại in hoặc sau timeout
-    const handleAfterPrint = () => {
-      window.removeEventListener('afterprint', handleAfterPrint);
+    if (state.activeScreen !== 'tables') showTableFloor();
+  };
+  window.addEventListener('afterprint', handleAfterPrint);
+  setTimeout(() => {
+    if (state.activeScreen !== 'tables') {
       showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
       showTableFloor();
-    };
-    window.addEventListener('afterprint', handleAfterPrint);
-    setTimeout(() => {
-      if (state.activeScreen !== 'tables') {
-        showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
-        showTableFloor();
-      }
-    }, 2500);
-  }
+    }
+  }, 2500);
 }
 
 // =============================================================
@@ -1583,7 +1576,6 @@ function executeWindowPrint(order) {
     container.innerHTML = receiptHtml;
   }
 
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const isZalo = /Zalo/i.test(navigator.userAgent);
 
   // 2. Nếu đang mở qua Zalo (Zalo WebView chặn window.print):
@@ -1593,20 +1585,14 @@ function executeWindowPrint(order) {
     return;
   }
 
-  // 3. Nếu là thiết bị di động (iPhone / Android):
-  // Mở modal xem trước trên màn hình để nhân viên luôn kiểm tra được nội dung phiếu
-  if (isMobile) {
-    openMobileReceiptModal(order, receiptHtml, false);
-  }
+  // 3. Luôn mở modal xem trước phiếu nhiệt trên màn hình (cả laptop và điện thoại)
+  openMobileReceiptModal(order, receiptHtml, false);
 
-  // 4. Kích hoạt in hệ thống đồng bộ trực tiếp trong sự kiện bấm (chuẩn AirPrint iOS & Desktop)
+  // 4. Kích hoạt in hệ thống đồng bộ trực tiếp trong sự kiện bấm (chuẩn AirPrint iOS & Desktop Chrome)
   try {
     window.print();
   } catch (err) {
     console.warn('Lỗi gọi window.print:', err);
-    if (!isMobile) {
-      openMobileReceiptModal(order, receiptHtml, false);
-    }
   }
 }
 

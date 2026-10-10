@@ -177,44 +177,31 @@ body {
     margin: 0;
   }
 
-  /* Reset hoàn toàn mọi container để không bị Tailwind overflow-hidden hoặc flexbox cắt xén */
+  /* Reset toàn bộ trang để in đúng khổ 80mm */
   html,
-  body,
-  body.h-screen,
-  body.overflow-hidden,
-  body.flex,
-  body.flex-col,
-  #appContainer {
-    width: 100% !important;
+  body {
+    width: 80mm !important;
+    min-width: 80mm !important;
+    max-width: 80mm !important;
     height: auto !important;
-    min-height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    position: static !important;
-    background: #ffffff !important;
     margin: 0 !important;
     padding: 0 !important;
+    background: #ffffff !important;
     display: block !important;
+    overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Ẩn triệt để tất cả phần tử giao diện web của ứng dụng */
-  body * {
-    visibility: hidden !important;
+  /* Ẩn triệt để TẤT CẢ các thành phần khác của app khi in */
+  body > *:not(#printable-receipt) {
+    display: none !important;
   }
 
-  /* Hiện thị duy nhất container in nhiệt và toàn bộ con của nó */
-  #printable-receipt,
-  #printable-receipt * {
-    visibility: visible !important;
-  }
-
+  /* Hiển thị duy nhất phiếu in nhiệt */
   #printable-receipt {
     display: block !important;
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: static !important;
     width: 80mm !important;
     max-width: 80mm !important;
     margin: 0 !important;
@@ -225,8 +212,14 @@ body {
     font-size: 13px !important;
     line-height: 1.35 !important;
     box-sizing: border-box !important;
-    z-index: 999999 !important;
     opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  #printable-receipt * {
+    visibility: visible !important;
+    color: #000000 !important;
   }
 }
+
 
