@@ -215,12 +215,16 @@ function connectTableEventSource() {
           }
           const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
           if (!isMobile) {
-            if (Date.now() - (window._lastPrintTimestamp || 0) < 2500) return;
-            window._lastPrintTimestamp = Date.now();
-            console.log('Quầy nhận lệnh in tự động từ di động:', payload.print_order);
-            showToast(`🖨️ Tự động in phiếu cho ${payload.print_order.table_name || 'Bàn'}...`, 'info');
+            console.log('Quầy nhận lệnh từ di động:', payload.print_order);
             playOrderNotificationSound();
-            executeWindowPrint(payload.print_order);
+            showToast(`🔔 Bếp nhận đơn mới từ ${payload.print_order.table_name || 'Bàn'}!`, 'success');
+
+            // Chỉ gọi lệnh in nếu người dùng BẬT tự động in (đã có máy in bill nhiệt thật)
+            if (isAutoPrintEnabled()) {
+              if (Date.now() - (window._lastPrintTimestamp || 0) < 2500) return;
+              window._lastPrintTimestamp = Date.now();
+              executeWindowPrint(payload.print_order);
+            }
           }
         }
         updateSyncIndicator(true);
@@ -1126,10 +1130,12 @@ function executePrintKitchenSlip() {
   closeKitchenConfirmModal();
   closeTableCartDrawer();
 
-  // 2. KÍCH HOẠT IN NGAY LẬP TỨC (ĐỒNG BỘ TRONG USER GESTURE ĐỂ TRÌNH DUYỆT DI ĐỘNG KHÔNG BỊ CHẶN)
-  printReceipt(orderForPrint);
+  // 2. KÍCH HOẠT IN NẾU CÓ BẬT CHẾ ĐỘ TỰ ĐỘNG IN (HOẶC ĐÃ KẾT NỐI BLUETOOTH)
+  if (isAutoPrintEnabled() || bluetoothCharacteristic) {
+    printReceipt(orderForPrint);
+  }
 
-  // Chỉ phát lệnh in từ xa lên quầy nếu đang thao tác trên thiết bị di động (Zalo Mini App / điện thoại)
+  // Phát lệnh từ xa lên quầy nếu đang thao tác trên thiết bị di động (Zalo Mini App / điện thoại)
   const isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (isMobileDev) {
     const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
@@ -1159,19 +1165,9 @@ function executePrintKitchenSlip() {
     }
   });
 
-  // 4. CHUYỂN VỀ SƠ ĐỒ BÀN (CHỜ SAU KHI XONG HỘP THOẠI IN ĐỂ TRÁNH XUNG ĐỘT RENDER)
-  const handleAfterPrint = () => {
-    window.removeEventListener('afterprint', handleAfterPrint);
-    showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
-    if (state.activeScreen !== 'tables') showTableFloor();
-  };
-  window.addEventListener('afterprint', handleAfterPrint);
-  setTimeout(() => {
-    if (state.activeScreen !== 'tables') {
-      showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
-      showTableFloor();
-    }
-  }, 2500);
+  // 4. CHUYỂN VỀ SƠ ĐỒ BÀN
+  showToast(`Đã báo món ${currentTable} chuyển cho bếp!`);
+  if (state.activeScreen !== 'tables') showTableFloor();
 }
 
 // =============================================================
@@ -2099,7 +2095,38 @@ function fallbackCopyText(text) {
   document.body.removeChild(ta);
 }
 
+function isAutoPrintEnabled() {
+  return localStorage.getItem('pos_auto_print_enabled') === 'true';
+}
+
+function toggleAutoPrintSetting(enabled) {
+  localStorage.setItem('pos_auto_print_enabled', enabled ? 'true' : 'false');
+  updateAutoPrintUI();
+  if (enabled) {
+    showToast('Đã BẬT tự động in khi có đơn từ điện thoại!', 'success');
+  } else {
+    showToast('Đã TẮT tự động in (Không mở File Explorer & không lưu file)', 'info');
+  }
+}
+
+function updateAutoPrintUI() {
+  const isEnabled = isAutoPrintEnabled();
+  const toggle = document.getElementById('toggleAutoPrintSwitch');
+  if (toggle) toggle.checked = isEnabled;
+  const hint = document.getElementById('autoPrintHintText');
+  if (hint) {
+    if (isEnabled) {
+      hint.innerHTML = '🟢 <strong>Đang BẬT</strong>: Máy tính sẽ tự động nhả giấy in khi có đơn từ điện thoại. <em>(Chỉ dùng khi đã cắm máy in bill thật)</em>.';
+      hint.className = 'text-[10px] leading-relaxed text-emerald-800 bg-emerald-50 p-2 rounded-xl border border-emerald-200';
+    } else {
+      hint.innerHTML = '⚪ <strong>Đang TẮT</strong>: Máy tính chỉ báo chuông & cập nhật bàn, <strong>không mở File Explorer và không lưu file bill</strong>. Hãy BẬT khi quán đã cắm máy in hóa đơn nhiệt thật.';
+      hint.className = 'text-[10px] leading-relaxed text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-200';
+    }
+  }
+}
+
 function openPrinterModal() {
+  updateAutoPrintUI();
   document.getElementById('printerModal')?.classList.remove('hidden');
 }
 
