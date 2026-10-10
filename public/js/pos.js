@@ -1570,30 +1570,247 @@ function printReceipt(order) {
 function executeWindowPrint(order) {
   const receiptHtml = generateReceiptHtml(order);
 
-  // 1. Cập nhật DOM chính để in hệ thống
+  // 1. Cập nhật DOM chính (để dự phòng và cho mobile AirPrint)
   const container = document.getElementById('printable-receipt');
   if (container) {
     container.innerHTML = receiptHtml;
   }
 
-  const isZalo = /Zalo/i.test(navigator.userAgent);
-
-  // 2. Nếu đang mở qua Zalo (Zalo WebView chặn window.print):
-  // Mở ngay modal xem phiếu nhiệt kèm thông báo và nút 1 chạm sao chép gửi Zalo
-  if (isZalo) {
-    openMobileReceiptModal(order, receiptHtml, true);
-    return;
-  }
-
-  // 3. Luôn mở modal xem trước phiếu nhiệt trên màn hình (cả laptop và điện thoại)
+  // 2. Mở modal xem trước phiếu nhiệt trên màn hình (cả laptop và điện thoại)
   openMobileReceiptModal(order, receiptHtml, false);
 
-  // 4. Kích hoạt in hệ thống đồng bộ trực tiếp trong sự kiện bấm (chuẩn AirPrint iOS & Desktop Chrome)
-  try {
-    window.print();
-  } catch (err) {
-    console.warn('Lỗi gọi window.print:', err);
+  const isZalo = /Zalo/i.test(navigator.userAgent);
+  if (isZalo) return;
+
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // Trên thiết bị di động (Safari iOS / Android):
+    // Kích hoạt AirPrint hệ thống đồng bộ trực tiếp
+    try {
+      window.print();
+    } catch (err) {
+      console.warn('Lỗi gọi window.print trên mobile:', err);
+    }
+  } else {
+    // Trên Laptop / Máy tính PC (Chrome / Edge / Firefox):
+    // Dùng Iframe cách ly độc lập hoàn toàn để in sạch 100%, không bao giờ bị trắng trang
+    printViaIsolatedIframe(receiptHtml);
   }
+}
+
+function printViaIsolatedIframe(receiptHtml) {
+  let iframe = document.getElementById('pos-print-isolated-iframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'pos-print-isolated-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '100px';
+    iframe.style.height = '100px';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0.01';
+    iframe.style.zIndex = '-9999';
+    iframe.style.pointerEvents = 'none';
+    document.body.appendChild(iframe);
+  }
+
+  const iframeDoc = iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(`
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="utf-8">
+      <title>Phiếu Báo Bếp</title>
+      <style>
+        @page {
+          margin: 0;
+        }
+        * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+        html, body {
+          width: 80mm;
+          margin: 0;
+          padding: 0;
+          background: #ffffff;
+          color: #000000;
+          font-family: 'Courier New', Courier, monospace, sans-serif;
+          font-size: 13px;
+          line-height: 1.35;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .receipt-container {
+          width: 80mm;
+          max-width: 80mm;
+          padding: 6mm 4mm;
+          background: #ffffff;
+          color: #000000;
+        }
+        .receipt-title {
+          font-size: 16px;
+          font-weight: 900;
+          text-align: center;
+          text-transform: uppercase;
+          margin-bottom: 2px;
+          letter-spacing: 0.5px;
+        }
+        .receipt-header {
+          text-align: center;
+          font-size: 11px;
+          margin-bottom: 10px;
+          border-bottom: 1px dashed #000000;
+          padding-bottom: 8px;
+        }
+        .receipt-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 8px 0;
+        }
+        .receipt-table th {
+          border-bottom: 1px dashed #000000;
+          text-align: left;
+          padding: 4px 0;
+          font-size: 11px;
+        }
+        .receipt-table td {
+          padding: 3px 0;
+          font-size: 12px;
+          vertical-align: top;
+        }
+        .receipt-divider {
+          border-bottom: 1px dashed #000000;
+          margin: 6px 0;
+        }
+        .receipt-summary {
+          width: 100%;
+          margin-top: 4px;
+        }
+        .receipt-summary td {
+          padding: 2px 0;
+          font-size: 12px;
+        }
+        .receipt-total {
+          font-size: 15px;
+          font-weight: bold;
+          border-top: 1px dashed #000000;
+          border-bottom: 1px dashed #000000;
+          padding: 6px 0;
+        }
+        .receipt-footer {
+          text-align: center;
+          font-size: 11px;
+          margin-top: 12px;
+          padding-top: 6px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="receipt-container">
+        ${receiptHtml}
+      </div>
+    </body>
+    </html>
+  `);
+  iframeDoc.close();
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (err) {
+      console.warn('Iframe print error, fallback to window.print:', err);
+      try {
+        window.print();
+      } catch (e) {}
+    }
+  }, 120);
+}
+
+function openReceiptPrintWindow() {
+  if (!lastPrintedOrder) {
+    showToast('Chưa có thông tin phiếu!', 'error');
+    return;
+  }
+  const receiptHtml = generateReceiptHtml(lastPrintedOrder);
+  const win = window.open('', '_blank', 'width=420,height=650');
+  if (!win) {
+    showToast('Trình duyệt chặn popup. Hãy bấm Cho phép mở popup để xem trang in riêng!', 'warning');
+    return;
+  }
+  win.document.write(`
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="utf-8">
+      <title>Phiếu Báo Bếp - ${lastPrintedOrder.table_name || 'Bàn'}</title>
+      <style>
+        @page { size: 80mm auto; margin: 0; }
+        body {
+          margin: 0;
+          padding: 12px;
+          background: #f8fafc;
+          font-family: 'Courier New', Courier, monospace, sans-serif;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        .btn-print {
+          background: #059669;
+          color: white;
+          border: none;
+          padding: 12px 24px;
+          font-size: 14px;
+          font-weight: bold;
+          border-radius: 10px;
+          cursor: pointer;
+          margin-bottom: 16px;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .receipt-container {
+          background: white;
+          width: 80mm;
+          padding: 6mm 4mm;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+          border: 1px dashed #cbd5e1;
+          border-radius: 8px;
+        }
+        .receipt-title { font-size: 16px; font-weight: 900; text-align: center; text-transform: uppercase; margin-bottom: 2px; }
+        .receipt-header { text-align: center; font-size: 11px; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 8px; }
+        .receipt-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        .receipt-table th { border-bottom: 1px dashed #000; text-align: left; padding: 4px 0; font-size: 11px; }
+        .receipt-table td { padding: 3px 0; font-size: 12px; vertical-align: top; }
+        .receipt-divider { border-bottom: 1px dashed #000; margin: 6px 0; }
+        .receipt-summary { width: 100%; margin-top: 4px; }
+        .receipt-summary td { padding: 2px 0; font-size: 12px; }
+        .receipt-total { font-size: 15px; font-weight: bold; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 6px 0; }
+        .receipt-footer { text-align: center; font-size: 11px; margin-top: 12px; padding-top: 6px; }
+        @media print {
+          body { background: white; padding: 0; }
+          .btn-print { display: none; }
+          .receipt-container { box-shadow: none; border: none; padding: 6mm 4mm; width: 80mm; }
+        }
+      </style>
+    </head>
+    <body>
+      <button class="btn-print" onclick="window.print()">🖨️ BẤM VÀO ĐÂY ĐỂ IN PHIẾU BÁO BẾP</button>
+      <div class="receipt-container">
+        ${receiptHtml}
+      </div>
+      <script>
+        window.onload = function() {
+          setTimeout(function() { window.print(); }, 250);
+        };
+      <\/script>
+    </body>
+    </html>
+  `);
+  win.document.close();
 }
 
 function openMobileReceiptModal(order, receiptHtml, isZalo = false) {
@@ -1622,16 +1839,21 @@ function closeMobileReceiptModal() {
 }
 
 function triggerDirectSystemPrint() {
-  if (lastPrintedOrder) {
-    const receiptHtml = generateReceiptHtml(lastPrintedOrder);
-    const container = document.getElementById('printable-receipt');
-    if (container) container.innerHTML = receiptHtml;
+  if (!lastPrintedOrder) {
+    showToast('Chưa có thông tin phiếu!', 'error');
+    return;
   }
-  try {
-    window.print();
-  } catch (e) {
-    console.warn('Lỗi gọi window.print từ modal:', e);
-    showToast('Trình duyệt chưa hỗ trợ in trực tiếp. Bạn có thể sao chép phiếu để gửi cho bếp!', 'warning');
+  const receiptHtml = generateReceiptHtml(lastPrintedOrder);
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    try {
+      window.print();
+    } catch (e) {
+      console.warn('Lỗi gọi window.print từ modal:', e);
+      openReceiptPrintWindow();
+    }
+  } else {
+    printViaIsolatedIframe(receiptHtml);
   }
 }
 
