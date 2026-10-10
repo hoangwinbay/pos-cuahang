@@ -8,7 +8,10 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "deploy:zalo": "npx zmp-cli deploy",
+    "start:zalo": "npx zmp-cli start",
+    "login:zalo": "npx zmp-cli login"
   },
   "keywords": ["pos", "point-of-sale", "vietqr", "mobile"],
   "author": "",

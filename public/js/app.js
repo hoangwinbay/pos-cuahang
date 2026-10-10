@@ -274,6 +274,25 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// =============================================================
+// ZALO MINI APP SDK INTEGRATION (App ID: 2743297307107944554)
+// =============================================================
+function initZaloMiniApp() {
+  const isZaloEnv = /Zalo/i.test(navigator.userAgent) || typeof window.zmp !== 'undefined';
+  if (!isZaloEnv) return;
+
+  try {
+    const zmpSdk = window.zmp || window.ZMP;
+    if (zmpSdk && typeof zmpSdk.setNavigationBarTitle === 'function') {
+      zmpSdk.setNavigationBarTitle({
+        title: state.settings.store_name || 'BÚN MẮM MIỀN TÂY'
+      });
+    }
+  } catch (e) {
+    console.debug('ZMP SDK init notice:', e);
+  }
+}
+
 // App Initialization
 document.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
@@ -286,6 +305,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await initAuth();
   await loadSettings();
+  initZaloMiniApp();
+
   if (typeof initPos === 'function') {
     await initPos();
   }

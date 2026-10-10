@@ -8,11 +8,16 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <!-- Zalo Mini App SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/zmp-sdk@2.53.0/index.umd.min.js"></script>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#059669">
   <link rel="stylesheet" href="css/style.css?v=20261010_1955">
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden select-none">
+
+  <!-- Zalo Mini App Root Container -->
+  <div id="app" class="w-full h-full flex flex-col overflow-hidden">
 
   <!-- Khung in hóa đơn nhiệt 80mm (Chỉ hiển thị khi bấm In) -->
   <div id="printable-receipt"></div>
@@ -220,6 +225,11 @@
         <i class="fa-solid fa-users text-emerald-600 text-base w-6 text-center"></i>
         <span>Chuyển Vai Trò (Chủ / NV)</span>
       </button>
+
+      <a href="https://zalo.me/s/2743297307107944554/" target="_blank" class="w-full p-3 rounded-xl hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-blue-100 bg-blue-50/40">
+        <i class="fa-solid fa-mobile-screen-button text-blue-600 text-base w-6 text-center"></i>
+        <span>Mở Zalo Mini App</span>
+      </a>
     </div>
 
     <div class="p-3 border-t border-slate-100 text-center text-[11px] text-slate-400">
@@ -845,6 +855,7 @@
   <!-- Toast Notification -->
   <div id="toastContainer" class="fixed bottom-16 sm:bottom-6 right-4 left-4 sm:left-auto z-50 flex flex-col space-y-2 pointer-events-none items-center sm:items-end"></div>
 
+  </div> <!-- /#app: Zalo Mini App Root Container -->
 
   <!-- JavaScript Modules -->
   <script src="js/app.js?v=20261010_1955"></script>
