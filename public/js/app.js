@@ -472,13 +472,27 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+function copyToClipboard(elementId) {
+  const el = document.getElementById(elementId);
+  if (!el || !el.value) return;
+  navigator.clipboard.writeText(el.value).then(() => {
+    showToast('Đã sao chép đường dẫn!', 'success');
+  }).catch(() => {
+    el.select();
+    document.execCommand('copy');
+    showToast('Đã sao chép!', 'success');
+  });
+}
+
 // =============================================================
 // MODAL CẤU HÌNH MÁY CHỦ POS (CHO ZALO MINI APP HOẶC THIẾT BỊ PHỤ)
 // =============================================================
-function openServerConfigModal() {
+async function openServerConfigModal() {
   const modal = document.getElementById('modalServerConfig');
   const input = document.getElementById('inputServerUrl');
   const statusEl = document.getElementById('serverTestStatus');
+  const hostView = document.getElementById('serverConfigHostView');
+  const clientView = document.getElementById('serverConfigClientView');
 
   if (input) {
     input.value = localStorage.getItem('pos_server_url') || '';
@@ -487,6 +501,38 @@ function openServerConfigModal() {
     statusEl.className = 'text-xs font-semibold hidden';
     statusEl.textContent = '';
   }
+
+  // Phân biệt: Nếu đang mở trực tiếp trên Laptop (localhost hoặc IP nội bộ)
+  const isHostMachine = window.location.hostname === 'localhost' || 
+                        window.location.hostname === '127.0.0.1' || 
+                        /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
+
+  if (isHostMachine && hostView && clientView) {
+    hostView.classList.remove('hidden');
+    clientView.classList.add('hidden');
+
+    try {
+      const res = await fetch('/api/server-info');
+      if (res.ok) {
+        const info = await res.json();
+        const wifiInput = document.getElementById('displayWifiUrl');
+        const tunnelInput = document.getElementById('displayTunnelUrl');
+        const qrImg = document.getElementById('serverQrCodeImg');
+
+        if (wifiInput) wifiInput.value = info.wifi_url || '';
+        if (tunnelInput) tunnelInput.value = info.tunnel_url || '';
+
+        const targetUrl = info.tunnel_url || info.wifi_url;
+        if (qrImg && targetUrl) {
+          qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(targetUrl)}`;
+        }
+      }
+    } catch (e) {}
+  } else if (hostView && clientView) {
+    hostView.classList.add('hidden');
+    clientView.classList.remove('hidden');
+  }
+
   if (modal) modal.classList.remove('hidden');
 }
 

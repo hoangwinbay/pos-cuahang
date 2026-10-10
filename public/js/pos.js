@@ -186,7 +186,9 @@ function connectTableEventSource() {
   }
 
   try {
-    tableEventSource = new EventSource('/api/tables/events');
+    const base = typeof getApiBaseUrl === 'function' ? getApiBaseUrl() : '';
+    const sseUrl = base ? `${base}/api/tables/events` : '/api/tables/events';
+    tableEventSource = new EventSource(sseUrl);
 
     tableEventSource.onopen = () => {
       updateSyncIndicator(true);
@@ -226,20 +228,16 @@ function initRealtimeTableSync() {
   fetchAndApplyTableSync();
   connectTableEventSource();
 
-  // Polling dự phòng mỗi 4 giây
+  // Polling dự phòng liên tục mỗi 2.5 giây cho mọi thiết bị
   setInterval(() => {
-    if (document.visibilityState === 'visible') {
-      fetchAndApplyTableSync(true);
-    }
-  }, 4000);
+    fetchAndApplyTableSync(true);
+  }, 2500);
 
   // Khi mở lại tab hoặc mở khóa màn hình điện thoại
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      fetchAndApplyTableSync();
-      if (!tableEventSource || tableEventSource.readyState === EventSource.CLOSED) {
-        connectTableEventSource();
-      }
+    fetchAndApplyTableSync();
+    if (!tableEventSource || tableEventSource.readyState === EventSource.CLOSED) {
+      connectTableEventSource();
     }
   });
 }

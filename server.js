@@ -11,8 +11,15 @@ const AUTH_SECRET = 'pos_secret_key_' + (process.env.AUTH_SECRET || 'antigravity
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Request logging for monitoring device connections
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/css') && !req.url.startsWith('/js') && !req.url.startsWith('/favicon') && !req.url.endsWith('.png') && !req.url.endsWith('.jpg')) {
+    console.log(`[${new Date().toLocaleTimeString('vi-VN')}] ${req.method} ${req.url}`);
+  }
+  next();
+});
 
 // -------------------------------------------------------------
 // AUTH TOKEN HELPERS (HMAC-SHA256 Token)
@@ -904,6 +911,40 @@ function getAllTableDefinitions() {
   return ["Bàn 1", "Bàn 2", "Bàn 3", "Bàn 4", "Bàn 5", "Bàn 6", "Bàn 7", "Bàn 8", "Bàn 9", "Bàn 10", "Bàn 11", "Bàn 12"];
 }
 
+// GET /api/server-info: Thông tin IP nội bộ và đường dẫn Tunnel cho di động kết nối
+app.get('/api/server-info', (req, res) => {
+  let localIp = '192.168.10.58';
+  try {
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+      const lower = name.toLowerCase();
+      if (lower.includes('vmware') || lower.includes('virtual') || lower.includes('vbox')) continue;
+      for (const net of nets[name]) {
+        if (net.family === 'IPv4' && !net.internal && (net.address.startsWith('192.168.') || net.address.startsWith('10.'))) {
+          localIp = net.address;
+          break;
+        }
+      }
+    }
+  } catch (e) {}
+
+  let tunnelUrl = '';
+  try {
+    const fs = require('node:fs');
+    const tunnelFile = path.join(__dirname, 'current_tunnel_url.txt');
+    if (fs.existsSync(tunnelFile)) {
+      tunnelUrl = fs.readFileSync(tunnelFile, 'utf8').trim();
+    }
+  } catch (e) {}
+
+  res.json({
+    local_ip: localIp,
+    port: PORT,
+    wifi_url: `http://${localIp}:${PORT}`,
+    tunnel_url: tunnelUrl
+  });
+});
+
 // 1. GET /api/tables/sync: Lấy dữ liệu tất cả bàn và trạng thái đơn bàn
 app.get('/api/tables/sync', (req, res) => {
   try {
@@ -922,7 +963,9 @@ app.get('/api/tables/events', (req, res) => {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no'
+    'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': '*'
   });
 
   const initial = {

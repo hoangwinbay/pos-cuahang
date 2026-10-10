@@ -6,6 +6,8 @@ const fs = require('fs');
 function getLocalIp() {
   const nets = os.networkInterfaces();
   for (const name of Object.keys(nets)) {
+    const lower = name.toLowerCase();
+    if (lower.includes('vmware') || lower.includes('virtual') || lower.includes('vbox')) continue;
     for (const net of nets[name]) {
       if (net.family === 'IPv4' && !net.internal) {
         if (net.address.startsWith('192.168.') || net.address.startsWith('10.')) {
