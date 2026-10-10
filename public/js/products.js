@@ -25,13 +25,139 @@ async function loadMenuDishes() {
     const modalCatSelect = document.getElementById('dishCategory');
     if (modalCatSelect) {
       modalCatSelect.innerHTML = categories.map(c => `
-        <option value="${c.id}">${c.name}</option>
+        <option value="${c.id}">${c.icon ? c.icon + ' ' : ''}${c.name}</option>
       `).join('');
     }
 
+    renderCategoriesList(categories);
     renderMenuDishesList(products);
   } catch (err) {
     showToast('Lỗi khi tải danh sách món: ' + err.message, 'error');
+  }
+}
+
+// Hiển thị danh sách danh mục trong mục Quản lý thực đơn
+function renderCategoriesList(categories) {
+  const container = document.getElementById('categoriesListContainer');
+  if (!container) return;
+
+  if (!categories || categories.length === 0) {
+    container.innerHTML = '<span class="text-xs text-slate-400 italic">Chưa có danh mục nào. Bấm "+ Thêm Danh Mục" để tạo!</span>';
+    return;
+  }
+
+  container.innerHTML = categories.map(cat => {
+    const icon = cat.icon || '📁';
+    const name = cat.name;
+    const count = cat.product_count !== undefined ? cat.product_count : 0;
+    return `
+      <div class="inline-flex items-center space-x-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-medium transition-all group">
+        <span class="font-bold text-slate-800">${icon} ${name}</span>
+        <span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold">${count} món</span>
+        <div class="flex items-center space-x-1 pl-1.5 border-l border-slate-200 ml-1">
+          <button onclick="openEditCategoryModal(${cat.id}, '${name.replace(/'/g, "\\'")}', '${icon.replace(/'/g, "\\'")}')" class="p-1 text-slate-400 hover:text-emerald-600 rounded transition-colors" title="Sửa danh mục">
+            <i class="fa-solid fa-pen text-[11px]"></i>
+          </button>
+          <button onclick="deleteCategory(${cat.id}, '${name.replace(/'/g, "\\'")}', ${count})" class="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors" title="Xóa danh mục">
+            <i class="fa-regular fa-trash-can text-[11px]"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// =============================================================
+// MODAL: THÊM / SỬA / XÓA DANH MỤC THỰC ĐƠN
+// =============================================================
+function openCategoryModal() {
+  document.getElementById('categoryForm')?.reset();
+  const idEl = document.getElementById('categoryEditId');
+  const titleEl = document.getElementById('categoryModalTitle');
+  if (idEl) idEl.value = '';
+  if (titleEl) titleEl.textContent = 'Thêm Danh Mục Mới';
+  document.getElementById('categoryModal')?.classList.remove('hidden');
+  setTimeout(() => document.getElementById('categoryNameInput')?.focus(), 80);
+}
+
+function openEditCategoryModal(id, name, icon) {
+  const idEl = document.getElementById('categoryEditId');
+  const nameEl = document.getElementById('categoryNameInput');
+  const iconEl = document.getElementById('categoryIconInput');
+  const titleEl = document.getElementById('categoryModalTitle');
+  if (idEl) idEl.value = id;
+  if (nameEl) nameEl.value = name;
+  if (iconEl) iconEl.value = icon || '';
+  if (titleEl) titleEl.textContent = 'Chỉnh Sửa Danh Mục';
+  document.getElementById('categoryModal')?.classList.remove('hidden');
+  setTimeout(() => nameEl?.focus(), 80);
+}
+
+function closeCategoryModal() {
+  document.getElementById('categoryModal')?.classList.add('hidden');
+}
+
+async function saveCategory(event) {
+  event.preventDefault();
+  const id = document.getElementById('categoryEditId')?.value;
+  const name = document.getElementById('categoryNameInput')?.value?.trim();
+  const icon = document.getElementById('categoryIconInput')?.value?.trim() || '📁';
+
+  if (!name) {
+    showToast('Vui lòng nhập tên danh mục!', 'error');
+    return;
+  }
+
+  const saveBtn = document.getElementById('btnSaveCategory');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.classList.add('opacity-70');
+  }
+
+  try {
+    if (id) {
+      await api(`/api/categories/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name, icon })
+      });
+      showToast('Đã cập nhật danh mục thành công!', 'success');
+    } else {
+      await api('/api/categories', {
+        method: 'POST',
+        body: JSON.stringify({ name, icon })
+      });
+      showToast('Đã thêm danh mục mới thành công!', 'success');
+    }
+
+    closeCategoryModal();
+    await loadMenuDishes();
+    if (typeof loadCategories === 'function') loadCategories();
+    if (typeof loadProducts === 'function') loadProducts();
+  } catch (err) {
+    showToast('Lỗi khi lưu danh mục: ' + err.message, 'error');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.classList.remove('opacity-70');
+    }
+  }
+}
+
+async function deleteCategory(id, name, productCount) {
+  const msg = productCount > 0 
+    ? `Danh mục "${name}" hiện đang có ${productCount} món. Bạn có chắc chắn muốn xóa không?`
+    : `Bạn có chắc chắn muốn xóa danh mục "${name}"?`;
+
+  if (!confirm(msg)) return;
+
+  try {
+    await api(`/api/categories/${id}`, { method: 'DELETE' });
+    showToast(`Đã xóa danh mục "${name}"`, 'success');
+    await loadMenuDishes();
+    if (typeof loadCategories === 'function') loadCategories();
+    if (typeof loadProducts === 'function') loadProducts();
+  } catch (err) {
+    showToast('Lỗi khi xóa danh mục: ' + err.message, 'error');
   }
 }
 

@@ -522,6 +522,18 @@ app.post('/api/categories', requireAdmin, (req, res) => {
   }
 });
 
+app.put('/api/categories/:id', requireAdmin, (req, res) => {
+  try {
+    const { name, icon } = req.body;
+    if (!name) return res.status(400).json({ error: 'Tên danh mục là bắt buộc' });
+    db.prepare('UPDATE categories SET name = ?, icon = ? WHERE id = ?').run(name.trim(), icon || '📁', req.params.id);
+    const updated = db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/categories/:id', requireAdmin, (req, res) => {
   try {
     db.prepare('DELETE FROM categories WHERE id = ?').run(req.params.id);

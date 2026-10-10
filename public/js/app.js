@@ -159,13 +159,39 @@ function handleOfflineApi(url, options = {}) {
     return { success: true, tables: state.tableList };
   }
 
-  // 7. GET /api/categories
-  if (path === '/api/categories') {
-    return JSON.parse(localStorage.getItem('pos_cached_categories') || 'null') || [
-      { id: 1, name: 'Bún Mắm & Bún Nước Lèo' },
-      { id: 2, name: 'Món Thêm & Ăn Kèm' },
-      { id: 3, name: 'Nước Giải Khát' }
+  // 7. /api/categories (GET, POST, PUT, DELETE)
+  if (path.startsWith('/api/categories')) {
+    let list = JSON.parse(localStorage.getItem('pos_cached_categories') || 'null') || [
+      { id: 1, name: 'Bún Mắm & Bún Nước Lèo', icon: '🍜' },
+      { id: 2, name: 'Món Thêm & Ăn Kèm', icon: '🥟' },
+      { id: 3, name: 'Nước Giải Khát', icon: '🥤' }
     ];
+    let body = {};
+    try { body = options.body ? JSON.parse(options.body) : {}; } catch (e) {}
+
+    if (method === 'POST') {
+      const newCat = { id: Date.now(), name: body.name || 'Danh mục mới', icon: body.icon || '📁', product_count: 0 };
+      list.push(newCat);
+      localStorage.setItem('pos_cached_categories', JSON.stringify(list));
+      return newCat;
+    }
+    if (method === 'PUT') {
+      const id = parseInt(path.split('/').pop());
+      const cat = list.find(c => c.id === id);
+      if (cat) {
+        if (body.name) cat.name = body.name;
+        if (body.icon) cat.icon = body.icon;
+      }
+      localStorage.setItem('pos_cached_categories', JSON.stringify(list));
+      return cat || { id, name: body.name };
+    }
+    if (method === 'DELETE') {
+      const id = parseInt(path.split('/').pop());
+      list = list.filter(c => c.id !== id);
+      localStorage.setItem('pos_cached_categories', JSON.stringify(list));
+      return { success: true };
+    }
+    return list;
   }
 
   // 8. GET /api/products
@@ -490,7 +516,7 @@ function applyUserRolePermissions() {
     if (drawerBtnLogout) {
       drawerBtnLogout.className = 'w-full p-3 rounded-xl hover:bg-emerald-50 text-emerald-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-emerald-100 bg-emerald-50/30';
       if (drawerBtnLogoutIcon) drawerBtnLogoutIcon.className = 'fa-solid fa-arrow-right-to-bracket text-emerald-600 text-base w-6 text-center';
-      if (drawerBtnLogoutText) drawerBtnLogoutText.textContent = 'Đăng Nhập Chủ Quán';
+      if (drawerBtnLogoutText) drawerBtnLogoutText.textContent = 'Đăng Nhập';
       drawerBtnLogout.onclick = () => { toggleSideDrawer(false); openLoginModal(); };
     }
     return;
@@ -504,13 +530,13 @@ function applyUserRolePermissions() {
       : '<i class="fa-solid fa-user text-blue-600"></i>';
   }
   if (nameDisplay) {
-    nameDisplay.textContent = isAdmin ? 'Chủ Quán' : 'Nhân Viên';
+    nameDisplay.textContent = isAdmin ? 'Admin' : 'Nhân Viên';
   }
   if (drawerUserRole) {
-    drawerUserRole.textContent = isAdmin ? '👑 Chủ Quán (Toàn quyền)' : '👤 Nhân Viên Bán Hàng';
+    drawerUserRole.textContent = isAdmin ? 'Admin' : 'Nhân Viên';
   }
 
-  // Chỉ Chủ Quán mới thấy Thống Kê & Quản lý thực đơn
+  // Chỉ Admin mới thấy Thống Kê & Quản lý thực đơn
   if (drawerBtnReports) drawerBtnReports.style.display = isAdmin ? 'flex' : 'none';
   if (drawerBtnMenu) drawerBtnMenu.style.display = isAdmin ? 'flex' : 'none';
 
@@ -525,7 +551,7 @@ function applyUserRolePermissions() {
         : 'fa-solid fa-user-shield text-blue-600 text-base w-6 text-center';
     }
     if (drawerBtnLogoutText) {
-      drawerBtnLogoutText.textContent = isAdmin ? 'Đăng Xuất (Chủ Quán)' : 'Đăng Nhập Chủ Quán';
+      drawerBtnLogoutText.textContent = isAdmin ? 'Đăng Xuất' : 'Đăng Nhập';
     }
     drawerBtnLogout.onclick = () => {
       toggleSideDrawer(false);
@@ -614,7 +640,7 @@ async function submitLoginWithUserPass() {
 
       closeLoginModal();
       applyUserRolePermissions();
-      showToast(`Đăng nhập thành công: ${res.user.role === 'admin' ? 'Chủ Quán (Toàn quyền)' : res.user.name}`, 'success');
+      showToast(`Đăng nhập thành công: ${res.user.role === 'admin' ? 'Admin' : res.user.name}`, 'success');
     } else {
       throw new Error(res?.error || 'Tên đăng nhập hoặc mật khẩu không chính xác!');
     }

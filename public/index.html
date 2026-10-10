@@ -39,7 +39,6 @@
             <h1 id="headerStoreName" class="font-black text-base text-slate-800 leading-tight">BÚN MẮM MIỀN TÂY</h1>
             <span id="realtimeSyncDot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs animate-pulse" title="Đang đồng bộ trực tiếp thời gian thực"></span>
           </div>
-          <p class="text-[10px] text-slate-400 font-medium leading-none">Đồng bộ đa thiết bị thời gian thực</p>
         </div>
       </div>
     </header>
@@ -183,7 +182,7 @@
     <div class="p-4 bg-emerald-700 text-white flex items-center justify-between">
       <div>
         <h3 id="drawerStoreName" class="font-black text-base leading-tight">BÚN MẮM MIỀN TÂY</h3>
-        <p id="drawerUserRole" class="text-xs text-emerald-100 mt-0.5">👑 Chủ Quán</p>
+        <p id="drawerUserRole" class="text-xs text-emerald-100 mt-0.5">Admin</p>
       </div>
       <button onclick="toggleSideDrawer(false)" class="text-emerald-200 hover:text-white p-1">
         <i class="fa-solid fa-xmark text-xl"></i>
@@ -191,16 +190,16 @@
     </div>
 
     <div class="flex-1 overflow-y-auto p-3 space-y-2">
-      <!-- 1. Thống Kê Doanh Thu (Chỉ Chủ Quán) -->
+      <!-- 1. Thống Kê Doanh Thu (Chỉ Admin) -->
       <button onclick="navigateTo('reports')" id="drawerBtnReports" class="w-full p-3 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left">
         <i class="fa-solid fa-chart-pie text-emerald-600 text-base w-6 text-center"></i>
         <span>Thống Kê Doanh Thu</span>
       </button>
 
-      <!-- 2. Quản Lý Thực Đơn & Món (Chỉ Chủ Quán) -->
+      <!-- 2. Quản lý thực đơn (Chỉ Admin) -->
       <button onclick="navigateTo('menu')" id="drawerBtnMenu" class="w-full p-3 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left">
         <i class="fa-solid fa-utensils text-emerald-600 text-base w-6 text-center"></i>
-        <span>Quản Lý Thực Đơn & Món</span>
+        <span>Quản lý thực đơn</span>
       </button>
 
       <!-- 3. Thiết bị -->
@@ -223,32 +222,16 @@
       </button>
 
       <!-- 6. Zalo Mini App -->
-      <button onclick="openZaloModal(); toggleSideDrawer(false);" class="w-full p-3 rounded-xl hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-blue-100 bg-blue-50/40">
+      <button onclick="openZaloModal(); toggleSideDrawer(false);" class="w-full p-3 rounded-xl hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-slate-100">
         <i class="fa-solid fa-qrcode text-blue-600 text-base w-6 text-center"></i>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center space-x-1.5">
-            <span>Zalo Mini App</span>
-            <span class="bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black uppercase">Bản Test</span>
-          </div>
-          <p class="text-[10px] text-slate-400 font-normal truncate">Quét mã QR mở ngay trên điện thoại</p>
-        </div>
+        <span>Zalo Mini App</span>
       </button>
 
-      <!-- 7. Đổi Mật Khẩu -->
-      <button onclick="openChangePasswordModal(); toggleSideDrawer(false);" class="w-full p-3 rounded-xl hover:bg-amber-50 text-slate-700 hover:text-amber-800 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-slate-100 bg-slate-50/50">
-        <i class="fa-solid fa-key text-amber-500 text-base w-6 text-center"></i>
-        <span>Đổi Mật Khẩu</span>
-      </button>
-
-      <!-- 8. Đăng Xuất (hoặc Đăng Nhập) -->
+      <!-- 7. Đăng Xuất (hoặc Đăng Nhập) -->
       <button onclick="handleLogout(); toggleSideDrawer(false);" id="drawerBtnLogout" class="w-full p-3 rounded-xl hover:bg-rose-50 text-rose-600 hover:text-rose-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-rose-100 bg-rose-50/40">
         <i id="drawerBtnLogoutIcon" class="fa-solid fa-arrow-right-from-bracket text-rose-600 text-base w-6 text-center"></i>
-        <span id="drawerBtnLogoutText">Đăng Xuất</span>
+        <span id="drawerBtnLogoutText">Đăng Nhập</span>
       </button>
-    </div>
-
-    <div class="p-3 border-t border-slate-100 text-center text-[11px] text-slate-400">
-      POS Order • Phiên bản 2.0 Web Mobile
     </div>
   </div>
 
@@ -342,16 +325,41 @@
           </button>
           <div>
             <h2 class="text-sm font-black text-slate-800">Quản Lý Thực Đơn</h2>
-            <p class="text-[11px] text-slate-400">Thêm món, sửa giá, tải ảnh</p>
+            <p class="text-[11px] text-slate-400">Món ăn & Danh mục thực đơn</p>
           </div>
         </div>
-        <button onclick="openAddDishModal()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5">
-          <i class="fa-solid fa-plus"></i>
-          <span>+ Thêm Món</span>
-        </button>
+        <div class="flex items-center space-x-2">
+          <button onclick="openCategoryModal()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5">
+            <i class="fa-solid fa-layer-group text-emerald-600"></i>
+            <span>+ Danh Mục</span>
+          </button>
+          <button onclick="openAddDishModal()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5">
+            <i class="fa-solid fa-plus"></i>
+            <span>+ Thêm Món</span>
+          </button>
+        </div>
       </div>
 
-      <!-- Danh Sách Món -->
+      <!-- 1. Danh Mục Thực Đơn (Thêm & Sửa Danh Mục) -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div class="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between items-center">
+          <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-layer-group text-emerald-600"></i>
+            <span>Danh Mục Món Ăn</span>
+          </div>
+          <button onclick="openCategoryModal()" class="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center space-x-1">
+            <i class="fa-solid fa-plus text-[10px]"></i>
+            <span>Thêm Danh Mục</span>
+          </button>
+        </div>
+        <div class="p-3">
+          <div id="categoriesListContainer" class="flex flex-wrap gap-2">
+            <!-- Inject categories chips here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Danh Sách Món -->
       <div class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         <div class="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 flex justify-between">
           <span>Danh Sách Món Đang Bán</span>
@@ -658,6 +666,62 @@
         </button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- MODAL: THÊM / SỬA DANH MỤC THỰC ĐƠN -->
+  <!-- ============================================================= -->
+  <div id="categoryModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden modal-enter p-5 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        <h3 id="categoryModalTitle" class="font-bold text-slate-800 text-base">Thêm Danh Mục Mới</h3>
+        <button onclick="closeCategoryModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <form id="categoryForm" onsubmit="saveCategory(event)" class="space-y-3">
+        <input type="hidden" id="categoryEditId" value="">
+        
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Tên danh mục *</label>
+          <input 
+            type="text" 
+            id="categoryNameInput" 
+            required 
+            placeholder="VD: Bún Mắm, Món Thêm, Nước..." 
+            class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600 font-medium"
+          >
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Biểu tượng / Icon (Tùy chọn)</label>
+          <input 
+            type="text" 
+            id="categoryIconInput" 
+            placeholder="VD: 🍜, 🥟, 🥤, 🍲..." 
+            class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600 font-medium"
+          >
+        </div>
+
+        <div class="flex items-center space-x-2 pt-2">
+          <button 
+            type="button" 
+            onclick="closeCategoryModal()" 
+            class="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors"
+          >
+            Hủy
+          </button>
+          <button 
+            type="submit" 
+            id="btnSaveCategory" 
+            class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md shadow-emerald-600/20 transition-all"
+          >
+            Lưu Danh Mục
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
