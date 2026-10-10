@@ -195,6 +195,43 @@ app.get('/api/auth/me', (req, res) => {
   res.json({ user: req.user });
 });
 
+// Đổi mã PIN / Mật khẩu tài khoản (Chủ quán & Nhân viên)
+app.post('/api/auth/change-pin', (req, res) => {
+  try {
+    const { role, oldPin, newPin } = req.body;
+    if (!newPin || String(newPin).trim().length < 4) {
+      return res.status(400).json({ error: 'Mã PIN mới phải có ít nhất 4 chữ số hoặc ký tự!' });
+    }
+
+    const targetRole = role === 'staff' || role === 'nhanvien' ? 'staff' : 'admin';
+    const user = db.prepare('SELECT * FROM users WHERE role = ? AND active = 1').get(targetRole);
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy tài khoản người dùng!' });
+    }
+
+    // Xác thực mã PIN cũ
+    if (oldPin) {
+      const match = (user.pin === String(oldPin).trim() || user.password === String(oldPin).trim());
+      if (!match) {
+        return res.status(401).json({ error: 'Mã PIN hiện tại không chính xác!' });
+      }
+    } else if (!req.user || req.user.role !== 'admin') {
+      return res.status(401).json({ error: 'Vui lòng nhập mã PIN hiện tại để xác thực!' });
+    }
+
+    const cleanNewPin = String(newPin).trim();
+    db.prepare('UPDATE users SET pin = ?, password = ? WHERE id = ?').run(cleanNewPin, cleanNewPin, user.id);
+
+    res.json({
+      success: true,
+      message: `Đã đổi mã PIN ${targetRole === 'admin' ? 'Chủ Quán' : 'Nhân Viên'} thành công!`,
+      role: targetRole
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // List all users (Admin only)
 app.get('/api/users', requireAdmin, (req, res) => {
   try {

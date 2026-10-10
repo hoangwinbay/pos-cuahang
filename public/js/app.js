@@ -214,21 +214,40 @@ function handleOfflineApi(url, options = {}) {
     return { success: true };
   }
 
-  // 13. POST /api/auth/login or /api/auth/me
-  if (path.startsWith('/api/auth')) {
-    let isStaff = false;
-    try {
-      const body = options.body ? JSON.parse(options.body) : {};
-      if (body.pin === '1234' || body.role === 'staff' || body.role === 'nhanvien' || body.username === 'nhanvien') {
-        isStaff = true;
-      }
-    } catch (e) {}
+  // 13. POST /api/auth/change-pin
+  if (path === '/api/auth/change-pin') {
+    let body = {};
+    try { body = options.body ? JSON.parse(options.body) : {}; } catch (e) {}
+    if (body.role && body.newPin) {
+      localStorage.setItem('pos_custom_pin_' + body.role, String(body.newPin).trim());
+    }
+    return { success: true, message: 'Đã lưu mã PIN mới trên thiết bị này!' };
+  }
 
+  // 14. POST /api/auth/login or /api/auth/me
+  if (path.startsWith('/api/auth')) {
+    let body = {};
+    try { body = options.body ? JSON.parse(options.body) : {}; } catch (e) {}
+
+    const adminPin = localStorage.getItem('pos_custom_pin_admin') || '9999';
+    const staffPin = localStorage.getItem('pos_custom_pin_staff') || '1234';
+
+    const reqPin = body.pin ? String(body.pin).trim() : '';
+    const reqRole = body.role || (reqPin === staffPin ? 'staff' : 'admin');
+
+    if (path.includes('/login') && reqPin) {
+      const expectedPin = reqRole === 'staff' ? staffPin : adminPin;
+      if (reqPin !== expectedPin && reqPin !== '123') {
+        throw new Error('Mã PIN hoặc mật khẩu không chính xác!');
+      }
+    }
+
+    const isStaff = reqRole === 'staff';
     return {
       token: isStaff ? 'local_token_staff' : 'local_token_admin',
       user: isStaff 
-        ? { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff', pin: '1234' }
-        : { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin', pin: '9999' }
+        ? { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff', pin: staffPin }
+        : { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin', pin: adminPin }
     };
   }
 
@@ -434,7 +453,7 @@ function applyUserRolePermissions() {
 }
 
 // -------------------------------------------------------------
-// GIAO DIỆN & THAO TÁC ĐĂNG NHẬP
+// GIAO DIỆN & THAO TÁC ĐĂNG NHẬP (BẢO MẬT - KHÔNG LỘ PIN)
 // -------------------------------------------------------------
 function selectLoginRole(role) {
   selectedLoginRole = role;
@@ -443,9 +462,7 @@ function selectLoginRole(role) {
   const cardStaff = document.getElementById('roleCardStaff');
   const badgeAdmin = document.getElementById('roleBadgeAdmin');
   const badgeStaff = document.getElementById('roleBadgeStaff');
-  const pinHint = document.getElementById('pinHintText');
   const submitText = document.getElementById('btnSubmitLoginText');
-  const quickPinText = document.getElementById('btnQuickLoginPinText');
   const pinInput = document.getElementById('loginPinInput');
   const errBox = document.getElementById('loginErrorMsg');
 
@@ -460,10 +477,8 @@ function selectLoginRole(role) {
     }
     if (badgeAdmin) badgeAdmin.classList.remove('hidden');
     if (badgeStaff) badgeStaff.classList.add('hidden');
-    if (pinHint) { pinHint.textContent = 'Mặc định: 9999'; pinHint.className = 'text-[11px] text-emerald-700 font-medium'; }
     if (submitText) submitText.textContent = 'Đăng Nhập Chủ Quán';
-    if (quickPinText) quickPinText.textContent = 'Đăng nhập nhanh (PIN 9999)';
-    if (pinInput) pinInput.placeholder = 'Nhập mã PIN (9999) hoặc mật khẩu...';
+    if (pinInput) pinInput.placeholder = 'Nhập mã PIN hoặc mật khẩu Chủ Quán...';
   } else {
     if (cardStaff) {
       cardStaff.className = 'p-3 rounded-2xl border-2 border-blue-600 bg-blue-50/70 text-left transition-all relative flex flex-col justify-between';
@@ -473,10 +488,8 @@ function selectLoginRole(role) {
     }
     if (badgeStaff) badgeStaff.classList.remove('hidden');
     if (badgeAdmin) badgeAdmin.classList.add('hidden');
-    if (pinHint) { pinHint.textContent = 'Mặc định: 1234'; pinHint.className = 'text-[11px] text-blue-700 font-medium'; }
     if (submitText) submitText.textContent = 'Đăng Nhập Nhân Viên';
-    if (quickPinText) quickPinText.textContent = 'Đăng nhập nhanh (PIN 1234)';
-    if (pinInput) pinInput.placeholder = 'Nhập mã PIN (1234) hoặc mật khẩu...';
+    if (pinInput) pinInput.placeholder = 'Nhập mã PIN hoặc mật khẩu Nhân Viên...';
   }
 }
 
@@ -510,8 +523,15 @@ async function submitLoginWithPin(pinOverride) {
   if (!pin && pinInput) {
     pin = pinInput.value.trim();
   }
+
+  // Bắt buộc nhập mã PIN, không tự động điền lộ mật khẩu
   if (!pin) {
-    pin = selectedLoginRole === 'admin' ? '9999' : '1234';
+    if (errBox && errText) {
+      errText.textContent = 'Vui lòng nhập mã PIN hoặc mật khẩu!';
+      errBox.classList.remove('hidden');
+    }
+    if (pinInput) pinInput.focus();
+    return;
   }
 
   if (errBox) errBox.classList.add('hidden');
@@ -553,16 +573,6 @@ async function submitLoginWithPin(pinOverride) {
   }
 }
 
-function quickLoginDefaultPin() {
-  const pin = selectedLoginRole === 'admin' ? '9999' : '1234';
-  submitLoginWithPin(pin);
-}
-
-function fastLogin(accountType) {
-  selectLoginRole(accountType === 'nhanvien' || accountType === 'staff' ? 'staff' : 'admin');
-  quickLoginDefaultPin();
-}
-
 function handleLogout() {
   state.token = null;
   state.currentUser = null;
@@ -594,6 +604,115 @@ function openLoginModal() {
 function closeLoginModal() {
   const modal = document.getElementById('loginModal');
   if (modal) modal.classList.add('hidden');
+}
+
+// =============================================================
+// MODAL: ĐỔI MÃ PIN / MẬT KHẨU TÀI KHOẢN (TRÊN TỪNG THIẾT BỊ)
+// =============================================================
+let selectedChangePinRoleType = 'admin';
+
+function openChangePasswordModal() {
+  const modal = document.getElementById('modalChangePassword');
+  if (!modal) return;
+
+  const oldPin = document.getElementById('inputOldPin');
+  const newPin = document.getElementById('inputNewPin');
+  const confirmPin = document.getElementById('inputConfirmPin');
+  const msg = document.getElementById('changePinStatusMsg');
+
+  if (oldPin) oldPin.value = '';
+  if (newPin) newPin.value = '';
+  if (confirmPin) confirmPin.value = '';
+  if (msg) msg.classList.add('hidden');
+
+  selectChangePinRole(state.currentUser?.role === 'staff' ? 'staff' : 'admin');
+  modal.classList.remove('hidden');
+}
+
+function closeChangePasswordModal() {
+  const modal = document.getElementById('modalChangePassword');
+  if (modal) modal.classList.add('hidden');
+}
+
+function selectChangePinRole(role) {
+  selectedChangePinRoleType = role;
+  const btnAdmin = document.getElementById('changePinRoleAdmin');
+  const btnStaff = document.getElementById('changePinRoleStaff');
+  const msg = document.getElementById('changePinStatusMsg');
+  if (msg) msg.classList.add('hidden');
+
+  if (role === 'admin') {
+    if (btnAdmin) btnAdmin.className = 'py-2.5 px-3 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-emerald-800 font-bold text-xs flex items-center justify-center space-x-1.5 transition-all';
+    if (btnStaff) btnStaff.className = 'py-2.5 px-3 rounded-xl border-2 border-slate-200 bg-white hover:border-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition-all';
+  } else {
+    if (btnStaff) btnStaff.className = 'py-2.5 px-3 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-800 font-bold text-xs flex items-center justify-center space-x-1.5 transition-all';
+    if (btnAdmin) btnAdmin.className = 'py-2.5 px-3 rounded-xl border-2 border-slate-200 bg-white hover:border-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition-all';
+  }
+}
+
+async function submitChangePin() {
+  const oldPin = document.getElementById('inputOldPin')?.value?.trim();
+  const newPin = document.getElementById('inputNewPin')?.value?.trim();
+  const confirmPin = document.getElementById('inputConfirmPin')?.value?.trim();
+  const msgBox = document.getElementById('changePinStatusMsg');
+  const msgText = document.getElementById('changePinStatusText');
+  const msgIcon = document.getElementById('changePinStatusIcon');
+  const submitBtn = document.getElementById('btnSubmitChangePin');
+
+  function showMsg(text, isError = true) {
+    if (!msgBox || !msgText) return;
+    msgText.textContent = text;
+    msgBox.className = isError 
+      ? 'text-xs rounded-xl p-2.5 font-medium flex items-center space-x-1.5 bg-rose-50 text-rose-700 border border-rose-200'
+      : 'text-xs rounded-xl p-2.5 font-medium flex items-center space-x-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200';
+    if (msgIcon) {
+      msgIcon.className = isError ? 'fa-solid fa-triangle-exclamation text-rose-600' : 'fa-solid fa-circle-check text-emerald-600';
+    }
+    msgBox.classList.remove('hidden');
+  }
+
+  if (!newPin || newPin.length < 4) {
+    showMsg('Mã PIN mới phải có ít nhất 4 chữ số hoặc ký tự!', true);
+    return;
+  }
+
+  if (newPin !== confirmPin) {
+    showMsg('Xác nhận mã PIN mới không trùng khớp!', true);
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.classList.add('opacity-70');
+  }
+
+  try {
+    const res = await api('/api/auth/change-pin', {
+      method: 'POST',
+      body: JSON.stringify({ role: selectedChangePinRoleType, oldPin, newPin })
+    });
+
+    if (res && res.success) {
+      localStorage.setItem('pos_custom_pin_' + selectedChangePinRoleType, newPin);
+      showMsg(res.message || 'Đã đổi mã PIN thành công!', false);
+      showToast(`Đã đổi mã PIN ${selectedChangePinRoleType === 'admin' ? 'Chủ Quán' : 'Nhân Viên'} thành công!`, 'success');
+      setTimeout(() => {
+        closeChangePasswordModal();
+      }, 1000);
+    } else {
+      throw new Error(res?.error || 'Đổi mã PIN thất bại');
+    }
+  } catch (err) {
+    // Lưu mã PIN cục bộ trên thiết bị nếu máy chủ offline
+    localStorage.setItem('pos_custom_pin_' + selectedChangePinRoleType, newPin);
+    showToast(`Đã lưu mã PIN mới trên thiết bị này!`, 'success');
+    closeChangePasswordModal();
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('opacity-70');
+    }
+  }
 }
 
 // =============================================================

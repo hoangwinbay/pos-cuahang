@@ -235,7 +235,13 @@
         <i class="fa-solid fa-qrcode text-blue-500 text-sm"></i>
       </button>
 
-      <!-- 4. Đăng Xuất (hoặc Đăng Nhập) -->
+      <!-- 4. Đổi Mã PIN / Mật Khẩu Thiết Bị -->
+      <button onclick="openChangePasswordModal(); toggleSideDrawer(false);" class="w-full p-3 rounded-xl hover:bg-amber-50 text-slate-700 hover:text-amber-800 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-slate-100 bg-slate-50/50">
+        <i class="fa-solid fa-key text-amber-500 text-base w-6 text-center"></i>
+        <span>Đổi Mã PIN / Mật Khẩu</span>
+      </button>
+
+      <!-- 5. Đăng Xuất (hoặc Đăng Nhập) -->
       <button onclick="handleLogout(); toggleSideDrawer(false);" id="drawerBtnLogout" class="w-full p-3 rounded-xl hover:bg-rose-50 text-rose-600 hover:text-rose-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-rose-100 bg-rose-50/40">
         <i id="drawerBtnLogoutIcon" class="fa-solid fa-arrow-right-from-bracket text-rose-600 text-base w-6 text-center"></i>
         <span id="drawerBtnLogoutText">Đăng Xuất</span>
@@ -812,6 +818,7 @@
   </div>
 
   <!-- ============================================================= -->
+  <!-- ============================================================= -->
   <!-- MODAL: ĐĂNG NHẬP HỆ THỐNG POS (CHỦ QUÁN & NHÂN VIÊN) -->
   <!-- ============================================================= -->
   <div id="loginModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 hidden">
@@ -854,9 +861,6 @@
               <div class="font-black text-xs sm:text-sm text-slate-800">Chủ Quán</div>
               <p class="text-[10px] text-slate-500 line-clamp-1 mt-0.5">Toàn quyền, doanh thu</p>
             </div>
-            <div class="mt-2 text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100/80 px-1.5 py-0.5 rounded w-fit">
-              PIN: 9999
-            </div>
           </button>
 
           <!-- Card Nhân Viên -->
@@ -876,19 +880,13 @@
               <div class="font-black text-xs sm:text-sm text-slate-800">Nhân Viên</div>
               <p class="text-[10px] text-slate-500 line-clamp-1 mt-0.5">Gọi món, in bill, bàn</p>
             </div>
-            <div class="mt-2 text-[10px] font-mono font-bold text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded w-fit">
-              PIN: 1234
-            </div>
           </button>
         </div>
       </div>
 
-      <!-- Ô nhập PIN / Mật khẩu -->
+      <!-- Ô nhập PIN / Mật khẩu (Bảo mật, không hiển thị mã mẫu) -->
       <div class="space-y-1.5">
-        <div class="flex items-center justify-between">
-          <label class="text-xs font-bold text-slate-700">Mã PIN hoặc Mật khẩu:</label>
-          <span id="pinHintText" class="text-[11px] text-emerald-700 font-medium">Mặc định: 9999</span>
-        </div>
+        <label class="block text-xs font-bold text-slate-700">Mã PIN hoặc Mật khẩu:</label>
         <div class="relative">
           <input 
             type="password" 
@@ -902,6 +900,7 @@
             type="button" 
             onclick="togglePinVisibility()" 
             class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-1"
+            title="Ẩn/Hiện mật khẩu"
           >
             <i id="pinToggleIcon" class="fa-solid fa-eye"></i>
           </button>
@@ -911,12 +910,11 @@
       <!-- Thông báo lỗi (nếu có) -->
       <div id="loginErrorMsg" class="hidden text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-xl p-2.5 font-medium flex items-center space-x-1.5">
         <i class="fa-solid fa-triangle-exclamation"></i>
-        <span id="loginErrorText">Mã PIN không đúng</span>
+        <span id="loginErrorText">Mã PIN hoặc mật khẩu không chính xác</span>
       </div>
 
-      <!-- Các nút thao tác đăng nhập -->
+      <!-- Nút Đăng nhập -->
       <div class="space-y-2 pt-1">
-        <!-- Nút Đăng nhập chính -->
         <button 
           type="button" 
           onclick="submitLoginWithPin()" 
@@ -924,18 +922,130 @@
           class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl text-xs sm:text-sm shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center space-x-2"
         >
           <i class="fa-solid fa-right-to-bracket"></i>
-          <span id="btnSubmitLoginText">Đăng Nhập Chủ Quán</span>
+          <span id="btnSubmitLoginText">Đăng Nhập</span>
         </button>
+      </div>
 
-        <!-- Nút Đăng nhập 1-chạm cực nhanh -->
+      <!-- Footer: Đổi mã PIN -->
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
         <button 
           type="button" 
-          onclick="quickLoginDefaultPin()" 
-          id="btnQuickLoginPin" 
-          class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors flex items-center justify-center space-x-1.5"
+          onclick="openChangePasswordModal();" 
+          class="text-emerald-700 hover:text-emerald-800 font-bold flex items-center space-x-1.5 hover:underline"
         >
-          <i class="fa-solid fa-bolt text-amber-500"></i>
-          <span id="btnQuickLoginPinText">Đăng nhập nhanh (PIN 9999)</span>
+          <i class="fa-solid fa-key text-amber-500"></i>
+          <span>Đổi mã PIN / Mật khẩu</span>
+        </button>
+        <span class="text-slate-400 text-[11px]">Bảo mật thiết bị</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- MODAL: ĐỔI MÃ PIN / MẬT KHẨU TÀI KHOẢN TRÊN THIẾT BỊ -->
+  <!-- ============================================================= -->
+  <div id="modalChangePassword" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-sm sm:max-w-md rounded-2xl shadow-2xl overflow-hidden modal-enter p-5 space-y-4">
+      
+      <!-- Header -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base shadow-xs">
+            <i class="fa-solid fa-key"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-slate-800 text-base leading-tight">Đổi Mã PIN / Mật Khẩu</h3>
+            <p class="text-[11px] text-slate-400">Thiết lập mật khẩu bảo mật riêng cho thiết bị & quán</p>
+          </div>
+        </div>
+        <button onclick="closeChangePasswordModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Chọn tài khoản cần đổi -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-bold text-slate-700">Tài khoản cần đổi mã:</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button 
+            type="button" 
+            onclick="selectChangePinRole('admin')" 
+            id="changePinRoleAdmin" 
+            class="py-2.5 px-3 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-emerald-800 font-bold text-xs flex items-center justify-center space-x-1.5 transition-all"
+          >
+            <i class="fa-solid fa-user-shield text-emerald-600"></i>
+            <span>Chủ Quán</span>
+          </button>
+          <button 
+            type="button" 
+            onclick="selectChangePinRole('staff')" 
+            id="changePinRoleStaff" 
+            class="py-2.5 px-3 rounded-xl border-2 border-slate-200 bg-white hover:border-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition-all"
+          >
+            <i class="fa-solid fa-user text-blue-600"></i>
+            <span>Nhân Viên</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Ô 1: Mã PIN hiện tại -->
+      <div class="space-y-1">
+        <label class="block text-xs font-bold text-slate-700">Mã PIN / Mật khẩu hiện tại:</label>
+        <input 
+          type="password" 
+          id="inputOldPin" 
+          placeholder="Nhập mã PIN hoặc mật khẩu cũ..." 
+          class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-amber-500 font-mono tracking-widest"
+        >
+      </div>
+
+      <!-- Ô 2: Mã PIN mới -->
+      <div class="space-y-1">
+        <label class="block text-xs font-bold text-slate-700">Mã PIN / Mật khẩu mới (tối thiểu 4 số):</label>
+        <input 
+          type="password" 
+          id="inputNewPin" 
+          placeholder="Nhập mã PIN mới (ví dụ: 4 số bí mật)..." 
+          class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-amber-500 font-mono tracking-widest"
+        >
+      </div>
+
+      <!-- Ô 3: Xác nhận mã PIN mới -->
+      <div class="space-y-1">
+        <label class="block text-xs font-bold text-slate-700">Xác nhận lại mã PIN mới:</label>
+        <input 
+          type="password" 
+          id="inputConfirmPin" 
+          placeholder="Nhập lại mã PIN mới..." 
+          class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-amber-500 font-mono tracking-widest"
+          onkeydown="if(event.key==='Enter') submitChangePin()"
+        >
+      </div>
+
+      <!-- Thông báo lỗi / thành công -->
+      <div id="changePinStatusMsg" class="hidden text-xs rounded-xl p-2.5 font-medium flex items-center space-x-1.5">
+        <i id="changePinStatusIcon" class="fa-solid fa-triangle-exclamation"></i>
+        <span id="changePinStatusText"></span>
+      </div>
+
+      <!-- Các nút thao tác -->
+      <div class="flex items-center space-x-2 pt-1">
+        <button 
+          type="button" 
+          onclick="closeChangePasswordModal()" 
+          class="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors"
+        >
+          Hủy
+        </button>
+        <button 
+          type="button" 
+          onclick="submitChangePin()" 
+          id="btnSubmitChangePin" 
+          class="flex-1 py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center space-x-1.5"
+        >
+          <i class="fa-solid fa-check"></i>
+          <span>Lưu Mã PIN Mới</span>
         </button>
       </div>
 
@@ -1220,12 +1330,12 @@
   </div> <!-- /#app: Zalo Mini App Root Container -->
 
   <!-- JavaScript Modules -->
-  <script src="js/mount.js?v=20261011_0255_authclean"></script>
-  <script src="js/app.js?v=20261011_0255_authclean"></script>
-  <script src="js/pos.js?v=20261011_0255_authclean"></script>
-  <script src="js/products.js?v=20261011_0255_authclean"></script>
-  <script src="js/orders.js?v=20261011_0255_authclean"></script>
-  <script src="js/reports.js?v=20261011_0255_authclean"></script>
+  <script src="js/mount.js?v=20261011_0305_securepin"></script>
+  <script src="js/app.js?v=20261011_0305_securepin"></script>
+  <script src="js/pos.js?v=20261011_0305_securepin"></script>
+  <script src="js/products.js?v=20261011_0305_securepin"></script>
+  <script src="js/orders.js?v=20261011_0305_securepin"></script>
+  <script src="js/reports.js?v=20261011_0305_securepin"></script>
 
 </body>
 </html>
