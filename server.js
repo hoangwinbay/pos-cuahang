@@ -620,6 +620,17 @@ app.post('/api/orders', (req, res) => {
 
       db.exec('COMMIT;');
 
+      if (table_name) {
+        try {
+          db.prepare('DELETE FROM active_table_orders WHERE table_name = ?').run(table_name);
+          broadcastTableUpdate({
+            type: 'table_order_cleared',
+            table_name: table_name,
+            all_table_orders: getAllActiveTableOrders()
+          });
+        } catch (e) {}
+      }
+
       const createdOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
       const createdItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
 
@@ -836,6 +847,166 @@ app.get('/api/backup/export-json', requireAdmin, (req, res) => {
   };
   res.setHeader('Content-Disposition', `attachment; filename=pos_data_${new Date().toISOString().slice(0, 10)}.json`);
   res.json(data);
+});
+
+// -------------------------------------------------------------
+// REAL-TIME TABLE SYNC & SERVER-SENT EVENTS (SSE)
+// -------------------------------------------------------------
+const sseClients = new Set();
+
+function broadcastTableUpdate(payload) {
+  const message = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(message);
+    } catch (e) {
+      sseClients.delete(client);
+    }
+  }
+}
+
+// Ping SSE connection every 25s to keep alive through reverse proxies
+setInterval(() => {
+  for (const client of sseClients) {
+    try {
+      client.write(': ping\n\n');
+    } catch (e) {
+      sseClients.delete(client);
+    }
+  }
+}, 25000);
+
+function getAllActiveTableOrders() {
+  try {
+    const rows = db.prepare('SELECT table_name, order_data FROM active_table_orders').all();
+    const result = {};
+    for (const row of rows) {
+      try {
+        result[row.table_name] = JSON.parse(row.order_data);
+      } catch (e) {
+        result[row.table_name] = null;
+      }
+    }
+    return result;
+  } catch (err) {
+    console.error('Lỗi đọc active_table_orders:', err);
+    return {};
+  }
+}
+
+function getAllTableDefinitions() {
+  try {
+    const rows = db.prepare('SELECT table_name FROM table_definitions ORDER BY sort_order ASC, rowid ASC').all();
+    if (rows && rows.length > 0) {
+      return rows.map(r => r.table_name);
+    }
+  } catch (err) {}
+  return ["Bàn 1", "Bàn 2", "Bàn 3", "Bàn 4", "Bàn 5", "Bàn 6", "Bàn 7", "Bàn 8", "Bàn 9", "Bàn 10", "Bàn 11", "Bàn 12"];
+}
+
+// 1. GET /api/tables/sync: Lấy dữ liệu tất cả bàn và trạng thái đơn bàn
+app.get('/api/tables/sync', (req, res) => {
+  try {
+    res.json({
+      tables: getAllTableDefinitions(),
+      tableOrders: getAllActiveTableOrders()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. GET /api/tables/events: Kết nối SSE thời gian thực cho mọi thiết bị
+app.get('/api/tables/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+
+  const initial = {
+    type: 'initial_sync',
+    tables: getAllTableDefinitions(),
+    all_table_orders: getAllActiveTableOrders()
+  };
+  res.write(`data: ${JSON.stringify(initial)}\n\n`);
+
+  sseClients.add(res);
+
+  req.on('close', () => {
+    sseClients.delete(res);
+  });
+});
+
+// 3. POST /api/tables/order: Cập nhật hoặc lưu đơn của bàn (Đồng bộ tức thì)
+app.post('/api/tables/order', (req, res) => {
+  try {
+    const { table_name, order_data } = req.body;
+    if (!table_name) return res.status(400).json({ error: 'Thiếu tên bàn!' });
+
+    const orderJson = typeof order_data === 'string' ? order_data : JSON.stringify(order_data || {});
+
+    const upsert = db.prepare(`
+      INSERT INTO active_table_orders (table_name, order_data, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(table_name) DO UPDATE SET order_data = excluded.order_data, updated_at = CURRENT_TIMESTAMP
+    `);
+    upsert.run(table_name, orderJson);
+
+    const allOrders = getAllActiveTableOrders();
+    broadcastTableUpdate({
+      type: 'table_order_updated',
+      table_name,
+      order_data: JSON.parse(orderJson),
+      all_table_orders: allOrders
+    });
+
+    res.json({ success: true, table_name });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. DELETE /api/tables/order/:tableName: Hủy hoặc làm trống bàn (Đồng bộ tức thì)
+app.delete('/api/tables/order/:tableName', (req, res) => {
+  try {
+    const tableName = decodeURIComponent(req.params.tableName);
+    db.prepare('DELETE FROM active_table_orders WHERE table_name = ?').run(tableName);
+
+    const allOrders = getAllActiveTableOrders();
+    broadcastTableUpdate({
+      type: 'table_order_cleared',
+      table_name: tableName,
+      all_table_orders: allOrders
+    });
+
+    res.json({ success: true, table_name: tableName });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. POST /api/tables/custom: Thêm bàn mới
+app.post('/api/tables/custom', (req, res) => {
+  try {
+    const { table_name } = req.body;
+    if (!table_name || !table_name.trim()) return res.status(400).json({ error: 'Tên bàn không hợp lệ!' });
+
+    const trimmed = table_name.trim();
+    const count = db.prepare('SELECT COUNT(*) as cnt FROM table_definitions').get()?.cnt || 0;
+    db.prepare('INSERT OR IGNORE INTO table_definitions (table_name, sort_order) VALUES (?, ?)').run(trimmed, count + 1);
+
+    const tables = getAllTableDefinitions();
+    broadcastTableUpdate({
+      type: 'table_list_updated',
+      tables
+    });
+
+    res.json({ success: true, tables });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Catch-all route to serve index.html

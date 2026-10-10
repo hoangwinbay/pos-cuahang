@@ -74,7 +74,29 @@ function initDatabase() {
       active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS active_table_orders (
+      table_name TEXT PRIMARY KEY,
+      order_data TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS table_definitions (
+      table_name TEXT PRIMARY KEY,
+      sort_order INTEGER DEFAULT 0
+    );
   `);
+
+  // Seed default table definitions if empty
+  try {
+    const tableDefCount = db.prepare('SELECT COUNT(*) as count FROM table_definitions').get()?.count || 0;
+    if (tableDefCount === 0) {
+      const insertTableDef = db.prepare('INSERT INTO table_definitions (table_name, sort_order) VALUES (?, ?)');
+      for (let i = 1; i <= 12; i++) {
+        insertTableDef.run(`Bàn ${i}`, i);
+      }
+    }
+  } catch (e) {}
 
   // Ensure cashier and table_name columns exist in orders table
   try {

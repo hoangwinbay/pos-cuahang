@@ -11,11 +11,157 @@ function isActualImage(str) {
   return typeof str === 'string' && (str.startsWith('data:image') || str.startsWith('http') || str.startsWith('/'));
 }
 
+// =============================================================
+// ĐỒNG BỘ THỜI GIAN THỰC ĐA THIẾT BỊ (MULTI-DEVICE REALTIME SYNC)
+// =============================================================
+let tableEventSource = null;
+let syncDebounceTimers = {};
+
+function syncTableOrderToServer(tableName, immediate = false) {
+  if (syncDebounceTimers[tableName]) {
+    clearTimeout(syncDebounceTimers[tableName]);
+  }
+
+  const doSync = async () => {
+    try {
+      const orderData = state.tableOrders[tableName];
+      if (!orderData || !orderData.items || orderData.items.length === 0) {
+        deleteTableOrderOnServer(tableName);
+        return;
+      }
+      await api('/api/tables/order', {
+        method: 'POST',
+        body: JSON.stringify({
+          table_name: tableName,
+          order_data: orderData
+        })
+      });
+    } catch (e) {
+      console.warn('Đồng bộ bàn lên server thất bại:', e);
+    }
+  };
+
+  if (immediate) {
+    return doSync();
+  } else {
+    syncDebounceTimers[tableName] = setTimeout(doSync, 300);
+  }
+}
+
+async function deleteTableOrderOnServer(tableName) {
+  try {
+    await api('/api/tables/order/' + encodeURIComponent(tableName), {
+      method: 'DELETE'
+    });
+  } catch (e) {
+    console.warn('Xóa bàn trên server thất bại:', e);
+  }
+}
+
+async function fetchAndApplyTableSync(silent = false) {
+  try {
+    const data = await api('/api/tables/sync');
+    if (data && data.tables) {
+      state.tableList = data.tables;
+      localStorage.setItem('pos_table_list', JSON.stringify(state.tableList));
+    }
+    if (data && data.tableOrders) {
+      applyIncomingTableOrders(data.tableOrders);
+    }
+    updateSyncIndicator(true);
+  } catch (err) {
+    if (!silent) console.warn('Lỗi lấy dữ liệu sync bàn:', err);
+    updateSyncIndicator(false);
+  }
+}
+
+function applyIncomingTableOrders(newTableOrders) {
+  state.tableOrders = newTableOrders || {};
+  localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+
+  if (state.activeScreen === 'tables') {
+    renderTableGrid();
+  } else if (state.activeScreen === 'order') {
+    renderGroupedDishList();
+    updateTableBottomBar();
+  }
+}
+
+function updateSyncIndicator(online) {
+  const dot = document.getElementById('realtimeSyncDot');
+  if (dot) {
+    if (online) {
+      dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs animate-pulse';
+      dot.title = 'Đang đồng bộ trực tiếp đa thiết bị (Online)';
+    } else {
+      dot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 shadow-xs';
+      dot.title = 'Đang kết nối lại máy chủ...';
+    }
+  }
+}
+
+function connectTableEventSource() {
+  if (tableEventSource) {
+    try { tableEventSource.close(); } catch (e) {}
+  }
+
+  try {
+    tableEventSource = new EventSource('/api/tables/events');
+
+    tableEventSource.onopen = () => {
+      updateSyncIndicator(true);
+    };
+
+    tableEventSource.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.tables) {
+          state.tableList = payload.tables;
+          localStorage.setItem('pos_table_list', JSON.stringify(state.tableList));
+        }
+        if (payload.all_table_orders !== undefined) {
+          applyIncomingTableOrders(payload.all_table_orders);
+        }
+        updateSyncIndicator(true);
+      } catch (e) {}
+    };
+
+    tableEventSource.onerror = () => {
+      updateSyncIndicator(false);
+    };
+  } catch (err) {
+    updateSyncIndicator(false);
+  }
+}
+
+function initRealtimeTableSync() {
+  fetchAndApplyTableSync();
+  connectTableEventSource();
+
+  // Polling dự phòng mỗi 4 giây
+  setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      fetchAndApplyTableSync(true);
+    }
+  }, 4000);
+
+  // Khi mở lại tab hoặc mở khóa màn hình điện thoại
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      fetchAndApplyTableSync();
+      if (!tableEventSource || tableEventSource.readyState === EventSource.CLOSED) {
+        connectTableEventSource();
+      }
+    }
+  });
+}
+
 // Khởi tạo POS
 async function initPos() {
   await Promise.all([loadPosCategories(), loadPosProducts()]);
   setupPosSearchListeners();
   showTableFloor();
+  initRealtimeTableSync();
 }
 
 // =============================================================
@@ -77,7 +223,7 @@ function filterTableArea(filter) {
   renderTableGrid();
 }
 
-function promptAddCustomTable() {
+async function promptAddCustomTable() {
   const custom = prompt('Nhập tên bàn mới (VD: Bàn 13, Bàn VIP, Sân thượng...):', '');
   if (custom && custom.trim()) {
     const tableName = custom.trim();
@@ -86,6 +232,12 @@ function promptAddCustomTable() {
       localStorage.setItem('pos_table_list', JSON.stringify(state.tableList));
       showToast(`Đã thêm: ${tableName}`);
       renderTableGrid();
+      try {
+        await api('/api/tables/custom', {
+          method: 'POST',
+          body: JSON.stringify({ table_name: tableName })
+        });
+      } catch (e) {}
     }
   }
 }
@@ -429,6 +581,15 @@ function changeDishQty(productId, delta) {
 
   updateTableBottomBar();
   renderCartDrawerItems();
+
+  // Đồng bộ thời gian thực cho mọi thiết bị
+  if (tableOrder.items.length === 0) {
+    delete state.tableOrders[currentTable];
+    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    deleteTableOrderOnServer(currentTable);
+  } else {
+    syncTableOrderToServer(currentTable);
+  }
 }
 
 // Cập nhật Thanh Dính Dưới Cùng (Sticky Bottom Bar)
@@ -579,6 +740,7 @@ function clearCurrentTableOrder() {
 
   delete state.tableOrders[currentTable];
   localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+  deleteTableOrderOnServer(currentTable);
 
   showToast(`Đã làm trống ${currentTable}`);
   renderGroupedDishList();
@@ -701,6 +863,7 @@ function cancelAndClearKitchenSlip() {
   const currentTable = state.currentTable;
   delete state.tableOrders[currentTable];
   localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+  deleteTableOrderOnServer(currentTable);
 
   closeKitchenConfirmModal();
   closeTableCartDrawer();
@@ -735,8 +898,9 @@ function executePrintKitchenSlip() {
   const kitchenCode = tableOrder.orderCode || `BEP-${dateStr}-${String(Math.floor(100 + Math.random() * 900))}`;
   tableOrder.orderCode = kitchenCode;
 
-  // Lưu trạng thái bàn vào localStorage
+  // Lưu trạng thái bàn vào localStorage và đồng bộ ngay lập tức lên server cho mọi máy khác
   localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+  syncTableOrderToServer(currentTable, true);
 
   const orderForPrint = {
     order_code: kitchenCode,
@@ -777,6 +941,7 @@ function promptCancelCurrentTable() {
   if (confirm(`Hủy toàn bộ món của ${currentTable} và đưa bàn về trạng thái TRỐNG?`)) {
     delete state.tableOrders[currentTable];
     localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    deleteTableOrderOnServer(currentTable);
     showToast(`Đã làm trống ${currentTable}`);
     showTableFloor();
   }
@@ -797,6 +962,7 @@ function handleBackFromOrderScreen() {
     if (shouldClear) {
       delete state.tableOrders[currentTable];
       localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+      deleteTableOrderOnServer(currentTable);
       showToast(`Đã làm trống ${currentTable}`);
     }
   }
