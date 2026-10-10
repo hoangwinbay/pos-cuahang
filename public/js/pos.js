@@ -204,6 +204,9 @@ function connectTableEventSource() {
         if (payload.all_table_orders !== undefined) {
           applyIncomingTableOrders(payload.all_table_orders);
         }
+        if (payload.connected_devices_count !== undefined && typeof updateConnectedDeviceBadgeUI === 'function') {
+          updateConnectedDeviceBadgeUI(payload.connected_devices_count);
+        }
         if (payload.type === 'print_job' && payload.print_order) {
           const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
           if (!isMobile) {

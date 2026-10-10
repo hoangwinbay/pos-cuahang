@@ -208,6 +208,40 @@ function handleOfflineApi(url, options = {}) {
       token: 'local_token',
       user: { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin' }
     };
+  // 14. GET /api/devices
+  if (path === '/api/devices') {
+    return {
+      devices: [
+        {
+          id: typeof getDeviceId === 'function' ? getDeviceId() : 'dev_local',
+          name: typeof getDeviceName === 'function' ? getDeviceName() : 'Thiết Bị Cục Bộ',
+          platform: typeof getDevicePlatform === 'function' ? getDevicePlatform() : 'Web',
+          deviceType: typeof getDeviceType === 'function' ? getDeviceType() : 'mobile',
+          ip: 'Cục bộ',
+          role: state.currentUser ? state.currentUser.role : 'admin',
+          userName: state.currentUser ? state.currentUser.name : 'Chủ Quán',
+          lastSeen: Date.now(),
+          isOnline: true
+        }
+      ],
+      totalOnline: 1,
+      totalDevices: 1
+    };
+  }
+
+  // 15. POST /api/devices/heartbeat
+  if (path === '/api/devices/heartbeat') {
+    return { success: true, totalOnline: 1 };
+  }
+
+  // 16. PUT /api/devices/rename
+  if (path === '/api/devices/rename') {
+    return { success: true };
+  }
+
+  // 17. DELETE /api/devices/:id
+  if (path.startsWith('/api/devices/')) {
+    return { success: true };
   }
 
   return { success: true };
@@ -485,6 +519,268 @@ function copyToClipboard(elementId) {
 }
 
 // =============================================================
+// QUẢN LÝ ĐỊNH DANH & THEO DÕI THIẾT BỊ KẾT NỐI
+// =============================================================
+function getDeviceId() {
+  let id = localStorage.getItem('pos_device_id');
+  if (!id) {
+    id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
+    localStorage.setItem('pos_device_id', id);
+  }
+  return id;
+}
+
+function getDeviceName() {
+  const custom = localStorage.getItem('pos_device_name');
+  if (custom && custom.trim()) return custom.trim();
+
+  const isZalo = /Zalo/i.test(navigator.userAgent) || typeof window.zmp !== 'undefined';
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if (isZalo) {
+    return isIOS ? 'iPhone (Zalo Mini App)' : 'Android (Zalo Mini App)';
+  }
+  if (isIOS) return 'iPhone (Safari POS)';
+  if (isMobile) return 'Điện Thoại Android';
+  return 'Máy Tính / Laptop Quầy';
+}
+
+function getDevicePlatform() {
+  if (/Zalo/i.test(navigator.userAgent) || typeof window.zmp !== 'undefined') return 'Zalo Mini App';
+  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return 'iOS (iPhone / iPad)';
+  if (/Android/i.test(navigator.userAgent)) return 'Android';
+  if (/Windows/i.test(navigator.userAgent)) return 'Windows PC';
+  if (/Mac/i.test(navigator.userAgent)) return 'macOS';
+  return 'Web Browser';
+}
+
+function getDeviceType() {
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+}
+
+// Gửi nhịp tim định kỳ tới server (Heartbeat)
+async function sendDeviceHeartbeat() {
+  try {
+    const devId = getDeviceId();
+    const devName = getDeviceName();
+    const platform = getDevicePlatform();
+    const devType = getDeviceType();
+
+    const res = await api('/api/devices/heartbeat', {
+      method: 'POST',
+      body: JSON.stringify({
+        deviceId: devId,
+        deviceName: devName,
+        platform: platform,
+        deviceType: devType,
+        role: state.currentUser ? state.currentUser.role : 'staff',
+        userName: state.currentUser ? state.currentUser.name : 'Nhân Viên'
+      })
+    });
+
+    if (res && res.totalOnline !== undefined) {
+      updateConnectedDeviceBadgeUI(res.totalOnline);
+    }
+  } catch (e) {}
+}
+
+function updateConnectedDeviceBadgeUI(count) {
+  const badgeHeader = document.getElementById('headerDeviceCountDisplay');
+  const drawerBadge = document.getElementById('drawerDeviceCountBadge');
+  const modalBadge = document.getElementById('devicesOnlineCountText');
+
+  const text = `${count || 1} ĐT`;
+  const fullText = `${count || 1} Online`;
+
+  if (badgeHeader) badgeHeader.textContent = text;
+  if (drawerBadge) drawerBadge.textContent = count || 1;
+  if (modalBadge) modalBadge.textContent = fullText;
+}
+
+// =============================================================
+// MODAL XEM DANH SÁCH THIẾT BỊ ĐANG KẾT NỐI
+// =============================================================
+let devicesAutoRefreshInterval = null;
+
+async function openConnectedDevicesModal() {
+  const modal = document.getElementById('modalConnectedDevices');
+  if (modal) modal.classList.remove('hidden');
+
+  loadConnectedDevices();
+
+  if (devicesAutoRefreshInterval) clearInterval(devicesAutoRefreshInterval);
+  devicesAutoRefreshInterval = setInterval(() => {
+    const m = document.getElementById('modalConnectedDevices');
+    if (m && !m.classList.contains('hidden')) {
+      loadConnectedDevices(true);
+    }
+  }, 4000);
+}
+
+function closeConnectedDevicesModal() {
+  const modal = document.getElementById('modalConnectedDevices');
+  if (modal) modal.classList.add('hidden');
+  if (devicesAutoRefreshInterval) {
+    clearInterval(devicesAutoRefreshInterval);
+    devicesAutoRefreshInterval = null;
+  }
+}
+
+async function loadConnectedDevices(silent = false) {
+  const container = document.getElementById('connectedDevicesListContainer');
+  if (!container) return;
+
+  if (!silent) {
+    container.innerHTML = `
+      <div class="text-center py-8 text-slate-400 text-xs">
+        <i class="fa-solid fa-spinner fa-spin text-2xl mb-2 text-blue-500"></i>
+        <p>Đang tải danh sách thiết bị kết nối...</p>
+      </div>
+    `;
+  }
+
+  try {
+    const res = await api('/api/devices');
+    const devices = res?.devices || [];
+    const totalOnline = res?.totalOnline || devices.filter(d => d.isOnline).length;
+
+    updateConnectedDeviceBadgeUI(totalOnline);
+
+    if (devices.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-8 text-slate-400 text-xs">
+          <i class="fa-solid fa-network-wired text-3xl mb-2 text-slate-300"></i>
+          <p>Chưa có thiết bị nào kết nối.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const currentDevId = getDeviceId();
+
+    container.innerHTML = devices.map(dev => {
+      const isSelf = dev.id === currentDevId;
+      const isOnline = dev.isOnline;
+      
+      let iconHtml = '<i class="fa-solid fa-laptop text-indigo-600 text-lg"></i>';
+      let iconBg = 'bg-indigo-50 border-indigo-100';
+
+      if (dev.platform.includes('Zalo')) {
+        iconHtml = '<i class="fa-solid fa-comment-dots text-blue-600 text-lg"></i>';
+        iconBg = 'bg-blue-50 border-blue-100';
+      } else if (dev.platform.includes('iOS') || /iPhone|iPad/i.test(dev.platform)) {
+        iconHtml = '<i class="fa-brands fa-apple text-slate-800 text-lg"></i>';
+        iconBg = 'bg-slate-100 border-slate-200';
+      } else if (dev.platform.includes('Android')) {
+        iconHtml = '<i class="fa-brands fa-android text-emerald-600 text-lg"></i>';
+        iconBg = 'bg-emerald-50 border-emerald-100';
+      }
+
+      const elapsedSec = Math.floor((Date.now() - (dev.lastSeen || Date.now())) / 1000);
+      let lastSeenText = 'Vừa xong';
+      if (elapsedSec > 60) {
+        lastSeenText = `${Math.floor(elapsedSec / 60)} phút trước`;
+      } else if (elapsedSec > 5) {
+        lastSeenText = `${elapsedSec}s trước`;
+      }
+
+      return `
+        <div class="border ${isSelf ? 'border-blue-400 bg-blue-50/20 shadow-2xs' : 'border-slate-200 bg-white'} rounded-2xl p-3 sm:p-3.5 flex items-center justify-between space-x-3 transition-all hover:border-blue-300">
+          <div class="flex items-center space-x-3 truncate">
+            <div class="w-10 h-10 rounded-xl ${iconBg} border flex items-center justify-center shrink-0">
+              ${iconHtml}
+            </div>
+            <div class="truncate">
+              <div class="flex items-center space-x-1.5">
+                <span class="font-bold text-slate-800 text-xs sm:text-sm truncate">${escapeHtml(dev.name)}</span>
+                ${isSelf ? '<span class="text-[9px] bg-blue-600 text-white font-black px-1.5 py-0.2 rounded-full shrink-0">MÁY NÀY</span>' : ''}
+              </div>
+              <div class="text-[11px] text-slate-400 font-medium flex items-center space-x-2 mt-0.5">
+                <span>${escapeHtml(dev.platform)}</span>
+                <span>•</span>
+                <span class="font-mono text-slate-500">${escapeHtml(dev.ip)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2 shrink-0">
+            <div class="text-right">
+              ${isOnline ? `
+                <div class="flex items-center justify-end space-x-1 text-emerald-600 text-xs font-bold">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Online</span>
+                </div>
+              ` : `
+                <div class="flex items-center justify-end space-x-1 text-slate-400 text-xs font-medium">
+                  <span class="w-2 h-2 rounded-full bg-slate-300"></span>
+                  <span>Offline</span>
+                </div>
+              `}
+              <div class="text-[10px] text-slate-400">${isOnline ? 'Đang hoạt động' : lastSeenText}</div>
+            </div>
+
+            ${!isOnline && !isSelf ? `
+              <button onclick="deleteConnectedDevice('${dev.id}')" class="p-1.5 text-slate-300 hover:text-rose-500 rounded-lg hover:bg-rose-50 transition-colors" title="Xóa thiết bị offline">
+                <i class="fa-solid fa-trash-can text-xs"></i>
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `
+      <div class="text-center py-6 text-rose-500 text-xs">
+        <i class="fa-solid fa-circle-exclamation text-xl mb-1"></i>
+        <p>Lỗi tải danh sách: ${err.message}</p>
+      </div>
+    `;
+  }
+}
+
+async function promptRenameCurrentDevice() {
+  const current = getDeviceName();
+  const newName = prompt('Nhập tên gợi nhớ cho thiết bị này (Ví dụ: Máy Em Lan, Laptop Quầy, Máy Order Bàn):', current);
+  if (newName && newName.trim() && newName.trim() !== current) {
+    const trimmed = newName.trim();
+    localStorage.setItem('pos_device_name', trimmed);
+    try {
+      await api('/api/devices/rename', {
+        method: 'PUT',
+        body: JSON.stringify({
+          deviceId: getDeviceId(),
+          newName: trimmed
+        })
+      });
+      showToast('Đã đổi tên thiết bị!', 'success');
+      loadConnectedDevices(true);
+    } catch (e) {
+      showToast('Đã lưu tên thiết bị trên máy!', 'success');
+      loadConnectedDevices(true);
+    }
+  }
+}
+
+async function deleteConnectedDevice(devId) {
+  if (!confirm('Bạn có muốn xóa thiết bị này khỏi danh sách?')) return;
+  try {
+    await api('/api/devices/' + encodeURIComponent(devId), { method: 'DELETE' });
+    showToast('Đã xóa thiết bị khỏi danh sách');
+    loadConnectedDevices(true);
+  } catch (e) {
+    showToast('Không thể xóa thiết bị', 'error');
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  })[m]);
+}
+
+// =============================================================
 // MODAL CẤU HÌNH MÁY CHỦ POS (CHO ZALO MINI APP HOẶC THIẾT BỊ PHỤ)
 // =============================================================
 async function openServerConfigModal() {
@@ -623,6 +919,10 @@ async function startApp() {
   if (typeof initPos === 'function') {
     await initPos();
   }
+
+  // Khởi động nhịp tim định danh thiết bị
+  sendDeviceHeartbeat();
+  setInterval(sendDeviceHeartbeat, 10000);
 }
 
 if (document.readyState === 'loading') {

@@ -857,11 +857,97 @@ app.get('/api/backup/export-json', requireAdmin, (req, res) => {
 });
 
 // -------------------------------------------------------------
+// CONNECTED DEVICES TRACKER (QUẢN LÝ THIẾT BỊ ĐANG KẾT NỐI)
+// -------------------------------------------------------------
+const connectedDevices = new Map();
+
+function trackDeviceActivity(req, customData = {}) {
+  const deviceId = req.query.deviceId || req.body?.deviceId || req.headers['x-device-id'] || 'device_' + (req.ip || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
+  const userAgent = req.headers['user-agent'] || '';
+  
+  let platform = customData.platform || req.query.platform || req.body?.platform || '';
+  let deviceType = customData.deviceType || req.query.deviceType || req.body?.deviceType || '';
+
+  if (!platform) {
+    if (/Zalo/i.test(userAgent)) {
+      platform = 'Zalo Mini App';
+      deviceType = 'mobile';
+    } else if (/iPhone|iPad|iPod/i.test(userAgent)) {
+      platform = 'iOS (iPhone / iPad)';
+      deviceType = 'mobile';
+    } else if (/Android/i.test(userAgent)) {
+      platform = 'Android';
+      deviceType = 'mobile';
+    } else if (/Windows/i.test(userAgent)) {
+      platform = 'Windows PC / Laptop';
+      deviceType = 'desktop';
+    } else if (/Mac/i.test(userAgent)) {
+      platform = 'macOS';
+      deviceType = 'desktop';
+    } else {
+      platform = 'Web Browser';
+      deviceType = 'desktop';
+    }
+  }
+
+  const clientIp = (req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || '').split(',')[0].trim().replace('::ffff:', '');
+  const now = Date.now();
+  
+  const existing = connectedDevices.get(deviceId) || {
+    id: deviceId,
+    name: customData.deviceName || req.query.deviceName || req.body?.deviceName || (deviceType === 'desktop' ? 'Máy tính Quầy Thu Ngân' : `Điện Thoại (${platform})`),
+    firstConnected: new Date().toISOString()
+  };
+
+  const updated = {
+    ...existing,
+    id: deviceId,
+    name: customData.deviceName || req.query.deviceName || req.body?.deviceName || existing.name,
+    platform: platform,
+    deviceType: deviceType,
+    ip: clientIp || '127.0.0.1',
+    role: customData.role || req.query.role || req.body?.role || existing.role || (req.user ? req.user.role : 'Nhân viên'),
+    userName: customData.userName || req.query.userName || req.body?.userName || existing.userName || (req.user ? req.user.name : 'Nhân Viên'),
+    lastSeen: now,
+    lastSeenStr: new Date().toISOString(),
+    isOnline: true
+  };
+
+  connectedDevices.set(deviceId, updated);
+  return updated;
+}
+
+function getDevicesList() {
+  const now = Date.now();
+  const list = Array.from(connectedDevices.values()).map(d => ({
+    ...d,
+    isOnline: (now - d.lastSeen) < 30000 // online if seen within 30s
+  })).sort((a, b) => (b.isOnline ? 1 : 0) - (a.isOnline ? 1 : 0) || b.lastSeen - a.lastSeen);
+
+  return {
+    devices: list,
+    totalOnline: list.filter(d => d.isOnline).length,
+    totalDevices: list.length
+  };
+}
+
+// Clean up stale devices offline for > 12 hours
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, dev] of connectedDevices.entries()) {
+    if (now - dev.lastSeen > 43200000) {
+      connectedDevices.delete(id);
+    }
+  }
+}, 60000);
+
+// -------------------------------------------------------------
 // REAL-TIME TABLE SYNC & SERVER-SENT EVENTS (SSE)
 // -------------------------------------------------------------
 const sseClients = new Set();
 
 function broadcastTableUpdate(payload) {
+  payload.connected_devices_count = getDevicesList().totalOnline;
   const message = `data: ${JSON.stringify(payload)}\n\n`;
   for (const client of sseClients) {
     try {
@@ -968,10 +1054,15 @@ app.get('/api/tables/events', (req, res) => {
     'Access-Control-Allow-Headers': '*'
   });
 
+  const dev = trackDeviceActivity(req, { sse: true });
+  res.deviceId = dev.id;
+
   const initial = {
     type: 'initial_sync',
     tables: getAllTableDefinitions(),
-    all_table_orders: getAllActiveTableOrders()
+    all_table_orders: getAllActiveTableOrders(),
+    device_info: dev,
+    connected_devices_count: getDevicesList().totalOnline
   };
   res.write(`data: ${JSON.stringify(initial)}\n\n`);
 
@@ -980,6 +1071,41 @@ app.get('/api/tables/events', (req, res) => {
   req.on('close', () => {
     sseClients.delete(res);
   });
+});
+
+// -------------------------------------------------------------
+// API QUẢN LÝ THIẾT BỊ ĐANG KẾT NỐI (CONNECTED DEVICES)
+// -------------------------------------------------------------
+// GET /api/devices: Danh sách thiết bị kết nối
+app.get('/api/devices', (req, res) => {
+  trackDeviceActivity(req);
+  res.json(getDevicesList());
+});
+
+// POST /api/devices/heartbeat: Cập nhật nhịp tim & thông tin thiết bị
+app.post('/api/devices/heartbeat', (req, res) => {
+  const dev = trackDeviceActivity(req, req.body || {});
+  const list = getDevicesList();
+  res.json({ success: true, device: dev, totalOnline: list.totalOnline });
+});
+
+// PUT /api/devices/rename: Đổi tên định danh thiết bị
+app.put('/api/devices/rename', (req, res) => {
+  const { deviceId, newName } = req.body || {};
+  if (!deviceId || !newName) return res.status(400).json({ error: 'Thiếu dữ liệu' });
+  const dev = connectedDevices.get(deviceId);
+  if (dev) {
+    dev.name = newName.trim();
+    connectedDevices.set(deviceId, dev);
+  }
+  res.json({ success: true, device: dev });
+});
+
+// DELETE /api/devices/:id: Xóa thiết bị khỏi danh sách
+app.delete('/api/devices/:id', (req, res) => {
+  const { id } = req.params;
+  connectedDevices.delete(id);
+  res.json({ success: true });
 });
 
 // 3. POST /api/tables/order: Cập nhật hoặc lưu đơn của bàn (Hỗ trợ phát hiện xung đột khi mạng lag)
