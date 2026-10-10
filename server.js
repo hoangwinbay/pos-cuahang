@@ -144,22 +144,32 @@ app.get('/api/health', (req, res) => {
 // -------------------------------------------------------------
 app.post('/api/auth/login', (req, res) => {
   try {
-    const { username, password, pin } = req.body;
+    const { username, password, pin, role } = req.body;
 
     let user = null;
     if (pin) {
-      // Login via quick 4-digit PIN
-      user = db.prepare('SELECT * FROM users WHERE pin = ? AND active = 1').get(String(pin).trim());
+      const pinStr = String(pin).trim();
+      // 1. Check direct PIN
+      user = db.prepare('SELECT * FROM users WHERE pin = ? AND active = 1').get(pinStr);
+      // 2. Check if entered PIN matches password for selected role
+      if (!user && role) {
+        user = db.prepare('SELECT * FROM users WHERE (role = ? OR username = ?) AND password = ? AND active = 1').get(role, role, pinStr);
+      } else if (!user) {
+        user = db.prepare('SELECT * FROM users WHERE password = ? AND active = 1').get(pinStr);
+      }
     } else if (username && password) {
       // Login via username & password
       user = db.prepare('SELECT * FROM users WHERE username = ? AND active = 1').get(username.trim().toLowerCase());
       if (user && user.password !== password) {
         user = null;
       }
+    } else if (role) {
+      const targetRole = role === 'staff' || role === 'nhanvien' ? 'staff' : 'admin';
+      user = db.prepare('SELECT * FROM users WHERE role = ? AND active = 1').get(targetRole);
     }
 
     if (!user) {
-      return res.status(401).json({ error: 'Tên đăng nhập / Mật khẩu hoặc mã PIN không chính xác' });
+      return res.status(401).json({ error: 'Mã PIN hoặc mật khẩu không chính xác' });
     }
 
     const token = generateToken(user);
