@@ -3,7 +3,7 @@
 // =============================================================
 
 let currentSelectedCategory = 'all';
-let currentPaymentMethod = 'vietqr';
+let currentPaymentMethod = 'cash';
 let tempOrderCode = '';
 
 // Kiểm tra chuỗi có phải ảnh thực sự (base64 hoặc URL)
@@ -445,6 +445,7 @@ function updateTableBottomBar() {
   const labelEl = document.getElementById('bottomBarTableLabel');
   const headerBadge = document.getElementById('orderHeaderBadge');
   const btnCheckout = document.getElementById('btnBottomCheckout');
+  const btnKitchen = document.getElementById('btnPrintKitchen');
 
   if (badgeEl) badgeEl.textContent = totalCount;
   if (moneyEl) moneyEl.textContent = formatMoney(totalAmount);
@@ -465,6 +466,15 @@ function updateTableBottomBar() {
       btnCheckout.classList.add('opacity-50', 'cursor-not-allowed');
     } else {
       btnCheckout.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+  }
+
+  if (btnKitchen) {
+    btnKitchen.disabled = totalCount === 0;
+    if (totalCount === 0) {
+      btnKitchen.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+      btnKitchen.classList.remove('opacity-50', 'cursor-not-allowed');
     }
   }
 }
@@ -512,6 +522,7 @@ function renderCartDrawerItems() {
   const emptyState = document.getElementById('cartEmptyState');
   const finalTotalEl = document.getElementById('cartDrawerFinalTotal');
   const btnCheckout = document.getElementById('btnCartDrawerCheckout');
+  const btnKitchen = document.getElementById('btnCartDrawerPrintKitchen');
 
   const totalAmount = items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
   if (finalTotalEl) finalTotalEl.textContent = formatMoney(totalAmount);
@@ -520,11 +531,13 @@ function renderCartDrawerItems() {
     if (container) container.innerHTML = '';
     if (emptyState) emptyState.classList.remove('hidden');
     if (btnCheckout) btnCheckout.disabled = true;
+    if (btnKitchen) btnKitchen.disabled = true;
     return;
   }
 
   if (emptyState) emptyState.classList.add('hidden');
   if (btnCheckout) btnCheckout.disabled = false;
+  if (btnKitchen) btnKitchen.disabled = false;
 
   if (container) {
     container.innerHTML = items.map(item => {
@@ -586,7 +599,7 @@ function closeTableActionsMenu() {
 }
 
 // =============================================================
-// THANH TOÁN VIETQR & HOÀN TẤT ĐƠN HÀNG
+// MỞ MODAL XÁC NHẬN THANH TOÁN (KHÔNG QR) & IN PHIẾU BÁO BẾP
 // =============================================================
 function openCheckoutModal() {
   const currentTable = state.currentTable;
@@ -599,60 +612,106 @@ function openCheckoutModal() {
   }
 
   const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const totalCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   const now = new Date();
   const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
-  tempOrderCode = `HD-${dateStr}-${String(Math.floor(100 + Math.random() * 900))}`;
+  tempOrderCode = tableOrder.orderCode || `HD-${dateStr}-${String(Math.floor(100 + Math.random() * 900))}`;
+  tableOrder.orderCode = tempOrderCode;
 
   document.getElementById('checkoutModalTable').textContent = currentTable;
   document.getElementById('checkoutOrderCodePreview').textContent = `${tempOrderCode} • ${currentTable}`;
   document.getElementById('checkoutModalTotal').textContent = formatMoney(totalAmount);
 
-  setupVietQRDisplay(totalAmount, tempOrderCode);
-  setPaymentMethod('vietqr');
+  const countEl = document.getElementById('checkoutModalItemCount');
+  if (countEl) countEl.textContent = `${totalCount} món`;
+
+  // Render danh sách món đối chiếu
+  const itemsContainer = document.getElementById('checkoutModalItemsList');
+  if (itemsContainer) {
+    itemsContainer.innerHTML = items.map((it, idx) => `
+      <div class="py-1.5 flex items-center justify-between text-xs">
+        <div class="truncate pr-2">
+          <span class="font-bold text-slate-800">${idx + 1}. ${it.name}</span>
+          <span class="text-slate-500 text-[11px] block">SL: ${it.quantity} phần x ${formatMoney(it.price)}</span>
+        </div>
+        <div class="font-bold text-slate-800 shrink-0">
+          ${formatMoney(it.price * it.quantity)}
+        </div>
+      </div>
+    `).join('');
+  }
 
   document.getElementById('checkoutModal').classList.remove('hidden');
 }
 
 function closeCheckoutModal() {
-  document.getElementById('checkoutModal').classList.add('hidden');
+  document.getElementById('checkoutModal')?.classList.add('hidden');
 }
 
-function setPaymentMethod(method) {
-  currentPaymentMethod = method;
+// In phiếu báo bếp: nhân viên mang phiếu vào bếp, bếp mang món + phiếu ra bàn cho khách
+function printKitchenSlip() {
+  const currentTable = state.currentTable;
+  const tableOrder = state.tableOrders[currentTable];
+  const items = tableOrder?.items || [];
 
-  const btnVietQR = document.getElementById('btnMethodVietQR');
-  const btnCash = document.getElementById('btnMethodCash');
-
-  if (method === 'vietqr') {
-    btnVietQR.className = 'py-2 rounded-xl text-xs font-bold border-2 border-emerald-600 bg-emerald-50 text-emerald-800';
-    btnCash.className = 'py-2 rounded-xl text-xs font-semibold border border-slate-300 text-slate-700';
-  } else {
-    btnCash.className = 'py-2 rounded-xl text-xs font-bold border-2 border-emerald-600 bg-emerald-50 text-emerald-800';
-    btnVietQR.className = 'py-2 rounded-xl text-xs font-semibold border border-slate-300 text-slate-700';
+  if (items.length === 0) {
+    showToast('Bàn chưa có món nào để in báo bếp!', 'error');
+    return;
   }
+
+  const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const note = document.getElementById('orderNoteInput')?.value.trim() || tableOrder.note || '';
+
+  // Đảm bảo bàn đã có thời gian bắt đầu và ghi chú
+  if (!tableOrder.startTime) {
+    tableOrder.startTime = Date.now();
+  }
+  tableOrder.note = note;
+  tableOrder.hasPrintedKitchen = true;
+
+  const now = new Date();
+  const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  const kitchenCode = tableOrder.orderCode || `BEP-${dateStr}-${String(Math.floor(100 + Math.random() * 900))}`;
+  tableOrder.orderCode = kitchenCode;
+
+  // Lưu trạng thái bàn vào localStorage
+  localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+
+  const orderForPrint = {
+    order_code: kitchenCode,
+    created_at: new Date().toISOString(),
+    table_name: currentTable,
+    cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
+    note: note,
+    payment_method: 'cash',
+    subtotal: totalAmount,
+    discount: 0,
+    total: totalAmount,
+    items: items.map(item => ({
+      product_name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      total: item.price * item.quantity
+    }))
+  };
+
+  printReceipt(orderForPrint);
+  showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
+
+  // Đóng giỏ hàng và chuyển về sơ đồ bàn (bàn giữ nguyên màu xanh ngọc có khách)
+  closeTableCartDrawer();
+  showTableFloor();
 }
 
-function setupVietQRDisplay(amount, orderCode) {
-  const bankId = state.settings.bank_id || 'MB';
-  const accountNo = state.settings.bank_account_no || '0909888999';
-  const accountName = state.settings.bank_account_name || 'NGUYEN VAN POS';
-  const memo = `${orderCode} ${state.currentTable}`.trim();
-
-  const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(accountName)}`;
-
-  const qrImg = document.getElementById('vietQrImg');
-  if (qrImg) qrImg.src = qrUrl;
-}
-
-// Hoàn tất đơn hàng
+// Hoàn tất đơn hàng tại quầy và giải phóng bàn (bàn lập tức trống)
 async function completeCheckoutOrder() {
   const currentTable = state.currentTable;
   const tableOrder = state.tableOrders[currentTable];
   if (!tableOrder || !tableOrder.items || tableOrder.items.length === 0) return;
 
   const btnConfirm = document.getElementById('btnConfirmPayment');
-  btnConfirm.disabled = true;
+  if (btnConfirm) btnConfirm.disabled = true;
 
   try {
     const totalAmount = tableOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -665,7 +724,7 @@ async function completeCheckoutOrder() {
       })),
       table_name: currentTable,
       note: note,
-      payment_method: currentPaymentMethod,
+      payment_method: 'cash',
       cash_given: totalAmount
     };
 
@@ -677,33 +736,30 @@ async function completeCheckoutOrder() {
     closeCheckoutModal();
     closeTableCartDrawer();
 
-    // Confetti
+    // Confetti chúc mừng
     try {
       if (typeof confetti === 'function') {
         confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
       }
     } catch (e) {}
 
-    showToast(`Thanh toán thành công ${currentTable}!`);
-
-    // In hóa đơn
-    printReceipt(newOrder);
+    showToast(`Đã thanh toán ${currentTable}, bàn đã trống!`);
 
     // XÓA ĐƠN CỦA BÀN VÀ TRẢ BÀN VỀ TRẠNG THÁI TRỐNG
     delete state.tableOrders[currentTable];
     localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
 
-    // Quay lại màn hình Sơ Đồ Bàn (Ảnh 1)
+    // Quay lại màn hình Sơ Đồ Bàn (bàn sẽ chuyển sang màu xám trống)
     showTableFloor();
 
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    btnConfirm.disabled = false;
+    if (btnConfirm) btnConfirm.disabled = false;
   }
 }
 
-// In phiếu đối chiếu
+// In lại phiếu đối chiếu
 function printCheckoutReceipt() {
   const currentTable = state.currentTable;
   const tableOrder = state.tableOrders[currentTable];
@@ -718,12 +774,12 @@ function printCheckoutReceipt() {
   const note = document.getElementById('orderNoteInput')?.value.trim() || tableOrder.note || '';
 
   const orderForPrint = {
-    order_code: tempOrderCode || 'ORDER-TAM',
+    order_code: tableOrder?.orderCode || tempOrderCode || 'ORDER-TAM',
     created_at: new Date().toISOString(),
     table_name: currentTable,
-    cashier_name: state.currentUser ? state.currentUser.name : 'Chủ Quán',
+    cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
     note: note,
-    payment_method: currentPaymentMethod,
+    payment_method: 'cash',
     subtotal: totalAmount,
     discount: 0,
     total: totalAmount,
@@ -738,13 +794,17 @@ function printCheckoutReceipt() {
   printReceipt(orderForPrint);
 }
 
+// Compatibility stubs
+function setPaymentMethod() {}
+function setupVietQRDisplay() {}
+
 // =============================================================
-// IN HÓA ĐƠN NHIỆT (80mm / 58mm & BLUETOOTH)
+// IN HÓA ĐƠN NHIỆT / PHIẾU BÁO BẾP (80mm / 58mm & BLUETOOTH)
 // =============================================================
 function generateReceiptHtml(order) {
   const storeName = state.settings.store_name || 'QUÁN ĂN - CÀ PHÊ';
   const tableName = order.table_name || 'Bàn 1';
-  const methodText = order.payment_method === 'vietqr' ? 'Chuyển khoản (VietQR)' : 'Tiền mặt';
+  const footerText = state.settings.receipt_footer || 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán';
 
   const itemsHtml = (order.items || []).map((item, idx) => `
     <tr>
@@ -759,15 +819,15 @@ function generateReceiptHtml(order) {
   return `
     <div class="receipt-title">${storeName}</div>
     <div class="receipt-header">
-      <div style="font-size: 14px; font-weight: 900; margin: 4px 0; text-transform: uppercase;">
-        PHIẾU GỌI MÓN / ĐỐI CHIẾU
+      <div style="font-size: 15px; font-weight: 900; margin: 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">
+        PHIẾU BÁO BẾP / GỌI MÓN
       </div>
-      <div style="font-size: 15px; font-weight: 900; color: #000; margin: 2px 0;">
+      <div style="font-size: 20px; font-weight: 900; color: #000; margin: 4px 0; padding: 2px 0; border: 1px dashed #000;">
         📍 ${tableName}
       </div>
-      <div>Mã đơn: <strong>${order.order_code}</strong></div>
+      <div>Mã phiếu: <strong>${order.order_code}</strong></div>
       <div>Giờ: ${formatDateTime(order.created_at)}</div>
-      ${order.note ? `<div style="font-style: italic; margin-top: 2px;">Ghi chú: ${order.note}</div>` : ''}
+      ${order.note ? `<div style="font-style: italic; font-weight: bold; margin-top: 2px;">Ghi chú: ${order.note}</div>` : ''}
     </div>
 
     <table class="receipt-table">
@@ -786,17 +846,14 @@ function generateReceiptHtml(order) {
 
     <table class="receipt-summary">
       <tr class="receipt-total">
-        <td>TỔNG CỘNG:</td>
+        <td>TỔNG TẠM TÍNH:</td>
         <td style="text-align: right;">${formatMoney(order.total)}</td>
-      </tr>
-      <tr>
-        <td>Thanh toán:</td>
-        <td style="text-align: right; font-weight: bold;">${methodText}</td>
       </tr>
     </table>
 
     <div class="receipt-footer">
-      <div>Cảm ơn quý khách và hẹn gặp lại!</div>
+      <div style="font-weight: bold; margin-top: 6px; font-size: 12px;">*** ${footerText} ***</div>
+      <div style="font-size: 11px; margin-top: 4px;">Cảm ơn quý khách và hẹn gặp lại!</div>
     </div>
   `;
 }
@@ -870,10 +927,10 @@ async function printEscPosBluetooth(order) {
   let content = '\x1B\x40';
   content += '\x1B\x61\x01';
   content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\n';
-  content += 'PHIEU DOI CHIEU MON\n';
+  content += 'PHIEU BAO BEP / GOI MON\n';
   content += `BAN: ${removeVietnameseAccents(order.table_name || 'BAN 1')}\n`;
   content += '\x1B\x45\x00';
-  content += `Ma HD: ${order.order_code}\n`;
+  content += `Ma phieu: ${order.order_code}\n`;
   content += `Gio: ${formatDateTime(order.created_at)}\n`;
   if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
@@ -889,11 +946,10 @@ async function printEscPosBluetooth(order) {
 
   content += divider;
   content += '\x1B\x45\x01';
-  content += formatLineColumns('TONG CONG:', formatMoney(order.total), lineWidth);
+  content += formatLineColumns('TONG TAM TINH:', formatMoney(order.total), lineWidth);
   content += '\x1B\x45\x00';
-  content += formatLineColumns('Thanh toan:', order.payment_method === 'vietqr' ? 'VietQR' : 'Tien mat', lineWidth);
   content += divider;
-  content += '\x1B\x61\x01Cam on quy khach!\n\n\n\n\x1D\x56\x01';
+  content += '\x1B\x61\x01Vui long mang phieu ra quay\nkhi thanh toan!\nCam on quy khach!\n\n\n\n\x1D\x56\x01';
 
   const encoder = new TextEncoder();
   const data = encoder.encode(content);
@@ -938,11 +994,11 @@ function closePrinterModal() {
 
 function testPrintSample() {
   const sampleOrder = {
-    order_code: 'HD-MAU',
+    order_code: 'BEP-MAU',
     created_at: new Date().toISOString(),
     table_name: 'Bàn 1 (Thử nghiệm)',
-    note: 'Ít đá, ít ngọt',
-    payment_method: 'vietqr',
+    note: 'Ít đá, ít cay',
+    payment_method: 'cash',
     total: 45000,
     items: [
       { product_name: 'Cà phê sữa đá', quantity: 1, price: 25000, total: 25000 },

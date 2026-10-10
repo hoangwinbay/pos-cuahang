@@ -233,7 +233,7 @@ function navigateTo(target) {
   } else if (target === 'menu') {
     if (viewMenu) { viewMenu.classList.remove('hidden'); viewMenu.classList.add('flex'); }
     if (typeof loadMenuDishes === 'function') loadMenuDishes();
-    if (typeof populateVietQrSettings === 'function') populateVietQrSettings();
+    if (typeof populateStoreSettings === 'function') populateStoreSettings();
   }
 }
 

@@ -260,37 +260,29 @@ async function deleteDish(id, name) {
 }
 
 // =============================================================
-// CÀI ĐẶT VIETQR ĐỂ TẠO MÃ THANH TOÁN
+// CÀI ĐẶT THÔNG TIN QUÁN (IN TRÊN PHIẾU BẾP)
 // =============================================================
-async function populateVietQrSettings() {
+async function populateStoreSettings() {
   try {
     await loadSettings();
-
-    // Populate banks dropdown
-    const bankSelect = document.getElementById('setting_bank_id');
-    if (bankSelect && state.banks.length > 0) {
-      bankSelect.innerHTML = state.banks.map(b => `
-        <option value="${b.code}" ${b.code === (state.settings.bank_id || 'MB') ? 'selected' : ''}>
-          ${b.code} - ${b.name}
-        </option>
-      `).join('');
-    }
-
-    document.getElementById('setting_bank_account_no').value = state.settings.bank_account_no || '';
-    document.getElementById('setting_bank_account_name').value = state.settings.bank_account_name || '';
+    const nameInput = document.getElementById('setting_store_name');
+    if (nameInput) nameInput.value = state.settings.store_name || '';
+    const footerInput = document.getElementById('setting_receipt_footer');
+    if (footerInput) footerInput.value = state.settings.receipt_footer || 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán';
   } catch (err) {
-    console.error('Lỗi tải cài đặt VietQR:', err);
+    console.error('Lỗi tải cài đặt quán:', err);
   }
 }
 
-async function saveVietQrSettings(e) {
+async function saveStoreSettings(e) {
   e.preventDefault();
 
   try {
+    const storeName = document.getElementById('setting_store_name').value.trim();
+    const footer = document.getElementById('setting_receipt_footer').value.trim();
     const payload = {
-      bank_id: document.getElementById('setting_bank_id').value,
-      bank_account_no: document.getElementById('setting_bank_account_no').value.trim(),
-      bank_account_name: document.getElementById('setting_bank_account_name').value.trim().toUpperCase()
+      store_name: storeName,
+      receipt_footer: footer
     };
 
     await api('/api/settings', {
@@ -299,8 +291,17 @@ async function saveVietQrSettings(e) {
     });
 
     state.settings = { ...state.settings, ...payload };
-    showToast('Đã lưu tài khoản nhận tiền VietQR thành công!');
+    const headerEl = document.getElementById('headerStoreName');
+    const drawerStoreEl = document.getElementById('drawerStoreName');
+    if (headerEl) headerEl.textContent = storeName;
+    if (drawerStoreEl) drawerStoreEl.textContent = storeName;
+    showToast('Đã lưu thông tin quán thành công!');
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
+
+// Giữ alias an toàn
+const populateVietQrSettings = populateStoreSettings;
+const saveVietQrSettings = saveStoreSettings;
+
