@@ -1258,7 +1258,7 @@ function closeServerConfigModal() {
 // =============================================================
 // MODAL ZALO MINI APP (BẢN TEST MỚI NHẤT)
 // =============================================================
-let currentZaloTestUrl = 'https://zalo.me/s/3906597427562388428/?env=TESTING&version=18';
+let currentZaloTestUrl = 'https://zalo.me/s/3906597427562388428/?env=TESTING&version=27';
 
 async function openZaloModal() {
   const modal = document.getElementById('modalZaloApp');

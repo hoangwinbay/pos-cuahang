@@ -25,7 +25,7 @@ async function loadMenuDishes() {
     const modalCatSelect = document.getElementById('dishCategory');
     if (modalCatSelect) {
       modalCatSelect.innerHTML = categories.map(c => `
-        <option value="${c.id}">${c.icon ? c.icon + ' ' : ''}${c.name}</option>
+        <option value="${c.id}">${c.name}</option>
       `).join('');
     }
 
@@ -47,15 +47,14 @@ function renderCategoriesList(categories) {
   }
 
   container.innerHTML = categories.map(cat => {
-    const icon = cat.icon || '📁';
     const name = cat.name;
     const count = cat.product_count !== undefined ? cat.product_count : 0;
     return `
       <div class="inline-flex items-center space-x-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-medium transition-all group">
-        <span class="font-bold text-slate-800">${icon} ${name}</span>
+        <span class="font-bold text-slate-800">${name}</span>
         <span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold">${count} món</span>
         <div class="flex items-center space-x-1 pl-1.5 border-l border-slate-200 ml-1">
-          <button onclick="openEditCategoryModal(${cat.id}, '${name.replace(/'/g, "\\'")}', '${icon.replace(/'/g, "\\'")}')" class="p-1 text-slate-400 hover:text-emerald-600 rounded transition-colors" title="Sửa danh mục">
+          <button onclick="openEditCategoryModal(${cat.id}, '${name.replace(/'/g, "\\'")}')" class="p-1 text-slate-400 hover:text-emerald-600 rounded transition-colors" title="Sửa danh mục">
             <i class="fa-solid fa-pen text-[11px]"></i>
           </button>
           <button onclick="deleteCategory(${cat.id}, '${name.replace(/'/g, "\\'")}', ${count})" class="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors" title="Xóa danh mục">
@@ -80,14 +79,12 @@ function openCategoryModal() {
   setTimeout(() => document.getElementById('categoryNameInput')?.focus(), 80);
 }
 
-function openEditCategoryModal(id, name, icon) {
+function openEditCategoryModal(id, name) {
   const idEl = document.getElementById('categoryEditId');
   const nameEl = document.getElementById('categoryNameInput');
-  const iconEl = document.getElementById('categoryIconInput');
   const titleEl = document.getElementById('categoryModalTitle');
   if (idEl) idEl.value = id;
   if (nameEl) nameEl.value = name;
-  if (iconEl) iconEl.value = icon || '';
   if (titleEl) titleEl.textContent = 'Chỉnh Sửa Danh Mục';
   document.getElementById('categoryModal')?.classList.remove('hidden');
   setTimeout(() => nameEl?.focus(), 80);
@@ -101,7 +98,6 @@ async function saveCategory(event) {
   event.preventDefault();
   const id = document.getElementById('categoryEditId')?.value;
   const name = document.getElementById('categoryNameInput')?.value?.trim();
-  const icon = document.getElementById('categoryIconInput')?.value?.trim() || '📁';
 
   if (!name) {
     showToast('Vui lòng nhập tên danh mục!', 'error');
@@ -118,13 +114,13 @@ async function saveCategory(event) {
     if (id) {
       await api(`/api/categories/${id}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, icon })
+        body: JSON.stringify({ name })
       });
       showToast('Đã cập nhật danh mục thành công!', 'success');
     } else {
       await api('/api/categories', {
         method: 'POST',
-        body: JSON.stringify({ name, icon })
+        body: JSON.stringify({ name })
       });
       showToast('Đã thêm danh mục mới thành công!', 'success');
     }
