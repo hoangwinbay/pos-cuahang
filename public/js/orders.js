@@ -25,7 +25,7 @@ async function loadOrdersList() {
 
       return `
         <tr class="hover:bg-slate-50 transition-colors">
-          <td class="px-3 py-2.5 font-mono font-bold text-xs text-blue-600">
+          <td class="px-3 py-2.5 font-mono font-bold text-xs text-emerald-700">
             ${o.order_code}
           </td>
           <td class="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap">
@@ -40,7 +40,7 @@ async function loadOrdersList() {
           <td class="px-3 py-2.5 text-center">
             <button 
               onclick="reprintOrderReceipt(${o.id})" 
-              class="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors inline-flex items-center space-x-1"
+              class="px-2.5 py-1 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg text-xs font-semibold transition-colors inline-flex items-center space-x-1"
               title="In lại phiếu đối chiếu"
             >
               <i class="fa-solid fa-print text-[11px]"></i>

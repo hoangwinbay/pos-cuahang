@@ -68,7 +68,7 @@ function renderMenuDishesList(dishes) {
           <div class="min-w-0">
             <h4 class="font-bold text-xs sm:text-sm text-slate-800 truncate">${d.name}</h4>
             <div class="flex items-center space-x-2 mt-0.5">
-              <span class="text-xs font-black text-blue-600">${formatMoney(d.price)}</span>
+              <span class="text-xs font-black text-emerald-700">${formatMoney(d.price)}</span>
               <span class="text-[10px] text-slate-400">• ${d.category_name || 'Chung'}</span>
             </div>
           </div>
@@ -78,7 +78,7 @@ function renderMenuDishesList(dishes) {
         <div class="flex items-center space-x-1.5 shrink-0">
           <button 
             onclick="openEditDishModal(${d.id})" 
-            class="px-2.5 py-1.5 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1"
+            class="px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1"
             title="Sửa tên, giá, ảnh món"
           >
             <i class="fa-solid fa-pen text-[11px]"></i>

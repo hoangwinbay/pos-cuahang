@@ -3,11 +3,14 @@
 // =============================================================
 
 const state = {
-  activeTab: 'pos',
-  selectedTable: 'Bàn 1',
+  activeScreen: 'tables', // 'tables', 'order', 'reports', 'menu'
+  currentTable: 'Bàn 1',
+  currentSource: 'taicho', // 'taicho' or 'mangve'
+  currentAreaFilter: 'all', // 'all', 'occupied', 'empty'
+  tableOrders: JSON.parse(localStorage.getItem('pos_table_orders') || '{}'),
+  tableList: JSON.parse(localStorage.getItem('pos_table_list') || '["Bàn 1", "Bàn 2", "Bàn 3", "Bàn 4", "Bàn 5", "Bàn 6", "Bàn 7", "Bàn 8", "Bàn 9", "Bàn 10", "Bàn 11", "Bàn 12"]'),
   products: [],
   categories: [],
-  cart: [],
   settings: {},
   banks: [],
   currentUser: null,
@@ -39,10 +42,10 @@ function showToast(message, type = 'success') {
   if (!container) return;
 
   const toast = document.createElement('div');
-  const bgClass = type === 'success' ? 'bg-emerald-600 text-white' : type === 'error' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-white';
+  const bgClass = type === 'success' ? 'bg-emerald-700 text-white' : type === 'error' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-white';
   const icon = type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info';
 
-  toast.className = `${bgClass} px-3.5 py-2 rounded-xl shadow-lg flex items-center space-x-2 text-xs font-semibold pointer-events-auto transform transition-all duration-300 translate-y-2 opacity-0 z-50`;
+  toast.className = `${bgClass} px-4 py-2.5 rounded-2xl shadow-xl flex items-center space-x-2 text-xs font-bold pointer-events-auto transform transition-all duration-300 translate-y-2 opacity-0 z-50`;
   toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
 
   container.appendChild(toast);
@@ -54,7 +57,7 @@ function showToast(message, type = 'success') {
   setTimeout(() => {
     toast.classList.add('opacity-0', 'translate-y-2');
     setTimeout(() => toast.remove(), 300);
-  }, 3000);
+  }, 2800);
 }
 
 // API Helper with Bearer token injection
@@ -115,13 +118,13 @@ async function initAuth() {
   applyUserRolePermissions();
 }
 
-// Apply role permissions to UI
 function applyUserRolePermissions() {
   const user = state.currentUser;
-  const tabReports = document.getElementById('tab-reports');
-  const tabMenu = document.getElementById('tab-menu');
   const roleIcon = document.getElementById('userRoleIcon');
   const nameDisplay = document.getElementById('userNameDisplay');
+  const drawerUserRole = document.getElementById('drawerUserRole');
+  const drawerBtnReports = document.getElementById('drawerBtnReports');
+  const drawerBtnMenu = document.getElementById('drawerBtnMenu');
 
   if (!user) {
     if (roleIcon) roleIcon.innerHTML = '<i class="fa-solid fa-circle-question text-slate-400"></i>';
@@ -133,22 +136,22 @@ function applyUserRolePermissions() {
 
   if (roleIcon) {
     roleIcon.innerHTML = isAdmin 
-      ? '<i class="fa-solid fa-user-shield text-blue-600"></i>' 
-      : '<i class="fa-solid fa-user text-emerald-600"></i>';
+      ? '<i class="fa-solid fa-user-shield text-emerald-600"></i>' 
+      : '<i class="fa-solid fa-user text-slate-600"></i>';
   }
   if (nameDisplay) nameDisplay.textContent = isAdmin ? 'Chủ Quán' : 'Nhân Viên';
+  if (drawerUserRole) drawerUserRole.textContent = isAdmin ? '👑 Chủ Quán (Toàn quyền)' : '👤 Nhân Viên Gọi Món';
 
   // Only Owner sees Thống Kê & Thực Đơn
-  if (tabReports) tabReports.style.display = isAdmin ? 'flex' : 'none';
-  if (tabMenu) tabMenu.style.display = isAdmin ? 'flex' : 'none';
+  if (drawerBtnReports) drawerBtnReports.style.display = isAdmin ? 'flex' : 'none';
+  if (drawerBtnMenu) drawerBtnMenu.style.display = isAdmin ? 'flex' : 'none';
 
-  // If staff is currently on restricted tab, switch back to pos
-  if (!isAdmin && (state.activeTab === 'reports' || state.activeTab === 'menu')) {
-    switchTab('pos');
+  // If staff is currently on restricted view, switch back to tables
+  if (!isAdmin && (state.activeScreen === 'reports' || state.activeScreen === 'menu')) {
+    navigateTo('tables');
   }
 }
 
-// Fast switch between Admin and Staff role
 async function fastLogin(accountType) {
   try {
     const pin = accountType === 'admin' ? '9999' : '1234';
@@ -164,90 +167,71 @@ async function fastLogin(accountType) {
     closeLoginModal();
     applyUserRolePermissions();
     showToast(`Đã chuyển vai trò: ${res.user.role === 'admin' ? 'Chủ Quán' : 'Nhân Viên'}`);
-
-    if (state.activeTab === 'pos') {
-      if (typeof loadPosProducts === 'function') loadPosProducts();
-    } else if (state.activeTab === 'reports') {
-      if (typeof loadDashboardReports === 'function') loadDashboardReports();
-    } else if (state.activeTab === 'menu') {
-      if (typeof loadMenuDishes === 'function') loadMenuDishes();
-    }
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
 function openLoginModal() {
-  const modal = document.getElementById('loginModal');
-  if (modal) modal.classList.remove('hidden');
+  document.getElementById('loginModal')?.classList.remove('hidden');
 }
 
 function closeLoginModal() {
-  const modal = document.getElementById('loginModal');
-  if (modal) modal.classList.add('hidden');
+  document.getElementById('loginModal')?.classList.add('hidden');
 }
 
-// Mobile Slide-over Drawer toggle
-function toggleMobileCart(open) {
-  const drawer = document.getElementById('posCartPanel');
-  const backdrop = document.getElementById('mobileCartBackdrop');
+// =============================================================
+// NAVIGATION & SIDE DRAWER (☰)
+// =============================================================
+function toggleSideDrawer(open) {
+  const drawer = document.getElementById('sideDrawer');
+  const backdrop = document.getElementById('drawerBackdrop');
   if (!drawer || !backdrop) return;
 
   if (open) {
     drawer.classList.add('drawer-open');
-    backdrop.classList.add('drawer-open');
+    backdrop.classList.remove('hidden');
   } else {
     drawer.classList.remove('drawer-open');
-    backdrop.classList.remove('drawer-open');
+    backdrop.classList.add('hidden');
   }
 }
 
-// =============================================================
-// TAB NAVIGATION (Gọi Món / Thống Kê / Thực Đơn)
-// =============================================================
-function switchTab(tabName) {
-  // Permission check: only admin can access reports and menu
+function navigateTo(target) {
+  toggleSideDrawer(false);
+
+  // Permission check
   if (state.currentUser && state.currentUser.role !== 'admin') {
-    if (tabName === 'reports' || tabName === 'menu') {
+    if (target === 'reports' || target === 'menu') {
       showToast('Mục này chỉ dành cho tài khoản Chủ Quán!', 'error');
       return;
     }
   }
 
-  state.activeTab = tabName;
+  state.activeScreen = target;
 
-  // Update tab buttons
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.remove('active', 'bg-white', 'text-blue-600', 'shadow-xs');
-    btn.classList.add('text-slate-600');
-  });
+  const screenTables = document.getElementById('screen-tables');
+  const screenOrder = document.getElementById('screen-order');
+  const viewReports = document.getElementById('view-reports');
+  const viewMenu = document.getElementById('view-menu');
 
-  const activeBtn = document.getElementById(`tab-${tabName}`);
-  if (activeBtn) {
-    activeBtn.classList.add('active', 'bg-white', 'text-blue-600', 'shadow-xs');
-    activeBtn.classList.remove('text-slate-600');
-  }
+  // Hide all screens
+  if (screenTables) screenTables.classList.add('hidden');
+  if (screenOrder) screenOrder.classList.add('hidden');
+  if (viewReports) { viewReports.classList.add('hidden'); viewReports.classList.remove('flex'); }
+  if (viewMenu) { viewMenu.classList.add('hidden'); viewMenu.classList.remove('flex'); }
 
-  // Update tab views
-  document.querySelectorAll('.tab-view').forEach(view => {
-    view.classList.add('hidden');
-    view.classList.remove('flex');
-  });
-
-  const activeView = document.getElementById(`view-${tabName}`);
-  if (activeView) {
-    activeView.classList.remove('hidden');
-    activeView.classList.add('flex');
-  }
-
-  // Tab specific lifecycle actions
-  if (tabName === 'pos') {
-    const search = document.getElementById('posSearchInput');
-    if (search && window.innerWidth >= 1024) search.focus();
-  } else if (tabName === 'reports') {
+  if (target === 'tables') {
+    if (screenTables) screenTables.classList.remove('hidden');
+    if (typeof renderTableGrid === 'function') renderTableGrid();
+  } else if (target === 'order') {
+    if (screenOrder) screenOrder.classList.remove('hidden');
+  } else if (target === 'reports') {
+    if (viewReports) { viewReports.classList.remove('hidden'); viewReports.classList.add('flex'); }
     if (typeof loadDashboardReports === 'function') loadDashboardReports();
     if (typeof loadOrdersList === 'function') loadOrdersList();
-  } else if (tabName === 'menu') {
+  } else if (target === 'menu') {
+    if (viewMenu) { viewMenu.classList.remove('hidden'); viewMenu.classList.add('flex'); }
     if (typeof loadMenuDishes === 'function') loadMenuDishes();
     if (typeof populateVietQrSettings === 'function') populateVietQrSettings();
   }
@@ -262,8 +246,11 @@ async function loadSettings() {
     state.settings = data;
 
     const headerEl = document.getElementById('headerStoreName');
-    if (headerEl && data.store_name) {
-      headerEl.textContent = data.store_name;
+    const drawerStoreEl = document.getElementById('drawerStoreName');
+
+    if (data.store_name) {
+      if (headerEl) headerEl.textContent = data.store_name;
+      if (drawerStoreEl) drawerStoreEl.textContent = data.store_name;
     }
   } catch (err) {
     console.error('Failed to load settings:', err);
@@ -276,14 +263,15 @@ window.addEventListener('keydown', (e) => {
     if (typeof closeCheckoutModal === 'function') closeCheckoutModal();
     if (typeof closeDishModal === 'function') closeDishModal();
     if (typeof closePrinterModal === 'function') closePrinterModal();
+    if (typeof closeTableCartDrawer === 'function') closeTableCartDrawer();
+    if (typeof closeTableActionsMenu === 'function') closeTableActionsMenu();
     closeLoginModal();
-    toggleMobileCart(false);
+    toggleSideDrawer(false);
   }
 });
 
 // App Initialization
 document.addEventListener('DOMContentLoaded', async () => {
-  // Service Worker for Mobile PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }

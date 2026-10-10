@@ -1,5 +1,5 @@
 // =============================================================
-// POS ORDER - WEB ORDER PAD & CHECKOUT LOGIC
+// POS ORDER - SƠ ĐỒ BÀN & GỌI MÓN (THEO MẪU FABiOrder)
 // =============================================================
 
 let currentSelectedCategory = 'all';
@@ -11,188 +11,258 @@ function isActualImage(str) {
   return typeof str === 'string' && (str.startsWith('data:image') || str.startsWith('http') || str.startsWith('/'));
 }
 
-// Initialize POS view
+// Khởi tạo POS
 async function initPos() {
   await Promise.all([loadPosCategories(), loadPosProducts()]);
-  setupPosListeners();
-  selectTable(state.selectedTable || 'Bàn 1');
-  updateCartUI();
+  setupPosSearchListeners();
+  showTableFloor();
 }
 
 // =============================================================
-// TABLE SELECTOR (BÀN 1..5 / MANG VỀ)
+// SCREEN 1: SƠ ĐỒ BÀN (TABLE FLOOR MAP)
 // =============================================================
-function selectTable(tableName) {
-  state.selectedTable = tableName;
+function showTableFloor() {
+  state.activeScreen = 'tables';
 
-  // Update header in cart
-  const currentTableEl = document.getElementById('currentTableDisplay');
-  if (currentTableEl) currentTableEl.textContent = tableName;
+  const screenTables = document.getElementById('screen-tables');
+  const screenOrder = document.getElementById('screen-order');
+  const viewReports = document.getElementById('view-reports');
+  const viewMenu = document.getElementById('view-menu');
 
-  const mobileTableEl = document.getElementById('mobileFloatingTable');
-  if (mobileTableEl) mobileTableEl.textContent = tableName;
+  if (screenTables) screenTables.classList.remove('hidden');
+  if (screenOrder) screenOrder.classList.add('hidden');
+  if (viewReports) viewReports.classList.add('hidden');
+  if (viewMenu) viewMenu.classList.add('hidden');
 
-  const checkoutTableEl = document.getElementById('checkoutModalTable');
-  if (checkoutTableEl) checkoutTableEl.textContent = tableName;
+  closeTableCartDrawer();
+  renderTableGrid();
+}
 
-  // Check if custom table pill exists, if not, create one
-  const container = document.getElementById('quickTablePills');
-  let matched = false;
-  const pills = document.querySelectorAll('#quickTablePills .table-pill');
-  pills.forEach(btn => {
-    if (btn.textContent.trim() === tableName) {
-      matched = true;
-      btn.className = 'table-pill active px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-xs';
-    } else {
-      btn.className = 'table-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors';
+function setOrderSource(source) {
+  state.currentSource = source;
+
+  const btnMangVe = document.getElementById('btnSourceMangVe');
+  const btnTaiCho = document.getElementById('btnSourceTaiCho');
+
+  if (source === 'mangve') {
+    btnMangVe.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-white text-emerald-700 shadow-xs transition-all';
+    btnTaiCho.className = 'px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 transition-all';
+  } else {
+    btnTaiCho.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-white text-emerald-700 shadow-xs transition-all';
+    btnMangVe.className = 'px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 transition-all';
+  }
+
+  renderTableGrid();
+}
+
+function filterTableArea(filter) {
+  state.currentAreaFilter = filter;
+
+  const tabs = {
+    all: document.getElementById('tabAreaAll'),
+    occupied: document.getElementById('tabAreaOccupied'),
+    empty: document.getElementById('tabAreaEmpty')
+  };
+
+  Object.keys(tabs).forEach(k => {
+    if (tabs[k]) {
+      if (k === filter) {
+        tabs[k].className = 'area-tab pb-2 border-b-2 border-emerald-600 text-emerald-700 font-bold';
+      } else {
+        tabs[k].className = 'area-tab pb-2 text-slate-500 hover:text-slate-800 font-bold';
+      }
     }
   });
 
-  if (!matched && container) {
-    const newBtn = document.createElement('button');
-    newBtn.onclick = () => selectTable(tableName);
-    newBtn.className = 'table-pill active px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-xs';
-    newBtn.textContent = tableName;
-    // Insert before the last button (+ Bàn...)
-    const lastBtn = container.querySelector('button:last-child');
-    container.insertBefore(newBtn, lastBtn);
-  }
+  renderTableGrid();
 }
 
-function promptCustomTable() {
-  const custom = prompt('Nhập số bàn hoặc tên gọi (VD: Bàn 6, Bàn VIP, Sân thượng...):', '');
+function promptAddCustomTable() {
+  const custom = prompt('Nhập tên bàn mới (VD: Bàn 13, Bàn VIP, Sân thượng...):', '');
   if (custom && custom.trim()) {
-    selectTable(custom.trim());
-    showToast(`Đã chọn: ${custom.trim()}`);
+    const tableName = custom.trim();
+    if (!state.tableList.includes(tableName)) {
+      state.tableList.push(tableName);
+      localStorage.setItem('pos_table_list', JSON.stringify(state.tableList));
+      showToast(`Đã thêm: ${tableName}`);
+      renderTableGrid();
+    }
   }
 }
 
-// =============================================================
-// CATEGORIES & PRODUCTS RENDER
-// =============================================================
-async function loadPosCategories() {
-  try {
-    const cats = await api('/api/categories');
-    state.categories = cats;
+// Render Lưới Bàn (3 cột trên điện thoại - Giống mẫu FABi Ảnh 1)
+function renderTableGrid() {
+  const container = document.getElementById('tableGridContainer');
+  if (!container) return;
 
-    const container = document.getElementById('posCategoryPills');
-    if (!container) return;
+  const filter = state.currentAreaFilter;
+  const tables = state.tableList.filter(tableName => {
+    const order = state.tableOrders[tableName];
+    const hasItems = order && order.items && order.items.length > 0;
+    if (filter === 'occupied') return hasItems;
+    if (filter === 'empty') return !hasItems;
+    return true;
+  });
 
-    const pillsHtml = cats.map(cat => `
+  if (tables.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-3 text-center py-12 text-slate-400 text-xs">
+        <i class="fa-solid fa-table text-3xl mb-2 text-slate-300"></i>
+        <p>Không có bàn nào phù hợp</p>
+      </div>
+    `;
+    return;
+  }
+
+  const now = Date.now();
+
+  container.innerHTML = tables.map(tableName => {
+    const order = state.tableOrders[tableName];
+    const hasItems = order && order.items && order.items.length > 0;
+
+    if (hasItems) {
+      // BÀN CÓ KHÁCH: Màu Xanh Ngọc nổi bật (khác màu xanh dương cũ)
+      const totalAmount = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const totalCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+      const startTime = order.startTime || now;
+      const elapsedMin = Math.max(1, Math.floor((now - startTime) / 60000));
+
+      return `
+        <div 
+          onclick="openTableOrder('${tableName}')"
+          class="table-card bg-emerald-600 text-white rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between shadow-sm cursor-pointer aspect-square active:scale-95 transition-all"
+        >
+          <div class="flex items-center justify-between">
+            <span class="font-black text-xs sm:text-sm tracking-tight text-white">${tableName}</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>
+          </div>
+
+          <div class="my-auto text-center py-1">
+            <div class="text-xs sm:text-sm font-black text-white leading-tight">
+              ${formatMoney(totalAmount)}
+            </div>
+            <div class="text-[10px] sm:text-xs text-emerald-100 font-semibold mt-0.5">
+              ${totalCount} Món
+            </div>
+          </div>
+
+          <div class="text-[10px] text-emerald-200 text-right font-medium">
+            ${elapsedMin} phút
+          </div>
+        </div>
+      `;
+    } else {
+      // BÀN TRỐNG: Nền trắng viền xám nhẹ nhàng bo góc
+      return `
+        <div 
+          onclick="openTableOrder('${tableName}')"
+          class="table-card bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl p-2.5 flex items-center justify-center text-slate-700 shadow-2xs cursor-pointer aspect-square active:scale-95 transition-all hover:bg-slate-50"
+        >
+          <span class="font-bold text-xs sm:text-sm text-slate-700">${tableName}</span>
+        </div>
+      `;
+    }
+  }).join('');
+}
+
+// =============================================================
+// SCREEN 2: MÀN HÌNH GỌI MÓN (THEO MẪU FABiOrder Ảnh 2)
+// =============================================================
+function openTableOrder(tableName) {
+  state.currentTable = tableName;
+  state.activeScreen = 'order';
+
+  const screenTables = document.getElementById('screen-tables');
+  const screenOrder = document.getElementById('screen-order');
+
+  if (screenTables) screenTables.classList.add('hidden');
+  if (screenOrder) screenOrder.classList.remove('hidden');
+
+  // Cập nhật tiêu đề màn hình
+  const sourceLabel = state.currentSource === 'mangve' ? 'MANG VỀ' : 'TẠI CHỖ';
+  const titleEl = document.getElementById('orderScreenTitle');
+  if (titleEl) {
+    titleEl.textContent = `${tableName} • ${sourceLabel}`;
+  }
+
+  // Khởi tạo đơn cho bàn nếu chưa có
+  if (!state.tableOrders[tableName]) {
+    state.tableOrders[tableName] = {
+      source: state.currentSource,
+      startTime: Date.now(),
+      note: '',
+      items: []
+    };
+  }
+
+  renderOrderCategoriesPills();
+  renderGroupedDishList();
+  updateTableBottomBar();
+}
+
+// Thanh danh mục cuộn ngang
+function renderOrderCategoriesPills() {
+  const container = document.getElementById('orderCategoryPills');
+  if (!container) return;
+
+  const totalCount = state.products.length;
+
+  const pillsHtml = state.categories.map(cat => {
+    const isActive = currentSelectedCategory == cat.id;
+    return `
       <button 
-        onclick="filterPosCategory(${cat.id})" 
-        class="cat-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap transition-colors" 
+        onclick="filterOrderCategory(${cat.id})" 
+        class="cat-pill px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+          isActive 
+            ? 'bg-emerald-600 text-white shadow-xs' 
+            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+        }"
         data-id="${cat.id}"
       >
         <span>${cat.name}</span>
       </button>
-    `).join('');
-
-    container.innerHTML = `
-      <button onclick="filterPosCategory('all')" class="cat-pill active px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-white whitespace-nowrap shadow-xs transition-colors" data-id="all">
-        Tất cả
-      </button>
-      ${pillsHtml}
     `;
+  }).join('');
+
+  container.innerHTML = `
+    <button 
+      onclick="filterOrderCategory('all')" 
+      class="cat-pill px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+        currentSelectedCategory === 'all' 
+          ? 'bg-emerald-600 text-white shadow-xs' 
+          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+      }"
+      data-id="all"
+    >
+      Tất cả (${totalCount})
+    </button>
+    ${pillsHtml}
+  `;
+}
+
+function filterOrderCategory(catId) {
+  currentSelectedCategory = catId;
+  renderOrderCategoriesPills();
+  renderGroupedDishList();
+}
+
+async function loadPosCategories() {
+  try {
+    state.categories = await api('/api/categories');
   } catch (err) {
     console.error('Failed to load categories:', err);
   }
 }
 
-function filterPosCategory(catId) {
-  currentSelectedCategory = catId;
-
-  document.querySelectorAll('#posCategoryPills .cat-pill').forEach(btn => {
-    if (btn.dataset.id == String(catId)) {
-      btn.className = 'cat-pill active px-3 py-1 rounded-lg text-xs font-bold bg-slate-800 text-white whitespace-nowrap shadow-xs';
-    } else {
-      btn.className = 'cat-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 whitespace-nowrap transition-colors';
-    }
-  });
-
-  applyPosFilters();
-}
-
 async function loadPosProducts() {
   try {
-    const products = await api('/api/products');
-    state.products = products;
-    applyPosFilters();
+    state.products = await api('/api/products');
   } catch (err) {
     console.error('Failed to load products:', err);
   }
 }
 
-function applyPosFilters() {
-  const searchTerm = (document.getElementById('posSearchInput')?.value || '').trim().toLowerCase();
-
-  const filtered = state.products.filter(p => {
-    const matchesCat = currentSelectedCategory === 'all' || p.category_id == currentSelectedCategory;
-    const matchesSearch = !searchTerm || p.name.toLowerCase().includes(searchTerm);
-    return matchesCat && matchesSearch;
-  });
-
-  renderPosProducts(filtered);
-}
-
-// Render Menu Cards (Tối giản, trực quan, ảnh to, giá rõ ràng)
-function renderPosProducts(productsToRender) {
-  const grid = document.getElementById('posProductGrid');
-  const emptyState = document.getElementById('posNoProducts');
-  if (!grid) return;
-
-  if (!productsToRender || productsToRender.length === 0) {
-    grid.innerHTML = '';
-    if (emptyState) emptyState.classList.remove('hidden');
-    return;
-  }
-
-  if (emptyState) emptyState.classList.add('hidden');
-
-  grid.innerHTML = productsToRender.map(p => {
-    // Check if dish is already in current cart
-    const cartItem = state.cart.find(c => c.id === p.id);
-    const hasInCart = !!cartItem;
-    const qty = cartItem ? cartItem.quantity : 0;
-    const hasImage = isActualImage(p.image);
-
-    return `
-      <div 
-        onclick="handleProductClick(${p.id})"
-        class="product-card relative bg-white border ${hasInCart ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/10' : 'border-slate-200 hover:border-blue-300'} rounded-2xl p-3 flex flex-col justify-between cursor-pointer shadow-xs select-none transition-all"
-      >
-        ${hasInCart ? `
-          <span class="absolute top-2 right-2 bg-blue-600 text-white text-[11px] font-black w-6 h-6 rounded-full flex items-center justify-center shadow-xs z-10">
-            ${qty}
-          </span>
-        ` : ''}
-
-        <!-- Ảnh món hoặc khung giữ chỗ -->
-        ${hasImage ? `
-          <div class="h-28 w-full rounded-xl overflow-hidden bg-slate-100 mb-2 border border-slate-100 shadow-2xs">
-            <img src="${p.image}" alt="${p.name}" class="w-full h-full object-cover">
-          </div>
-        ` : `
-          <div class="h-24 w-full rounded-xl bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center text-slate-300 mb-2">
-            <i class="fa-regular fa-image text-2xl"></i>
-          </div>
-        `}
-
-        <div>
-          <h4 class="font-bold text-xs sm:text-sm text-slate-800 line-clamp-2 leading-snug">
-            ${p.name}
-          </h4>
-        </div>
-
-        <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between">
-          <span class="text-xs sm:text-sm font-black text-blue-600">${formatMoney(p.price)}</span>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function setupPosListeners() {
+function setupPosSearchListeners() {
   const searchInput = document.getElementById('posSearchInput');
   const clearBtn = document.getElementById('posClearSearch');
 
@@ -203,7 +273,7 @@ function setupPosListeners() {
       } else {
         clearBtn?.classList.add('hidden');
       }
-      applyPosFilters();
+      renderGroupedDishList();
     });
   }
 
@@ -211,24 +281,136 @@ function setupPosListeners() {
     clearBtn.addEventListener('click', () => {
       if (searchInput) searchInput.value = '';
       clearBtn.classList.add('hidden');
-      applyPosFilters();
+      renderGroupedDishList();
       searchInput?.focus();
     });
   }
 }
 
-// =============================================================
-// CART LOGIC (GỌI MÓN THEO BÀN)
-// =============================================================
-function handleProductClick(prodId) {
-  const product = state.products.find(p => p.id === prodId);
+// Render Danh Sách Món Phân Theo Nhóm (Ảnh 2 của FABiOrder)
+function renderGroupedDishList() {
+  const container = document.getElementById('groupedDishContainer');
+  if (!container) return;
+
+  const searchTerm = (document.getElementById('posSearchInput')?.value || '').trim().toLowerCase();
+  const currentItems = state.tableOrders[state.currentTable]?.items || [];
+
+  // Lọc món theo search & category
+  const filteredProducts = state.products.filter(p => {
+    const matchesCat = currentSelectedCategory === 'all' || p.category_id == currentSelectedCategory;
+    const matchesSearch = !searchTerm || p.name.toLowerCase().includes(searchTerm);
+    return matchesCat && matchesSearch;
+  });
+
+  if (filteredProducts.length === 0) {
+    container.innerHTML = `
+      <div class="h-40 flex flex-col items-center justify-center text-slate-400">
+        <i class="fa-solid fa-utensils text-2xl mb-1 text-slate-300"></i>
+        <p class="text-xs font-semibold">Không tìm thấy món ăn nào</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Nhóm món theo Category
+  const groups = {};
+  filteredProducts.forEach(p => {
+    const catName = p.category_name || 'MÓN KHÁC';
+    if (!groups[catName]) groups[catName] = [];
+    groups[catName].push(p);
+  });
+
+  container.innerHTML = Object.keys(groups).map(catName => {
+    const dishRows = groups[catName].map(p => {
+      const existingInTable = currentItems.find(item => item.id === p.id);
+      const currentQty = existingInTable ? existingInTable.quantity : 0;
+      const hasImage = isActualImage(p.image);
+
+      return `
+        <div class="dish-row bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 shadow-2xs flex items-center justify-between gap-2.5">
+          <!-- Thumbnail ảnh hoặc khung giữ chỗ sạch sẽ -->
+          <div class="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-100 flex items-center justify-center">
+            ${hasImage ? `
+              <img src="${p.image}" alt="${p.name}" class="w-full h-full object-cover">
+            ` : `
+              <i class="fa-regular fa-image text-slate-300 text-lg"></i>
+            `}
+          </div>
+
+          <!-- Tên món & Giá -->
+          <div class="min-w-0 flex-1">
+            <h4 class="font-bold text-xs sm:text-sm text-slate-800 line-clamp-2 leading-snug">
+              ${p.name}
+            </h4>
+            <div class="text-xs font-black text-emerald-700 mt-0.5">
+              ${formatMoney(p.price)}
+            </div>
+          </div>
+
+          <!-- Bộ nút Stepper [-]  SL  [+] trực tiếp (Ảnh 2) -->
+          <div class="flex items-center space-x-1.5 shrink-0 bg-slate-50 p-1 rounded-xl border border-slate-200">
+            <button 
+              type="button"
+              onclick="changeDishQty(${p.id}, -1)" 
+              class="stepper-btn w-7 h-7 rounded-lg border border-slate-300 bg-white flex items-center justify-center text-slate-600 active:bg-slate-100 text-xs font-bold transition-all"
+            >
+              <i class="fa-solid fa-minus text-[10px]"></i>
+            </button>
+
+            <span id="dish-qty-${p.id}" class="w-6 text-center text-xs font-black text-slate-800">
+              ${currentQty}
+            </span>
+
+            <button 
+              type="button"
+              onclick="changeDishQty(${p.id}, 1)" 
+              class="stepper-btn w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center active:bg-emerald-800 text-xs font-bold shadow-2xs transition-all"
+            >
+              <i class="fa-solid fa-plus text-[10px]"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="space-y-2">
+        <h3 class="text-[11px] font-black text-slate-400 uppercase tracking-wider px-1">
+          ${catName}
+        </h3>
+        <div class="space-y-2">
+          ${dishRows}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Thay đổi số lượng món bằng nút Stepper
+function changeDishQty(productId, delta) {
+  const product = state.products.find(p => p.id === productId);
   if (!product) return;
 
-  const existing = state.cart.find(item => item.id === product.id);
-  if (existing) {
-    existing.quantity += 1;
-  } else {
-    state.cart.push({
+  const currentTable = state.currentTable;
+  if (!state.tableOrders[currentTable]) {
+    state.tableOrders[currentTable] = {
+      source: state.currentSource,
+      startTime: Date.now(),
+      note: '',
+      items: []
+    };
+  }
+
+  const tableOrder = state.tableOrders[currentTable];
+  let item = tableOrder.items.find(i => i.id === product.id);
+
+  if (item) {
+    item.quantity += delta;
+    if (item.quantity <= 0) {
+      tableOrder.items = tableOrder.items.filter(i => i.id !== product.id);
+    }
+  } else if (delta > 0) {
+    tableOrder.items.push({
       id: product.id,
       name: product.name,
       price: product.price,
@@ -237,135 +419,196 @@ function handleProductClick(prodId) {
     });
   }
 
-  updateCartUI();
+  // Cập nhật localStorage
+  localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+
+  // Cập nhật số trên Stepper ngay lập tức
+  const updatedItem = tableOrder.items.find(i => i.id === product.id);
+  const qtyEl = document.getElementById(`dish-qty-${product.id}`);
+  if (qtyEl) qtyEl.textContent = updatedItem ? updatedItem.quantity : 0;
+
+  updateTableBottomBar();
+  renderCartDrawerItems();
 }
 
-function updateCartQty(productId, delta) {
-  const item = state.cart.find(i => i.id === productId);
-  if (!item) return;
+// Cập nhật Thanh Dính Dưới Cùng (Sticky Bottom Bar)
+function updateTableBottomBar() {
+  const currentTable = state.currentTable;
+  const tableOrder = state.tableOrders[currentTable];
+  const items = tableOrder?.items || [];
 
-  const newQty = item.quantity + delta;
-  if (newQty <= 0) {
-    removeFromCart(productId);
-    return;
+  const totalCount = items.reduce((sum, it) => sum + it.quantity, 0);
+  const totalAmount = items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
+
+  const badgeEl = document.getElementById('bottomBarBadge');
+  const moneyEl = document.getElementById('bottomBarTotalMoney');
+  const labelEl = document.getElementById('bottomBarTableLabel');
+  const headerBadge = document.getElementById('orderHeaderBadge');
+  const btnCheckout = document.getElementById('btnBottomCheckout');
+
+  if (badgeEl) badgeEl.textContent = totalCount;
+  if (moneyEl) moneyEl.textContent = formatMoney(totalAmount);
+  if (labelEl) labelEl.textContent = currentTable;
+
+  if (headerBadge) {
+    if (totalCount > 0) {
+      headerBadge.textContent = totalCount;
+      headerBadge.classList.remove('hidden');
+    } else {
+      headerBadge.classList.add('hidden');
+    }
   }
 
-  item.quantity = newQty;
-  updateCartUI();
-}
-
-function removeFromCart(productId) {
-  state.cart = state.cart.filter(item => item.id !== productId);
-  updateCartUI();
-}
-
-function clearCart() {
-  if (state.cart.length === 0) return;
-  if (confirm(`Hủy toàn bộ món đang chọn cho ${state.selectedTable}?`)) {
-    state.cart = [];
-    const note = document.getElementById('orderNoteInput');
-    if (note) note.value = '';
-    updateCartUI();
-    showToast('Đã làm trống order');
+  if (btnCheckout) {
+    btnCheckout.disabled = totalCount === 0;
+    if (totalCount === 0) {
+      btnCheckout.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+      btnCheckout.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
   }
 }
 
-function updateCartUI() {
-  const itemsContainer = document.getElementById('cartItemsList');
+// =============================================================
+// DRAWER: XEM CHI TIẾT GIỎ MÓN CỦA BÀN
+// =============================================================
+function openTableCartDrawer() {
+  const drawer = document.getElementById('tableCartDrawer');
+  const backdrop = document.getElementById('tableCartBackdrop');
+  if (!drawer || !backdrop) return;
+
+  const currentTable = state.currentTable;
+  const title = document.getElementById('cartDrawerTableTitle');
+  if (title) title.textContent = currentTable;
+
+  const noteInput = document.getElementById('orderNoteInput');
+  if (noteInput) {
+    noteInput.value = state.tableOrders[currentTable]?.note || '';
+    noteInput.onchange = () => {
+      if (state.tableOrders[currentTable]) {
+        state.tableOrders[currentTable].note = noteInput.value.trim();
+        localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+      }
+    };
+  }
+
+  renderCartDrawerItems();
+
+  drawer.classList.remove('translate-x-full');
+  backdrop.classList.remove('hidden');
+}
+
+function closeTableCartDrawer() {
+  const drawer = document.getElementById('tableCartDrawer');
+  const backdrop = document.getElementById('tableCartBackdrop');
+  if (drawer) drawer.classList.add('translate-x-full');
+  if (backdrop) backdrop.classList.add('hidden');
+}
+
+function renderCartDrawerItems() {
+  const currentTable = state.currentTable;
+  const items = state.tableOrders[currentTable]?.items || [];
+  const container = document.getElementById('cartItemsList');
   const emptyState = document.getElementById('cartEmptyState');
-  const badgeCount = document.getElementById('cartBadgeCount');
-  const btnCheckout = document.getElementById('btnOpenCheckout');
-  const finalTotalEl = document.getElementById('cartFinalTotal');
+  const finalTotalEl = document.getElementById('cartDrawerFinalTotal');
+  const btnCheckout = document.getElementById('btnCartDrawerCheckout');
 
-  const totalItemCount = state.cart.reduce((sum, item) => sum + item.quantity, 0);
-  const totalAmount = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
-  if (badgeCount) badgeCount.textContent = `${totalItemCount} món`;
+  const totalAmount = items.reduce((sum, it) => sum + (it.price * it.quantity), 0);
   if (finalTotalEl) finalTotalEl.textContent = formatMoney(totalAmount);
 
-  // Update mobile floating bar
-  const mobileBadge = document.getElementById('mobileFloatingBadge');
-  const mobileTotal = document.getElementById('mobileFloatingTotal');
-  const mobileTable = document.getElementById('mobileFloatingTable');
-
-  if (mobileBadge) mobileBadge.textContent = totalItemCount;
-  if (mobileTotal) mobileTotal.textContent = formatMoney(totalAmount);
-  if (mobileTable) mobileTable.textContent = state.selectedTable;
-
-  if (state.cart.length === 0) {
-    if (itemsContainer) itemsContainer.innerHTML = '';
+  if (items.length === 0) {
+    if (container) container.innerHTML = '';
     if (emptyState) emptyState.classList.remove('hidden');
     if (btnCheckout) btnCheckout.disabled = true;
-    applyPosFilters(); // Update badges on grid
     return;
   }
 
   if (emptyState) emptyState.classList.add('hidden');
   if (btnCheckout) btnCheckout.disabled = false;
 
-  if (itemsContainer) {
-    itemsContainer.innerHTML = state.cart.map(item => {
+  if (container) {
+    container.innerHTML = items.map(item => {
       const hasImage = isActualImage(item.image);
-
       return `
-      <div class="cart-item bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-2">
-        <div class="flex items-center space-x-2.5 min-w-0 flex-1">
-          ${hasImage ? `
-            <img src="${item.image}" alt="${item.name}" class="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-200 shadow-2xs">
-          ` : ''}
-          <div class="truncate">
-            <h5 class="text-xs font-bold text-slate-800 truncate">${item.name}</h5>
-            <div class="text-[11px] font-semibold text-blue-600">${formatMoney(item.price)}</div>
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-2">
+          <div class="flex items-center space-x-2.5 min-w-0 flex-1">
+            ${hasImage ? `
+              <img src="${item.image}" alt="${item.name}" class="w-10 h-10 rounded-lg object-cover shrink-0 border border-slate-200">
+            ` : ''}
+            <div class="truncate">
+              <h5 class="text-xs font-bold text-slate-800 truncate">${item.name}</h5>
+              <div class="text-[11px] font-semibold text-emerald-700">${formatMoney(item.price)}</div>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-1 shrink-0 bg-white border border-slate-200 rounded-lg p-0.5">
+            <button onclick="changeDishQty(${item.id}, -1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 text-xs">
+              <i class="fa-solid fa-minus text-[9px]"></i>
+            </button>
+            <span class="w-6 text-center text-xs font-bold text-slate-800">${item.quantity}</span>
+            <button onclick="changeDishQty(${item.id}, 1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 text-xs">
+              <i class="fa-solid fa-plus text-[9px]"></i>
+            </button>
+          </div>
+
+          <div class="text-right shrink-0 min-w-[60px]">
+            <div class="text-xs font-black text-slate-800">${formatMoney(item.price * item.quantity)}</div>
           </div>
         </div>
-
-        <!-- Tăng giảm số lượng -->
-        <div class="flex items-center space-x-1 shrink-0 bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs">
-          <button onclick="updateCartQty(${item.id}, -1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 text-xs">
-            <i class="fa-solid fa-minus"></i>
-          </button>
-          <span class="w-6 text-center text-xs font-bold text-slate-800">${item.quantity}</span>
-          <button onclick="updateCartQty(${item.id}, 1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 text-xs">
-            <i class="fa-solid fa-plus"></i>
-          </button>
-        </div>
-
-        <!-- Tổng tiền món & Xóa -->
-        <div class="text-right shrink-0 min-w-[60px]">
-          <div class="text-xs font-black text-slate-800">${formatMoney(item.price * item.quantity)}</div>
-          <button onclick="removeFromCart(${item.id})" class="text-[11px] text-rose-500 hover:text-rose-700 transition-colors p-0.5">
-            <i class="fa-regular fa-trash-can"></i>
-          </button>
-        </div>
-      </div>
-    `;
+      `;
     }).join('');
   }
+}
 
-  applyPosFilters(); // Update badges on product cards
+function clearCurrentTableOrder() {
+  const currentTable = state.currentTable;
+  if (!confirm(`Hủy toàn bộ món đang gọi của ${currentTable}?`)) return;
+
+  delete state.tableOrders[currentTable];
+  localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+
+  showToast(`Đã làm trống ${currentTable}`);
+  renderGroupedDishList();
+  updateTableBottomBar();
+  closeTableCartDrawer();
+  renderTableGrid();
+}
+
+// Menu 3 chấm bàn
+function openTableActionsMenu() {
+  const title = document.getElementById('tableActionsTitle');
+  if (title) title.textContent = `Thao Tác: ${state.currentTable}`;
+  document.getElementById('tableActionsModal')?.classList.remove('hidden');
+}
+
+function closeTableActionsMenu() {
+  document.getElementById('tableActionsModal')?.classList.add('hidden');
 }
 
 // =============================================================
-// CHECKOUT & VIETQR PAYMENT MODAL
+// THANH TOÁN VIETQR & HOÀN TẤT ĐƠN HÀNG
 // =============================================================
 function openCheckoutModal() {
-  if (state.cart.length === 0) return;
+  const currentTable = state.currentTable;
+  const tableOrder = state.tableOrders[currentTable];
+  const items = tableOrder?.items || [];
 
-  const totalAmount = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  if (items.length === 0) {
+    showToast('Bàn chưa có món nào để thanh toán!', 'error');
+    return;
+  }
 
-  // Generate short temporary order code
+  const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
   const now = new Date();
   const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
   tempOrderCode = `HD-${dateStr}-${String(Math.floor(100 + Math.random() * 900))}`;
 
-  document.getElementById('checkoutModalTable').textContent = state.selectedTable;
-  document.getElementById('checkoutOrderCodePreview').textContent = `${tempOrderCode} • ${state.selectedTable}`;
+  document.getElementById('checkoutModalTable').textContent = currentTable;
+  document.getElementById('checkoutOrderCodePreview').textContent = `${tempOrderCode} • ${currentTable}`;
   document.getElementById('checkoutModalTotal').textContent = formatMoney(totalAmount);
 
-  // Dynamic VietQR code
   setupVietQRDisplay(totalAmount, tempOrderCode);
-
-  // Default to QR payment
   setPaymentMethod('vietqr');
 
   document.getElementById('checkoutModal').classList.remove('hidden');
@@ -382,43 +625,45 @@ function setPaymentMethod(method) {
   const btnCash = document.getElementById('btnMethodCash');
 
   if (method === 'vietqr') {
-    btnVietQR.className = 'py-2 rounded-xl text-xs font-bold border-2 border-blue-600 bg-blue-50 text-blue-700';
+    btnVietQR.className = 'py-2 rounded-xl text-xs font-bold border-2 border-emerald-600 bg-emerald-50 text-emerald-800';
     btnCash.className = 'py-2 rounded-xl text-xs font-semibold border border-slate-300 text-slate-700';
   } else {
-    btnCash.className = 'py-2 rounded-xl text-xs font-bold border-2 border-emerald-600 bg-emerald-50 text-emerald-700';
+    btnCash.className = 'py-2 rounded-xl text-xs font-bold border-2 border-emerald-600 bg-emerald-50 text-emerald-800';
     btnVietQR.className = 'py-2 rounded-xl text-xs font-semibold border border-slate-300 text-slate-700';
   }
 }
 
-// Generate Dynamic VietQR Image URL
 function setupVietQRDisplay(amount, orderCode) {
   const bankId = state.settings.bank_id || 'MB';
   const accountNo = state.settings.bank_account_no || '0909888999';
   const accountName = state.settings.bank_account_name || 'NGUYEN VAN POS';
-  const memo = `${orderCode} ${state.selectedTable}`.trim();
+  const memo = `${orderCode} ${state.currentTable}`.trim();
 
-  // Napas standard dynamic VietQR API
   const qrUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(accountName)}`;
 
   const qrImg = document.getElementById('vietQrImg');
   if (qrImg) qrImg.src = qrUrl;
 }
 
-// Complete order checkout
+// Hoàn tất đơn hàng
 async function completeCheckoutOrder() {
+  const currentTable = state.currentTable;
+  const tableOrder = state.tableOrders[currentTable];
+  if (!tableOrder || !tableOrder.items || tableOrder.items.length === 0) return;
+
   const btnConfirm = document.getElementById('btnConfirmPayment');
   btnConfirm.disabled = true;
 
   try {
-    const totalAmount = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const note = document.getElementById('orderNoteInput')?.value.trim() || '';
+    const totalAmount = tableOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const note = document.getElementById('orderNoteInput')?.value.trim() || tableOrder.note || '';
 
     const payload = {
-      items: state.cart.map(item => ({
+      items: tableOrder.items.map(item => ({
         id: item.id,
         quantity: item.quantity
       })),
-      table_name: state.selectedTable,
+      table_name: currentTable,
       note: note,
       payment_method: currentPaymentMethod,
       cash_given: totalAmount
@@ -430,26 +675,26 @@ async function completeCheckoutOrder() {
     });
 
     closeCheckoutModal();
-    toggleMobileCart(false);
+    closeTableCartDrawer();
 
-    // Confetti celebration
+    // Confetti
     try {
       if (typeof confetti === 'function') {
         confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
       }
     } catch (e) {}
 
-    showToast(`Thanh toán thành công ${state.selectedTable}!`);
+    showToast(`Thanh toán thành công ${currentTable}!`);
 
-    // Reset Cart
-    state.cart = [];
-    const noteInput = document.getElementById('orderNoteInput');
-    if (noteInput) noteInput.value = '';
-    updateCartUI();
+    // In hóa đơn
+    printReceipt(newOrder);
 
-    // Reload products & reports
-    loadPosProducts();
-    if (typeof loadOrdersList === 'function') loadOrdersList();
+    // XÓA ĐƠN CỦA BÀN VÀ TRẢ BÀN VỀ TRẠNG THÁI TRỐNG
+    delete state.tableOrders[currentTable];
+    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+
+    // Quay lại màn hình Sơ Đồ Bàn (Ảnh 1)
+    showTableFloor();
 
   } catch (err) {
     showToast(err.message, 'error');
@@ -458,24 +703,31 @@ async function completeCheckoutOrder() {
   }
 }
 
-// In phiếu đối chiếu từ modal thanh toán
+// In phiếu đối chiếu
 function printCheckoutReceipt() {
-  if (state.cart.length === 0) return;
+  const currentTable = state.currentTable;
+  const tableOrder = state.tableOrders[currentTable];
+  const items = tableOrder?.items || [];
 
-  const totalAmount = state.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const note = document.getElementById('orderNoteInput')?.value.trim() || '';
+  if (items.length === 0) {
+    showToast('Bàn chưa có món nào!', 'error');
+    return;
+  }
+
+  const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const note = document.getElementById('orderNoteInput')?.value.trim() || tableOrder.note || '';
 
   const orderForPrint = {
     order_code: tempOrderCode || 'ORDER-TAM',
     created_at: new Date().toISOString(),
-    table_name: state.selectedTable,
+    table_name: currentTable,
     cashier_name: state.currentUser ? state.currentUser.name : 'Chủ Quán',
     note: note,
     payment_method: currentPaymentMethod,
     subtotal: totalAmount,
     discount: 0,
     total: totalAmount,
-    items: state.cart.map(item => ({
+    items: items.map(item => ({
       product_name: item.name,
       quantity: item.quantity,
       price: item.price,
@@ -487,7 +739,7 @@ function printCheckoutReceipt() {
 }
 
 // =============================================================
-// THERMAL RECEIPT PRINTING (PHIẾU ĐỐI CHIẾU 80mm / 58mm)
+// IN HÓA ĐƠN NHIỆT (80mm / 58mm & BLUETOOTH)
 // =============================================================
 function generateReceiptHtml(order) {
   const storeName = state.settings.store_name || 'QUÁN ĂN - CÀ PHÊ';
@@ -549,7 +801,7 @@ function generateReceiptHtml(order) {
   `;
 }
 
-// Web Bluetooth ESC/POS Printing
+// In qua Bluetooth hoặc Trình duyệt
 let bluetoothDevice = null;
 let bluetoothCharacteristic = null;
 
@@ -567,7 +819,7 @@ function formatLineColumns(left, right, width = 32) {
 
 async function connectBluetoothPrinter() {
   if (!navigator.bluetooth) {
-    showToast('Trình duyệt chưa hỗ trợ Bluetooth. Hãy mở bằng Chrome trên Android hoặc dùng in qua Wi-Fi!', 'error');
+    showToast('Trình duyệt chưa hỗ trợ Bluetooth. Hãy mở bằng Chrome trên Android hoặc in qua Wi-Fi!', 'error');
     return;
   }
 
@@ -615,8 +867,8 @@ async function printEscPosBluetooth(order) {
   const lineWidth = 32;
   const divider = '-'.repeat(lineWidth) + '\n';
 
-  let content = '\x1B\x40'; // Reset
-  content += '\x1B\x61\x01'; // Center
+  let content = '\x1B\x40';
+  content += '\x1B\x61\x01';
   content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\n';
   content += 'PHIEU DOI CHIEU MON\n';
   content += `BAN: ${removeVietnameseAccents(order.table_name || 'BAN 1')}\n`;
@@ -625,7 +877,7 @@ async function printEscPosBluetooth(order) {
   content += `Gio: ${formatDateTime(order.created_at)}\n`;
   if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
-  content += '\x1B\x61\x00'; // Left
+  content += '\x1B\x61\x00';
   content += divider;
   content += formatLineColumns('MON / SL', 'TIEN', lineWidth);
   content += divider;
@@ -669,7 +921,6 @@ async function printReceipt(order) {
     }
   }
 
-  // Fallback to window.print()
   const container = document.getElementById('printable-receipt');
   if (container) {
     container.innerHTML = generateReceiptHtml(order);
