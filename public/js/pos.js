@@ -649,7 +649,7 @@ function closeCheckoutModal() {
   document.getElementById('checkoutModal')?.classList.add('hidden');
 }
 
-// In phiếu báo bếp: nhân viên mang phiếu vào bếp, bếp mang món + phiếu ra bàn cho khách
+// Mở popup xác nhận in phiếu báo bếp & đặt bàn
 function printKitchenSlip() {
   const currentTable = state.currentTable;
   const tableOrder = state.tableOrders[currentTable];
@@ -657,6 +657,48 @@ function printKitchenSlip() {
 
   if (items.length === 0) {
     showToast('Bàn chưa có món nào để in báo bếp!', 'error');
+    return;
+  }
+
+  const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const totalCount = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const tableEl = document.getElementById('kitchenConfirmTable');
+  const totalEl = document.getElementById('kitchenConfirmTotal');
+  const countEl = document.getElementById('kitchenConfirmCount');
+
+  if (tableEl) tableEl.textContent = currentTable;
+  if (totalEl) totalEl.textContent = formatMoney(totalAmount);
+  if (countEl) countEl.textContent = `${totalCount} món`;
+
+  document.getElementById('kitchenConfirmModal')?.classList.remove('hidden');
+}
+
+function closeKitchenConfirmModal() {
+  document.getElementById('kitchenConfirmModal')?.classList.add('hidden');
+}
+
+// Khi người dùng bấm "Hủy & Trả Bàn Trống"
+function cancelAndClearKitchenSlip() {
+  const currentTable = state.currentTable;
+  delete state.tableOrders[currentTable];
+  localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+
+  closeKitchenConfirmModal();
+  closeTableCartDrawer();
+  showToast(`Đã hủy gọi món ${currentTable} (Bàn trống)`);
+  showTableFloor();
+}
+
+// Khi người dùng bấm "In Báo Bếp"
+function executePrintKitchenSlip() {
+  const currentTable = state.currentTable;
+  const tableOrder = state.tableOrders[currentTable];
+  const items = tableOrder?.items || [];
+
+  if (items.length === 0) {
+    showToast('Bàn chưa có món nào!', 'error');
+    closeKitchenConfirmModal();
     return;
   }
 
@@ -696,11 +738,51 @@ function printKitchenSlip() {
     }))
   };
 
+  closeKitchenConfirmModal();
+  closeTableCartDrawer();
+
   printReceipt(orderForPrint);
   showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
+  showTableFloor();
+}
 
-  // Đóng giỏ hàng và chuyển về sơ đồ bàn (bàn giữ nguyên màu xanh ngọc có khách)
-  closeTableCartDrawer();
+// Bấm nút Hủy bàn ở header màn hình gọi món
+function promptCancelCurrentTable() {
+  const currentTable = state.currentTable;
+  const order = state.tableOrders[currentTable];
+  if (!order || !order.items || order.items.length === 0) {
+    showToast(`${currentTable} hiện đang trống!`);
+    showTableFloor();
+    return;
+  }
+
+  if (confirm(`Hủy toàn bộ món của ${currentTable} và đưa bàn về trạng thái TRỐNG?`)) {
+    delete state.tableOrders[currentTable];
+    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    showToast(`Đã làm trống ${currentTable}`);
+    showTableFloor();
+  }
+}
+
+// Xử lý khi bấm nút quay lại ← từ màn hình gọi món
+function handleBackFromOrderScreen() {
+  const currentTable = state.currentTable;
+  const order = state.tableOrders[currentTable];
+
+  // Nếu bàn có món nhưng CHƯA TỪNG in gửi bếp:
+  if (order && order.items && order.items.length > 0 && !order.hasPrintedKitchen) {
+    const shouldClear = confirm(
+      `${currentTable} vừa chọn món nhưng CHƯA IN BÁO BẾP.\n\n` +
+      `- Bấm [OK] để: HỦY GỌI MÓN (Trả bàn về trống)\n` +
+      `- Bấm [Hủy] để: GIỮ BÀN (Lưu lại để chọn tiếp sau)`
+    );
+    if (shouldClear) {
+      delete state.tableOrders[currentTable];
+      localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+      showToast(`Đã làm trống ${currentTable}`);
+    }
+  }
+
   showTableFloor();
 }
 

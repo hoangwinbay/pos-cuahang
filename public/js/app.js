@@ -261,6 +261,7 @@ async function loadSettings() {
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (typeof closeCheckoutModal === 'function') closeCheckoutModal();
+    if (typeof closeKitchenConfirmModal === 'function') closeKitchenConfirmModal();
     if (typeof closeDishModal === 'function') closeDishModal();
     if (typeof closePrinterModal === 'function') closePrinterModal();
     if (typeof closeTableCartDrawer === 'function') closeTableCartDrawer();

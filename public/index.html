@@ -89,10 +89,10 @@
   <!-- ============================================================= -->
   <div id="screen-order" class="w-full h-full flex flex-col overflow-hidden bg-slate-50 hidden">
     
-    <!-- Header: Nút quay lại ← + Tên Bàn + Menu 3 chấm ⋮ -->
+    <!-- Header: Nút quay lại ← + Tên Bàn + Hủy Bàn + Menu 3 chấm ⋮ -->
     <header class="bg-white border-b border-slate-200 px-2.5 py-2.5 flex items-center justify-between shrink-0 shadow-2xs z-20">
       <div class="flex items-center space-x-2 min-w-0">
-        <button onclick="showTableFloor()" class="w-8 h-8 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-700 text-base active:bg-slate-200 shrink-0">
+        <button onclick="handleBackFromOrderScreen()" class="w-8 h-8 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-700 text-base active:bg-slate-200 shrink-0">
           <i class="fa-solid fa-arrow-left"></i>
         </button>
         <h2 id="orderScreenTitle" class="font-black text-sm sm:text-base text-slate-800 truncate">
@@ -100,7 +100,11 @@
         </h2>
       </div>
 
-      <div class="flex items-center space-x-1">
+      <div class="flex items-center space-x-1.5">
+        <button onclick="promptCancelCurrentTable()" class="py-1 px-2 sm:px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-lg text-xs flex items-center space-x-1 transition-colors border border-rose-200" title="Hủy gọi món, trả bàn trống">
+          <i class="fa-solid fa-trash-can text-[11px]"></i>
+          <span>Hủy bàn</span>
+        </button>
         <button onclick="openTableCartDrawer()" class="relative p-2 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold" title="Xem giỏ món của bàn">
           <i class="fa-solid fa-receipt text-base"></i>
           <span id="orderHeaderBadge" class="hidden absolute top-1 right-1 w-4 h-4 bg-emerald-600 text-white text-[9px] rounded-full flex items-center justify-center font-black">0</span>
@@ -412,6 +416,46 @@
         >
           <i class="fa-solid fa-money-bill-wave"></i>
           <span>THANH TOÁN</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- MODAL: XÁC NHẬN IN PHIẾU BÁO BẾP & ĐẶT BÀN -->
+  <!-- ============================================================= -->
+  <div id="kitchenConfirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden modal-enter flex flex-col">
+      <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <h3 class="font-bold text-slate-800 text-sm flex items-center">
+          <i class="fa-solid fa-print text-amber-500 mr-2"></i>
+          <span>Xác Nhận In Phiếu Bếp</span>
+        </h3>
+        <button onclick="closeKitchenConfirmModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-4 space-y-3 text-center">
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+          <div class="text-xs text-amber-800 font-bold uppercase" id="kitchenConfirmTable">Bàn 1</div>
+          <div class="text-2xl font-black text-amber-700 mt-0.5" id="kitchenConfirmTotal">0 ₫</div>
+          <div class="text-xs text-amber-600 font-semibold mt-0.5" id="kitchenConfirmCount">0 món</div>
+        </div>
+
+        <p class="text-xs text-slate-500">
+          In phiếu mang cho đầu bếp và chuyển bàn sang trạng thái <strong class="text-emerald-700 font-bold">Có Khách</strong>:
+        </p>
+      </div>
+
+      <div class="p-3 bg-slate-50 border-t border-slate-200 grid grid-cols-2 gap-2">
+        <button onclick="cancelAndClearKitchenSlip()" class="py-2.5 px-2 bg-rose-100 hover:bg-rose-200 active:bg-rose-300 text-rose-700 font-bold rounded-xl text-xs transition-colors flex items-center justify-center space-x-1">
+          <i class="fa-solid fa-trash-can"></i>
+          <span>Hủy & Trả Bàn Trống</span>
+        </button>
+        <button onclick="executePrintKitchenSlip()" class="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black rounded-xl text-xs transition-colors flex items-center justify-center space-x-1 shadow-sm">
+          <i class="fa-solid fa-print"></i>
+          <span>In Báo Bếp</span>
         </button>
       </div>
     </div>
