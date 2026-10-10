@@ -952,7 +952,7 @@ function cancelAndClearKitchenSlip() {
 }
 
 // Khi người dùng bấm "In Báo Bếp"
-async function executePrintKitchenSlip() {
+function executePrintKitchenSlip() {
   const currentTable = state.currentTable;
   const tableOrder = state.tableOrders[currentTable];
   const items = tableOrder?.items || [];
@@ -978,31 +978,8 @@ async function executePrintKitchenSlip() {
   const kitchenCode = tableOrder.orderCode || `BEP-${dateStr}-${String(Math.floor(100 + Math.random() * 900))}`;
   tableOrder.orderCode = kitchenCode;
 
-  // 1. KIỂM TRA XUNG ĐỘT TRÙNG BÀN TRƯỚC KHI IN (Race Condition Check)
-  try {
-    const res = await api('/api/tables/order', {
-      method: 'POST',
-      body: JSON.stringify({
-        table_name: currentTable,
-        order_data: tableOrder,
-        check_conflict: true
-      })
-    });
-    // Lưu vào local sau khi server chấp thuận
-    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
-  } catch (err) {
-    if (err.status === 409 || err.data?.conflict) {
-      // Bàn đã bị máy khác đặt trước lúc mạng lag!
-      closeKitchenConfirmModal();
-      showTableConflictModal(err.data || { table_name: currentTable, incoming_order: tableOrder });
-      return;
-    }
-    // Mất mạng hoàn toàn: lưu hàng đợi offline
-    console.warn('Mất kết nối mạng khi in bếp, lưu vào hàng đợi offline:', err);
-    queueOfflineOrder(currentTable, tableOrder);
-    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
-    showToast('Mạng yếu! Đơn đã lưu tạm trên máy và sẽ tự động gửi khi có mạng lại.', 'warning');
-  }
+  // 1. Lưu ngay vào localStorage
+  localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
 
   const orderForPrint = {
     order_code: kitchenCode,
@@ -1025,9 +1002,46 @@ async function executePrintKitchenSlip() {
   closeKitchenConfirmModal();
   closeTableCartDrawer();
 
+  // 2. KÍCH HOẠT IN NGAY LẬP TỨC (ĐỒNG BỘ TRONG USER GESTURE ĐỂ TRÌNH DUYỆT DI ĐỘNG KHÔNG BỊ CHẶN)
   printReceipt(orderForPrint);
-  showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
-  showTableFloor();
+
+  // 3. ĐỒNG BỘ NỀN LÊN SERVER (NON-BLOCKING)
+  api('/api/tables/order', {
+    method: 'POST',
+    body: JSON.stringify({
+      table_name: currentTable,
+      order_data: tableOrder,
+      check_conflict: true
+    })
+  }).catch(err => {
+    if (err.status === 409 || err.data?.conflict) {
+      showTableConflictModal(err.data || { table_name: currentTable, incoming_order: tableOrder });
+    } else {
+      console.warn('Mất kết nối mạng khi in bếp, lưu hàng đợi offline:', err);
+      queueOfflineOrder(currentTable, tableOrder);
+    }
+  });
+
+  // 4. CHUYỂN VỀ SƠ ĐỒ BÀN
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!isMobile) {
+    showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
+    showTableFloor();
+  } else {
+    // Trên điện thoại: chờ sau khi tương tác xong hộp thoại in hoặc sau timeout
+    const handleAfterPrint = () => {
+      window.removeEventListener('afterprint', handleAfterPrint);
+      showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
+      showTableFloor();
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    setTimeout(() => {
+      if (state.activeScreen !== 'tables') {
+        showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
+        showTableFloor();
+      }
+    }, 2500);
+  }
 }
 
 // =============================================================
@@ -1541,21 +1555,161 @@ async function printEscPosBluetooth(order) {
   }
 }
 
-async function printReceipt(order) {
+let lastPrintedOrder = null;
+
+function printReceipt(order) {
+  lastPrintedOrder = order;
+
   if (bluetoothCharacteristic) {
-    try {
-      showToast('Đang in phiếu qua Bluetooth...');
-      await printEscPosBluetooth(order);
-      showToast('Đã in phiếu đối chiếu thành công!');
-      return;
-    } catch (err) {
+    showToast('Đang in phiếu qua Bluetooth...');
+    printEscPosBluetooth(order).then(() => {
+      showToast('Đã in phiếu thành công!');
+    }).catch(err => {
       console.warn('Bluetooth print failed, falling back to window.print', err);
-    }
+      executeWindowPrint(order);
+    });
+    return;
   }
 
+  executeWindowPrint(order);
+}
+
+function executeWindowPrint(order) {
+  const receiptHtml = generateReceiptHtml(order);
+
+  // 1. Cập nhật DOM chính cho in thường
   const container = document.getElementById('printable-receipt');
   if (container) {
-    container.innerHTML = generateReceiptHtml(order);
+    container.innerHTML = receiptHtml;
+  }
+
+  // 2. Kiểm tra nếu đang mở trong Zalo WebView (Zalo chặn hoàn toàn hộp thoại in)
+  const isZalo = /Zalo/i.test(navigator.userAgent);
+  if (isZalo) {
+    openMobileReceiptModal(order, receiptHtml, true);
+    return;
+  }
+
+  // 3. Với thiết bị di động (Android / iOS):
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isIOS) {
+      try {
+        window.print();
+      } catch (e) {
+        openMobileReceiptModal(order, receiptHtml, false);
+      }
+    } else {
+      printMobileDirect(receiptHtml, order);
+    }
+  } else {
+    // Desktop: in trực tiếp
+    window.print();
+  }
+}
+
+function printMobileDirect(receiptHtml, order) {
+  let iframe = document.getElementById('pos-print-iframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'pos-print-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '1px';
+    iframe.style.height = '1px';
+    iframe.style.opacity = '0.01';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+  }
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Phiếu Báo Bếp</title>
+      <style>
+        @page { size: 80mm auto; margin: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          margin: 0;
+          padding: 6mm 4mm;
+          font-family: 'Courier New', Courier, monospace, sans-serif;
+          font-size: 13px;
+          line-height: 1.35;
+          color: #000;
+          background: #fff;
+          width: 80mm;
+          max-width: 100%;
+        }
+        .receipt-title { font-size: 15px; font-weight: bold; text-align: center; text-transform: uppercase; margin-bottom: 2px; }
+        .receipt-header { text-align: center; font-size: 11px; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 8px; }
+        .receipt-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        .receipt-table th { border-bottom: 1px dashed #000; text-align: left; padding: 4px 0; font-size: 11px; }
+        .receipt-table td { padding: 3px 0; font-size: 11px; vertical-align: top; }
+        .receipt-divider { border-bottom: 1px dashed #000; margin: 6px 0; }
+        .receipt-summary { width: 100%; margin-top: 4px; }
+        .receipt-summary td { padding: 2px 0; font-size: 12px; }
+        .receipt-total { font-size: 15px; font-weight: bold; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 6px 0; }
+        .receipt-footer { text-align: center; font-size: 11px; margin-top: 12px; padding-top: 6px; }
+      </style>
+    </head>
+    <body>
+      ${receiptHtml}
+    </body>
+    </html>
+  `);
+  doc.close();
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (e) {
+      console.warn('Iframe print error, falling back to window.print:', e);
+      try {
+        window.print();
+      } catch (err) {
+        if (order) openMobileReceiptModal(order, receiptHtml, false);
+      }
+    }
+  }, 100);
+}
+
+function openMobileReceiptModal(order, receiptHtml, isZalo = false) {
+  const modal = document.getElementById('mobileReceiptModal');
+  const tableTitle = document.getElementById('mobileReceiptTableTitle');
+  const content = document.getElementById('mobileReceiptContent');
+  const zaloNotice = document.getElementById('mobileZaloNotice');
+
+  if (tableTitle) tableTitle.innerText = order.table_name || 'Bàn';
+  if (content) content.innerHTML = receiptHtml || generateReceiptHtml(order);
+
+  if (zaloNotice) {
+    if (isZalo) zaloNotice.classList.remove('hidden');
+    else zaloNotice.classList.add('hidden');
+  }
+
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeMobileReceiptModal() {
+  const modal = document.getElementById('mobileReceiptModal');
+  if (modal) modal.classList.add('hidden');
+  showTableFloor();
+}
+
+function triggerDirectSystemPrint() {
+  if (lastPrintedOrder) {
+    const receiptHtml = generateReceiptHtml(lastPrintedOrder);
+    const container = document.getElementById('printable-receipt');
+    if (container) container.innerHTML = receiptHtml;
+    printMobileDirect(receiptHtml, lastPrintedOrder);
+  } else {
     window.print();
   }
 }
