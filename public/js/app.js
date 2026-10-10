@@ -208,6 +208,8 @@ function handleOfflineApi(url, options = {}) {
       token: 'local_token',
       user: { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin' }
     };
+  }
+
   // 14. GET /api/devices
   if (path === '/api/devices') {
     return {
