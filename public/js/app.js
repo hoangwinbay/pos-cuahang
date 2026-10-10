@@ -265,13 +265,12 @@ function getApiBaseUrl() {
 // API Helper with Automatic Offline / Standalone Fallback
 async function api(url, options = {}) {
   const base = getApiBaseUrl();
-  const isZaloOrExternal = window.location.hostname !== 'localhost' && 
-                           window.location.hostname !== '127.0.0.1' && 
-                           !/^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
+  const isZaloCdn = window.location.hostname.includes('zdn.vn') || 
+                    window.location.hostname.includes('zalo.me');
 
   // Neu dang tren Zalo Mini App ma chua cau hinh dia chi may chu laptop:
   // Xu ly ngay bang bo cuc bo de khong bao gio phat sinh loi
-  if (!base && isZaloOrExternal) {
+  if (!base && isZaloCdn) {
     return handleOfflineApi(url, options);
   }
 
