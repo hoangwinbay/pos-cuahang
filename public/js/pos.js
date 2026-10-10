@@ -208,8 +208,15 @@ function connectTableEventSource() {
           updateConnectedDeviceBadgeUI(payload.connected_devices_count);
         }
         if (payload.type === 'print_job' && payload.print_order) {
+          const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+          // Bỏ qua nếu chính thiết bị này phát ra lệnh in (tránh laptop tự in lại lần 2)
+          if (myDevId && payload.sender_device_id && payload.sender_device_id === myDevId) {
+            return;
+          }
           const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
           if (!isMobile) {
+            if (Date.now() - (window._lastPrintTimestamp || 0) < 2500) return;
+            window._lastPrintTimestamp = Date.now();
             console.log('Quầy nhận lệnh in tự động từ di động:', payload.print_order);
             showToast(`Đang in phiếu cho ${payload.print_order.table_name || 'Bàn'}...`, 'info');
             printViaIsolatedIframe(generateReceiptHtml(payload.print_order));
@@ -1120,7 +1127,19 @@ function executePrintKitchenSlip() {
 
   // 2. KÍCH HOẠT IN NGAY LẬP TỨC (ĐỒNG BỘ TRONG USER GESTURE ĐỂ TRÌNH DUYỆT DI ĐỘNG KHÔNG BỊ CHẶN)
   printReceipt(orderForPrint);
-  api('/api/print-job', { method: 'POST', body: JSON.stringify({ order: orderForPrint }) }).catch(() => {});
+
+  // Chỉ phát lệnh in từ xa lên quầy nếu đang thao tác trên thiết bị di động (Zalo Mini App / điện thoại)
+  const isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileDev) {
+    const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+    api('/api/print-job', {
+      method: 'POST',
+      body: JSON.stringify({
+        order: orderForPrint,
+        sender_device_id: myDevId
+      })
+    }).catch(() => {});
+  }
 
   // 3. ĐỒNG BỘ NỀN LÊN SERVER (NON-BLOCKING)
   api('/api/tables/order', {
@@ -1428,6 +1447,7 @@ async function completeCheckoutOrder() {
         quantity: item.quantity
       })),
       table_name: `${currentTable} (${sourceLabel})`,
+      raw_table_name: currentTable,
       note: note,
       payment_method: 'cash',
       cash_given: totalAmount
@@ -1437,6 +1457,11 @@ async function completeCheckoutOrder() {
       method: 'POST',
       body: JSON.stringify(payload)
     });
+
+    // XÓA ĐƠN CỦA BÀN VÀ TRẢ BÀN VỀ TRẠNG THÁI TRỐNG TRÊN CẢ CLIENT VÀ SERVER
+    delete state.tableOrders[currentTable];
+    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    await deleteTableOrderOnServer(currentTable);
 
     closeCheckoutModal();
     closeTableCartDrawer();
@@ -1449,10 +1474,6 @@ async function completeCheckoutOrder() {
     } catch (e) {}
 
     showToast(`Đã thanh toán ${currentTable}, bàn đã trống!`);
-
-    // XÓA ĐƠN CỦA BÀN VÀ TRẢ BÀN VỀ TRẠNG THÁI TRỐNG
-    delete state.tableOrders[currentTable];
-    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
 
     // Quay lại màn hình Sơ Đồ Bàn (bàn sẽ chuyển sang màu xám trống)
     showTableFloor();
@@ -1706,6 +1727,11 @@ async function printEscPosBluetooth(order) {
 let lastPrintedOrder = null;
 
 function printReceipt(order) {
+  if (Date.now() - (window._lastPrintTimestamp || 0) < 2000) {
+    console.log('Chặn in trùng lặp trong 2s');
+    return;
+  }
+  window._lastPrintTimestamp = Date.now();
   lastPrintedOrder = order;
 
   if (bluetoothCharacteristic) {
@@ -1989,13 +2015,15 @@ function triggerDirectSystemPrint() {
     showToast('Chưa có thông tin phiếu!', 'error');
     return;
   }
+  if (Date.now() - (window._lastPrintTimestamp || 0) < 2000) return;
+  window._lastPrintTimestamp = Date.now();
   const receiptHtml = generateReceiptHtml(lastPrintedOrder);
   try {
     window.print();
   } catch (e) {
-    console.warn('Lỗi gọi window.print từ modal:', e);
+    console.warn('Lỗi gọi window.print từ modal, chuyển sang iframe:', e);
+    printViaIsolatedIframe(receiptHtml);
   }
-  printViaIsolatedIframe(receiptHtml);
 }
 
 function copyReceiptTextToClipboard() {

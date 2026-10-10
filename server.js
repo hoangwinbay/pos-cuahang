@@ -627,15 +627,19 @@ app.post('/api/orders', (req, res) => {
 
       db.exec('COMMIT;');
 
-      if (table_name) {
+      if (table_name || req.body.raw_table_name) {
         try {
-          db.prepare('DELETE FROM active_table_orders WHERE table_name = ?').run(table_name);
+          const rawTable = req.body.raw_table_name || table_name;
+          const cleanTableName = rawTable.replace(/\s*\([^)]*\)\s*$/, '').trim();
+          db.prepare('DELETE FROM active_table_orders WHERE table_name = ? OR table_name = ? OR table_name = ?').run(table_name, rawTable, cleanTableName);
           broadcastTableUpdate({
             type: 'table_order_cleared',
-            table_name: table_name,
+            table_name: cleanTableName || rawTable,
             all_table_orders: getAllActiveTableOrders()
           });
-        } catch (e) {}
+        } catch (e) {
+          console.error('Lỗi dọn bàn active_table_orders:', e);
+        }
       }
 
       const createdOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
@@ -1192,16 +1196,17 @@ app.post('/api/tables/order', (req, res) => {
 app.delete('/api/tables/order/:tableName', (req, res) => {
   try {
     const tableName = decodeURIComponent(req.params.tableName);
-    db.prepare('DELETE FROM active_table_orders WHERE table_name = ?').run(tableName);
+    const cleanTableName = tableName.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    db.prepare('DELETE FROM active_table_orders WHERE table_name = ? OR table_name = ?').run(tableName, cleanTableName);
 
     const allOrders = getAllActiveTableOrders();
     broadcastTableUpdate({
       type: 'table_order_cleared',
-      table_name: tableName,
+      table_name: cleanTableName || tableName,
       all_table_orders: allOrders
     });
 
-    res.json({ success: true, table_name: tableName });
+    res.json({ success: true, table_name: cleanTableName || tableName });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1232,10 +1237,11 @@ app.post('/api/tables/custom', (req, res) => {
 // 6. POST /api/print-job: Nhận lệnh in từ thiết bị di động / Zalo Mini App và phát tới máy in tại quầy
 app.post('/api/print-job', (req, res) => {
   try {
-    const { order } = req.body;
+    const { order, sender_device_id } = req.body;
     if (!order) return res.status(400).json({ error: 'Thiếu thông tin đơn hàng để in!' });
     broadcastTableUpdate({
       type: 'print_job',
+      sender_device_id: sender_device_id || null,
       print_order: order
     });
     res.json({ success: true, message: 'Đã phát lệnh in thành công tới máy tính quầy!' });

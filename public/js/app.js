@@ -101,6 +101,16 @@ function handleOfflineApi(url, options = {}) {
 
     localOrders.unshift(newOrder);
     localStorage.setItem('pos_local_orders', JSON.stringify(localOrders.slice(0, 100)));
+
+    if (body.table_name || body.raw_table_name) {
+      const raw = body.raw_table_name || body.table_name;
+      const clean = raw.replace(/\s*\([^)]*\)\s*$/, '').trim();
+      delete state.tableOrders[body.table_name];
+      delete state.tableOrders[raw];
+      delete state.tableOrders[clean];
+      localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    }
+
     return { success: true, ...newOrder };
   }
 
@@ -123,7 +133,9 @@ function handleOfflineApi(url, options = {}) {
   if (path.startsWith('/api/tables/order') && method === 'DELETE') {
     const tableName = decodeURIComponent(path.replace('/api/tables/order/', ''));
     if (tableName) {
+      const clean = tableName.replace(/\s*\([^)]*\)\s*$/, '').trim();
       delete state.tableOrders[tableName];
+      delete state.tableOrders[clean];
       localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
     }
     return { success: true };
