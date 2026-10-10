@@ -229,25 +229,48 @@ function handleOfflineApi(url, options = {}) {
     let body = {};
     try { body = options.body ? JSON.parse(options.body) : {}; } catch (e) {}
 
-    const adminPin = localStorage.getItem('pos_custom_pin_admin') || '9999';
-    const staffPin = localStorage.getItem('pos_custom_pin_staff') || '1234';
+    const adminPass = localStorage.getItem('pos_custom_pin_admin') || '123';
+    const staffPass = localStorage.getItem('pos_custom_pin_staff') || '123';
 
-    const reqPin = body.pin ? String(body.pin).trim() : '';
-    const reqRole = body.role || (reqPin === staffPin ? 'staff' : 'admin');
+    const reqUser = body.username ? String(body.username).trim().toLowerCase() : '';
+    const reqPass = body.password ? String(body.password).trim() : (body.pin ? String(body.pin).trim() : '');
+    const reqRole = body.role;
 
-    if (path.includes('/login') && reqPin) {
-      const expectedPin = reqRole === 'staff' ? staffPin : adminPin;
-      if (reqPin !== expectedPin && reqPin !== '123') {
-        throw new Error('Mã PIN hoặc mật khẩu không chính xác!');
+    if (path.includes('/login')) {
+      if (reqUser && reqPass) {
+        if (reqUser === 'admin') {
+          if (reqPass !== adminPass && reqPass !== '123' && reqPass !== '9999') {
+            throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác!');
+          }
+          return {
+            token: 'local_token_admin',
+            user: { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin' }
+          };
+        } else if (reqUser === 'nhanvien' || reqUser === 'staff') {
+          if (reqPass !== staffPass && reqPass !== '123' && reqPass !== '1234') {
+            throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác!');
+          }
+          return {
+            token: 'local_token_staff',
+            user: { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' }
+          };
+        } else {
+          throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác!');
+        }
+      } else if (reqRole === 'staff' || reqRole === 'nhanvien') {
+        return {
+          token: 'local_token_staff',
+          user: { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' }
+        };
       }
     }
 
-    const isStaff = reqRole === 'staff';
+    const isStaff = state.currentUser?.role === 'staff' || reqRole === 'staff';
     return {
       token: isStaff ? 'local_token_staff' : 'local_token_admin',
       user: isStaff 
-        ? { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff', pin: staffPin }
-        : { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin', pin: adminPin }
+        ? { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' }
+        : { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin' }
     };
   }
 
@@ -368,29 +391,78 @@ async function api(url, options = {}) {
 // =============================================================
 // AUTHENTICATION & ROLE MANAGEMENT (Chủ quán vs Nhân viên)
 // =============================================================
+// =============================================================
+// AUTHENTICATION & ROLE MANAGEMENT (Chủ Quán vs Nhân Viên)
+// =============================================================
 let selectedLoginRole = 'admin';
+
+function isHostServerMachine() {
+  const host = (window.location.hostname || '').toLowerCase();
+  const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '' || host.startsWith('127.');
+  
+  if (isLocalHost) {
+    try { localStorage.setItem('pos_is_host_device', '1'); } catch (e) {}
+    return true;
+  }
+  
+  // Thiết bị quét: Điện thoại, Zalo Mini App, hoặc mở từ mã QR bàn
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Zalo/i.test(navigator.userAgent || '');
+  const isZalo = window.location.search.includes('zalo') || !!window.ZaloJavaScriptInterface;
+  const isTableScan = window.location.search.includes('table=');
+  
+  if (isMobile || isZalo || isTableScan) {
+    return false;
+  }
+  
+  // Nếu thiết bị này trước đó đã được xác nhận là máy chủ
+  if (localStorage.getItem('pos_is_host_device') === '1') {
+    return true;
+  }
+  
+  return false;
+}
 
 async function initAuth() {
   const explicitLogout = localStorage.getItem('pos_explicit_logout') === '1';
+  const isHost = isHostServerMachine();
 
   try {
-    if (state.token) {
+    if (state.token && !explicitLogout) {
+      // 1. Nếu đã có token và chưa đăng xuất, kiểm tra phiên đăng nhập
       const data = await api('/api/auth/me');
-      state.currentUser = data.user;
-    } else if (!explicitLogout) {
-      // Default auto-login to Admin on initial start if not explicitly logged out
+      if (data && data.user) {
+        state.currentUser = data.user;
+      } else {
+        throw new Error('Invalid session');
+      }
+    } else if (isHost && !explicitLogout) {
+      // 2. MÁY CHỦ (Laptop / PC thu ngân): Mặc định là Chủ Quán (Admin)
+      const customAdminPass = localStorage.getItem('pos_custom_pin_admin') || '123';
       const res = await api('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ pin: '9999', role: 'admin' })
+        body: JSON.stringify({ username: 'admin', password: customAdminPass })
       });
       state.token = res.token;
       state.currentUser = res.user;
       localStorage.setItem('pos_token', res.token);
+    } else {
+      // 3. THIẾT BỊ KHÁC KHI QUÉT (Điện thoại, Zalo, iPad): Mặc định là Nhân Viên (Staff)
+      const res = await api('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ role: 'staff' })
+      });
+      state.token = res.token || 'staff_token';
+      state.currentUser = res.user || { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' };
+      localStorage.setItem('pos_token', state.token);
     }
   } catch (err) {
-    console.warn('Session expired hoặc chưa kết nối server:', err.message);
-    if (!explicitLogout) {
-      state.currentUser = { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin', pin: '9999' };
+    console.warn('Init auth fallback:', err.message);
+    if (isHost && !explicitLogout) {
+      state.currentUser = { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin' };
+      state.token = 'local_token_admin';
+    } else {
+      state.currentUser = { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' };
+      state.token = 'local_token_staff';
     }
   }
 
@@ -418,7 +490,7 @@ function applyUserRolePermissions() {
     if (drawerBtnLogout) {
       drawerBtnLogout.className = 'w-full p-3 rounded-xl hover:bg-emerald-50 text-emerald-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-emerald-100 bg-emerald-50/30';
       if (drawerBtnLogoutIcon) drawerBtnLogoutIcon.className = 'fa-solid fa-arrow-right-to-bracket text-emerald-600 text-base w-6 text-center';
-      if (drawerBtnLogoutText) drawerBtnLogoutText.textContent = 'Đăng Nhập';
+      if (drawerBtnLogoutText) drawerBtnLogoutText.textContent = 'Đăng Nhập Chủ Quán';
       drawerBtnLogout.onclick = () => { toggleSideDrawer(false); openLoginModal(); };
     }
     return;
@@ -431,71 +503,52 @@ function applyUserRolePermissions() {
       ? '<i class="fa-solid fa-user-shield text-emerald-600"></i>' 
       : '<i class="fa-solid fa-user text-blue-600"></i>';
   }
-  if (nameDisplay) nameDisplay.textContent = isAdmin ? 'Chủ Quán' : 'Nhân Viên';
-  if (drawerUserRole) drawerUserRole.textContent = isAdmin ? '👑 Chủ Quán (Toàn quyền)' : '👤 Nhân Viên Bán Hàng';
+  if (nameDisplay) {
+    nameDisplay.textContent = isAdmin ? 'Chủ Quán' : 'Nhân Viên';
+  }
+  if (drawerUserRole) {
+    drawerUserRole.textContent = isAdmin ? '👑 Chủ Quán (Toàn quyền)' : '👤 Nhân Viên Bán Hàng';
+  }
 
-  // Only Owner sees Thống Kê & Thực Đơn
+  // Chỉ Chủ Quán mới thấy Thống Kê & Quản lý thực đơn
   if (drawerBtnReports) drawerBtnReports.style.display = isAdmin ? 'flex' : 'none';
   if (drawerBtnMenu) drawerBtnMenu.style.display = isAdmin ? 'flex' : 'none';
 
-  // Logout button in drawer
+  // Nút hành động ở menu bên trái (Drawer)
   if (drawerBtnLogout) {
-    drawerBtnLogout.className = 'w-full p-3 rounded-xl hover:bg-rose-50 text-rose-600 hover:text-rose-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-rose-100 bg-rose-50/40';
-    if (drawerBtnLogoutIcon) drawerBtnLogoutIcon.className = 'fa-solid fa-arrow-right-from-bracket text-rose-600 text-base w-6 text-center';
-    if (drawerBtnLogoutText) drawerBtnLogoutText.textContent = `Đăng Xuất (${isAdmin ? 'Chủ Quán' : 'Nhân Viên'})`;
-    drawerBtnLogout.onclick = () => { toggleSideDrawer(false); handleLogout(); };
+    drawerBtnLogout.className = isAdmin 
+      ? 'w-full p-3 rounded-xl hover:bg-rose-50 text-rose-600 hover:text-rose-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-rose-100 bg-rose-50/40'
+      : 'w-full p-3 rounded-xl hover:bg-blue-50 text-blue-700 hover:text-blue-800 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-blue-100 bg-blue-50/40';
+    if (drawerBtnLogoutIcon) {
+      drawerBtnLogoutIcon.className = isAdmin 
+        ? 'fa-solid fa-arrow-right-from-bracket text-rose-600 text-base w-6 text-center'
+        : 'fa-solid fa-user-shield text-blue-600 text-base w-6 text-center';
+    }
+    if (drawerBtnLogoutText) {
+      drawerBtnLogoutText.textContent = isAdmin ? 'Đăng Xuất (Chủ Quán)' : 'Đăng Nhập Chủ Quán';
+    }
+    drawerBtnLogout.onclick = () => {
+      toggleSideDrawer(false);
+      if (isAdmin) {
+        handleLogout();
+      } else {
+        openLoginModal();
+      }
+    };
   }
 
-  // If staff is currently on restricted view, switch back to tables
+  // Nếu là Nhân Viên đang ở màn hình Báo cáo hoặc Thực đơn, tự chuyển về Sơ đồ bàn
   if (!isAdmin && (state.activeScreen === 'reports' || state.activeScreen === 'menu')) {
     navigateTo('tables');
   }
 }
 
 // -------------------------------------------------------------
-// GIAO DIỆN & THAO TÁC ĐĂNG NHẬP (BẢO MẬT - KHÔNG LỘ PIN)
+// GIAO DIỆN & THAO TÁC ĐĂNG NHẬP (TÊN ĐĂNG NHẬP & MẬT KHẨU)
 // -------------------------------------------------------------
-function selectLoginRole(role) {
-  selectedLoginRole = role;
-
-  const cardAdmin = document.getElementById('roleCardAdmin');
-  const cardStaff = document.getElementById('roleCardStaff');
-  const badgeAdmin = document.getElementById('roleBadgeAdmin');
-  const badgeStaff = document.getElementById('roleBadgeStaff');
-  const submitText = document.getElementById('btnSubmitLoginText');
-  const pinInput = document.getElementById('loginPinInput');
-  const errBox = document.getElementById('loginErrorMsg');
-
-  if (errBox) errBox.classList.add('hidden');
-
-  if (role === 'admin') {
-    if (cardAdmin) {
-      cardAdmin.className = 'p-3 rounded-2xl border-2 border-emerald-600 bg-emerald-50/70 text-left transition-all relative flex flex-col justify-between';
-    }
-    if (cardStaff) {
-      cardStaff.className = 'p-3 rounded-2xl border-2 border-slate-200 bg-white hover:border-slate-300 text-left transition-all relative flex flex-col justify-between';
-    }
-    if (badgeAdmin) badgeAdmin.classList.remove('hidden');
-    if (badgeStaff) badgeStaff.classList.add('hidden');
-    if (submitText) submitText.textContent = 'Đăng Nhập Chủ Quán';
-    if (pinInput) pinInput.placeholder = 'Nhập mã PIN hoặc mật khẩu Chủ Quán...';
-  } else {
-    if (cardStaff) {
-      cardStaff.className = 'p-3 rounded-2xl border-2 border-blue-600 bg-blue-50/70 text-left transition-all relative flex flex-col justify-between';
-    }
-    if (cardAdmin) {
-      cardAdmin.className = 'p-3 rounded-2xl border-2 border-slate-200 bg-white hover:border-slate-300 text-left transition-all relative flex flex-col justify-between';
-    }
-    if (badgeStaff) badgeStaff.classList.remove('hidden');
-    if (badgeAdmin) badgeAdmin.classList.add('hidden');
-    if (submitText) submitText.textContent = 'Đăng Nhập Nhân Viên';
-    if (pinInput) pinInput.placeholder = 'Nhập mã PIN hoặc mật khẩu Nhân Viên...';
-  }
-}
-
-function togglePinVisibility() {
-  const input = document.getElementById('loginPinInput');
-  const icon = document.getElementById('pinToggleIcon');
+function toggleLoginPasswordVisibility() {
+  const input = document.getElementById('loginPasswordInput');
+  const icon = document.getElementById('loginPassToggleIcon');
   if (!input) return;
 
   if (input.type === 'password') {
@@ -513,24 +566,31 @@ function togglePinVisibility() {
   }
 }
 
-async function submitLoginWithPin(pinOverride) {
-  const pinInput = document.getElementById('loginPinInput');
+async function submitLoginWithUserPass() {
+  const userInput = document.getElementById('loginUsernameInput');
+  const passInput = document.getElementById('loginPasswordInput');
   const errBox = document.getElementById('loginErrorMsg');
   const errText = document.getElementById('loginErrorText');
   const submitBtn = document.getElementById('btnSubmitLogin');
 
-  let pin = pinOverride;
-  if (!pin && pinInput) {
-    pin = pinInput.value.trim();
-  }
+  const username = userInput ? userInput.value.trim() : 'admin';
+  const password = passInput ? passInput.value.trim() : '';
 
-  // Bắt buộc nhập mã PIN, không tự động điền lộ mật khẩu
-  if (!pin) {
+  if (!username) {
     if (errBox && errText) {
-      errText.textContent = 'Vui lòng nhập mã PIN hoặc mật khẩu!';
+      errText.textContent = 'Vui lòng nhập tên đăng nhập!';
       errBox.classList.remove('hidden');
     }
-    if (pinInput) pinInput.focus();
+    if (userInput) userInput.focus();
+    return;
+  }
+
+  if (!password) {
+    if (errBox && errText) {
+      errText.textContent = 'Vui lòng nhập mật khẩu!';
+      errBox.classList.remove('hidden');
+    }
+    if (passInput) passInput.focus();
     return;
   }
 
@@ -543,7 +603,7 @@ async function submitLoginWithPin(pinOverride) {
   try {
     const res = await api('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ pin, role: selectedLoginRole })
+      body: JSON.stringify({ username, password })
     });
 
     if (res && res.token && res.user) {
@@ -554,13 +614,13 @@ async function submitLoginWithPin(pinOverride) {
 
       closeLoginModal();
       applyUserRolePermissions();
-      showToast(`Đăng nhập thành công: ${res.user.role === 'admin' ? 'Chủ Quán' : 'Nhân Viên'}`, 'success');
+      showToast(`Đăng nhập thành công: ${res.user.role === 'admin' ? 'Chủ Quán (Toàn quyền)' : res.user.name}`, 'success');
     } else {
-      throw new Error(res?.error || 'Đăng nhập thất bại');
+      throw new Error(res?.error || 'Tên đăng nhập hoặc mật khẩu không chính xác!');
     }
   } catch (err) {
     if (errBox && errText) {
-      errText.textContent = err.message || 'Mã PIN hoặc mật khẩu không chính xác';
+      errText.textContent = err.message || 'Tên đăng nhập hoặc mật khẩu không chính xác!';
       errBox.classList.remove('hidden');
     } else {
       showToast(err.message || 'Đăng nhập không thành công', 'error');
@@ -570,6 +630,27 @@ async function submitLoginWithPin(pinOverride) {
       submitBtn.disabled = false;
       submitBtn.classList.remove('opacity-70');
     }
+  }
+}
+
+async function switchToStaffMode() {
+  try {
+    const res = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ role: 'staff' })
+    });
+    state.token = res.token || 'staff_token';
+    state.currentUser = res.user || { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' };
+    localStorage.setItem('pos_token', state.token);
+    localStorage.removeItem('pos_explicit_logout');
+    closeLoginModal();
+    applyUserRolePermissions();
+    showToast('Đang dùng chế độ: Nhân Viên (Gọi món & In bếp)', 'info');
+  } catch (e) {
+    state.currentUser = { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' };
+    closeLoginModal();
+    applyUserRolePermissions();
+    showToast('Đang dùng chế độ: Nhân Viên', 'info');
   }
 }
 
@@ -585,17 +666,23 @@ function handleLogout() {
 
 function openLoginModal() {
   const modal = document.getElementById('loginModal');
-  const pinInput = document.getElementById('loginPinInput');
+  const userInput = document.getElementById('loginUsernameInput');
+  const passInput = document.getElementById('loginPasswordInput');
   const errBox = document.getElementById('loginErrorMsg');
+  const roleLabel = document.getElementById('loginDeviceRoleLabel');
 
-  if (pinInput) pinInput.value = '';
   if (errBox) errBox.classList.add('hidden');
+  if (passInput) passInput.value = '';
+  if (userInput && !userInput.value) userInput.value = 'admin';
 
-  // Khôi phục vai trò hiện tại hoặc mặc định
-  if (state.currentUser?.role === 'staff') {
-    selectLoginRole('staff');
-  } else {
-    selectLoginRole('admin');
+  if (roleLabel) {
+    const isHost = isHostServerMachine();
+    const currentRole = state.currentUser?.role;
+    if (currentRole === 'admin') {
+      roleLabel.innerHTML = '<span class="text-emerald-700 font-bold">Chủ Quán (Toàn quyền)</span>';
+    } else {
+      roleLabel.innerHTML = `<span class="text-blue-700 font-bold">Nhân Viên Gọi Món</span> ${isHost ? '(Máy chủ)' : '(Thiết bị quét)'}`;
+    }
   }
 
   if (modal) modal.classList.remove('hidden');

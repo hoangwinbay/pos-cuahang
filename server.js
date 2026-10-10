@@ -147,29 +147,30 @@ app.post('/api/auth/login', (req, res) => {
     const { username, password, pin, role } = req.body;
 
     let user = null;
-    if (pin) {
-      const pinStr = String(pin).trim();
-      // 1. Check direct PIN
-      user = db.prepare('SELECT * FROM users WHERE pin = ? AND active = 1').get(pinStr);
-      // 2. Check if entered PIN matches password for selected role
-      if (!user && role) {
-        user = db.prepare('SELECT * FROM users WHERE (role = ? OR username = ?) AND password = ? AND active = 1').get(role, role, pinStr);
-      } else if (!user) {
-        user = db.prepare('SELECT * FROM users WHERE password = ? AND active = 1').get(pinStr);
-      }
-    } else if (username && password) {
-      // Login via username & password
-      user = db.prepare('SELECT * FROM users WHERE username = ? AND active = 1').get(username.trim().toLowerCase());
-      if (user && user.password !== password) {
+    if (username && password) {
+      // 1. Đăng nhập bằng Tên đăng nhập & Mật khẩu
+      const cleanUser = String(username).trim().toLowerCase();
+      const cleanPass = String(password).trim();
+      user = db.prepare('SELECT * FROM users WHERE LOWER(username) = ? AND active = 1').get(cleanUser);
+      if (user && user.password !== cleanPass && user.pin !== cleanPass) {
         user = null;
       }
-    } else if (role) {
-      const targetRole = role === 'staff' || role === 'nhanvien' ? 'staff' : 'admin';
-      user = db.prepare('SELECT * FROM users WHERE role = ? AND active = 1').get(targetRole);
+    } else if (pin) {
+      // 2. Đăng nhập bằng mã PIN
+      const pinStr = String(pin).trim();
+      user = db.prepare('SELECT * FROM users WHERE pin = ? AND active = 1').get(pinStr);
+      if (!user && role) {
+        user = db.prepare('SELECT * FROM users WHERE (role = ? OR username = ?) AND (password = ? OR pin = ?) AND active = 1').get(role, role, pinStr, pinStr);
+      } else if (!user) {
+        user = db.prepare('SELECT * FROM users WHERE (password = ? OR pin = ?) AND active = 1').get(pinStr, pinStr);
+      }
+    } else if (role === 'staff' || role === 'nhanvien') {
+      // 3. Thiết bị quét mặc định vào quyền Nhân Viên (không cần mật khẩu)
+      user = db.prepare('SELECT * FROM users WHERE role = "staff" AND active = 1').get();
     }
 
     if (!user) {
-      return res.status(401).json({ error: 'Mã PIN hoặc mật khẩu không chính xác' });
+      return res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không chính xác' });
     }
 
     const token = generateToken(user);
@@ -199,8 +200,8 @@ app.get('/api/auth/me', (req, res) => {
 app.post('/api/auth/change-pin', (req, res) => {
   try {
     const { role, oldPin, newPin } = req.body;
-    if (!newPin || String(newPin).trim().length < 4) {
-      return res.status(400).json({ error: 'Mã PIN mới phải có ít nhất 4 chữ số hoặc ký tự!' });
+    if (!newPin || String(newPin).trim().length < 3) {
+      return res.status(400).json({ error: 'Mã PIN hoặc mật khẩu mới phải có ít nhất 3 ký tự!' });
     }
 
     const targetRole = role === 'staff' || role === 'nhanvien' ? 'staff' : 'admin';
