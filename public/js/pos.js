@@ -17,6 +17,82 @@ function isActualImage(str) {
 let tableEventSource = null;
 let syncDebounceTimers = {};
 
+// =============================================================
+// OFFLINE QUEUE & AUTO-RETRY (BẢO VỆ ĐƠN KHI MẠNG YẾU/MẤT KẾT NỐI)
+// =============================================================
+function getOfflineQueue() {
+  try {
+    return JSON.parse(localStorage.getItem('pos_offline_orders') || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveOfflineQueue(queue) {
+  localStorage.setItem('pos_offline_orders', JSON.stringify(queue));
+}
+
+function queueOfflineOrder(tableName, orderData) {
+  const queue = getOfflineQueue();
+  const existingIdx = queue.findIndex(q => q.tableName === tableName);
+  if (existingIdx !== -1) {
+    queue[existingIdx] = { tableName, orderData, timestamp: Date.now() };
+  } else {
+    queue.push({ tableName, orderData, timestamp: Date.now() });
+  }
+  saveOfflineQueue(queue);
+  updateSyncIndicator(false);
+}
+
+let isSyncingOffline = false;
+async function syncOfflineQueue() {
+  if (isSyncingOffline || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
+  const queue = getOfflineQueue();
+  if (queue.length === 0) return;
+
+  isSyncingOffline = true;
+  const remaining = [];
+
+  for (const item of queue) {
+    try {
+      await api('/api/tables/order', {
+        method: 'POST',
+        body: JSON.stringify({
+          table_name: item.tableName,
+          order_data: item.orderData,
+          check_conflict: false
+        })
+      });
+      console.log(`Đã gửi lại thành công đơn offline của ${item.tableName}`);
+    } catch (err) {
+      console.warn(`Chưa gửi được đơn offline của ${item.tableName}, sẽ thử lại sau:`, err);
+      remaining.push(item);
+    }
+  }
+
+  saveOfflineQueue(remaining);
+  isSyncingOffline = false;
+
+  if (remaining.length === 0) {
+    updateSyncIndicator(true);
+    showToast('Tất cả đơn đặt lúc mất mạng đã được đồng bộ lên máy chủ!', 'success');
+  }
+}
+
+window.addEventListener('online', () => {
+  console.log('Thiết bị có mạng trở lại, đang đồng bộ dữ liệu...');
+  syncOfflineQueue();
+  fetchAndApplyTableSync();
+});
+
+window.addEventListener('offline', () => {
+  console.warn('Thiết bị mất kết nối mạng!');
+  updateSyncIndicator(false);
+  showToast('Thiết bị đang offline. Đơn hàng sẽ được lưu tạm trên máy.', 'warning');
+});
+
+setInterval(syncOfflineQueue, 15000);
+
 function syncTableOrderToServer(tableName, immediate = false) {
   if (syncDebounceTimers[tableName]) {
     clearTimeout(syncDebounceTimers[tableName]);
@@ -37,7 +113,11 @@ function syncTableOrderToServer(tableName, immediate = false) {
         })
       });
     } catch (e) {
-      console.warn('Đồng bộ bàn lên server thất bại:', e);
+      console.warn('Đồng bộ bàn lên server thất bại, lưu hàng đợi:', e);
+      const orderData = state.tableOrders[tableName];
+      if (orderData && orderData.items && orderData.items.length > 0) {
+        queueOfflineOrder(tableName, orderData);
+      }
     }
   };
 
@@ -872,7 +952,7 @@ function cancelAndClearKitchenSlip() {
 }
 
 // Khi người dùng bấm "In Báo Bếp"
-function executePrintKitchenSlip() {
+async function executePrintKitchenSlip() {
   const currentTable = state.currentTable;
   const tableOrder = state.tableOrders[currentTable];
   const items = tableOrder?.items || [];
@@ -898,9 +978,31 @@ function executePrintKitchenSlip() {
   const kitchenCode = tableOrder.orderCode || `BEP-${dateStr}-${String(Math.floor(100 + Math.random() * 900))}`;
   tableOrder.orderCode = kitchenCode;
 
-  // Lưu trạng thái bàn vào localStorage và đồng bộ ngay lập tức lên server cho mọi máy khác
-  localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
-  syncTableOrderToServer(currentTable, true);
+  // 1. KIỂM TRA XUNG ĐỘT TRÙNG BÀN TRƯỚC KHI IN (Race Condition Check)
+  try {
+    const res = await api('/api/tables/order', {
+      method: 'POST',
+      body: JSON.stringify({
+        table_name: currentTable,
+        order_data: tableOrder,
+        check_conflict: true
+      })
+    });
+    // Lưu vào local sau khi server chấp thuận
+    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+  } catch (err) {
+    if (err.status === 409 || err.data?.conflict) {
+      // Bàn đã bị máy khác đặt trước lúc mạng lag!
+      closeKitchenConfirmModal();
+      showTableConflictModal(err.data || { table_name: currentTable, incoming_order: tableOrder });
+      return;
+    }
+    // Mất mạng hoàn toàn: lưu hàng đợi offline
+    console.warn('Mất kết nối mạng khi in bếp, lưu vào hàng đợi offline:', err);
+    queueOfflineOrder(currentTable, tableOrder);
+    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    showToast('Mạng yếu! Đơn đã lưu tạm trên máy và sẽ tự động gửi khi có mạng lại.', 'warning');
+  }
 
   const orderForPrint = {
     order_code: kitchenCode,
@@ -925,6 +1027,214 @@ function executePrintKitchenSlip() {
 
   printReceipt(orderForPrint);
   showToast(`Đã in phiếu ${currentTable} chuyển cho bếp!`);
+  showTableFloor();
+}
+
+// =============================================================
+// XỬ LÝ XUNG ĐỘT TRÙNG BÀN (CONFLICT RESOLUTION)
+// =============================================================
+let pendingConflictData = null;
+
+function showTableConflictModal(data) {
+  pendingConflictData = data;
+  const tableName = data.table_name || state.currentTable;
+  const existingOrder = data.existing_order || {};
+  const incomingOrder = data.incoming_order || state.tableOrders[tableName] || {};
+
+  const tableNameEl = document.getElementById('conflictTableName');
+  if (tableNameEl) tableNameEl.innerText = tableName;
+
+  // Render các món đang có trên bàn (từ máy trước gửi lên)
+  const existingContainer = document.getElementById('conflictExistingItems');
+  const existingTotalEl = document.getElementById('conflictExistingTotal');
+  if (existingContainer) {
+    const exItems = existingOrder.items || [];
+    if (exItems.length === 0) {
+      existingContainer.innerHTML = '<div class="text-slate-400 py-2 italic text-center">Không có món</div>';
+    } else {
+      existingContainer.innerHTML = exItems.map(it => `
+        <div class="py-1 flex justify-between items-center text-slate-700">
+          <span class="font-medium truncate mr-1">${it.name || it.product_name}</span>
+          <span class="font-bold shrink-0 text-slate-900">x${it.quantity}</span>
+        </div>
+      `).join('');
+    }
+    const exTotal = exItems.reduce((s, it) => s + (it.price * it.quantity), 0);
+    if (existingTotalEl) existingTotalEl.innerText = formatMoney(exTotal);
+  }
+
+  // Render các món máy này vừa chọn
+  const incomingContainer = document.getElementById('conflictIncomingItems');
+  const incomingTotalEl = document.getElementById('conflictIncomingTotal');
+  if (incomingContainer) {
+    const incItems = incomingOrder.items || [];
+    incomingContainer.innerHTML = incItems.map(it => `
+      <div class="py-1 flex justify-between items-center text-amber-950">
+        <span class="font-medium truncate mr-1">${it.name}</span>
+        <span class="font-bold shrink-0 text-amber-800">x${it.quantity}</span>
+      </div>
+    `).join('');
+    const incTotal = incItems.reduce((s, it) => s + (it.price * it.quantity), 0);
+    if (incomingTotalEl) incomingTotalEl.innerText = formatMoney(incTotal);
+  }
+
+  const modal = document.getElementById('tableConflictModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeTableConflictModal() {
+  const modal = document.getElementById('tableConflictModal');
+  if (modal) modal.classList.add('hidden');
+  pendingConflictData = null;
+}
+
+// 1. Gộp món vào bàn này
+async function resolveConflictMerge() {
+  if (!pendingConflictData) return;
+  const tableName = pendingConflictData.table_name || state.currentTable;
+  const incomingOrder = pendingConflictData.incoming_order || state.tableOrders[tableName];
+
+  try {
+    const res = await api('/api/tables/order', {
+      method: 'POST',
+      body: JSON.stringify({
+        table_name: tableName,
+        order_data: incomingOrder,
+        merge: true
+      })
+    });
+
+    if (res.order_data) {
+      state.tableOrders[tableName] = res.order_data;
+      localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    }
+
+    closeTableConflictModal();
+    closeTableCartDrawer();
+
+    // In phiếu các món gọi thêm cho bếp
+    const incItems = incomingOrder.items || [];
+    const incTotal = incItems.reduce((s, it) => s + (it.price * it.quantity), 0);
+    const orderForPrint = {
+      order_code: (state.tableOrders[tableName]?.orderCode || 'BEP-GOP') + '-THEM',
+      created_at: new Date().toISOString(),
+      table_name: tableName + ' (GỘP THÊM)',
+      cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
+      note: incomingOrder.note || 'Gọi thêm',
+      payment_method: 'cash',
+      subtotal: incTotal,
+      discount: 0,
+      total: incTotal,
+      items: incItems.map(item => ({
+        product_name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.price * item.quantity
+      }))
+    };
+    printReceipt(orderForPrint);
+
+    showToast(`Đã gộp món vào ${tableName} và in phiếu báo bếp thành công!`);
+    showTableFloor();
+  } catch (err) {
+    showToast('Lỗi khi gộp món: ' + (err.message || 'Vui lòng thử lại'), 'error');
+  }
+}
+
+// 2. Chuyển sang bàn khác
+function resolveConflictMoveTable() {
+  if (!pendingConflictData) return;
+  const emptyListEl = document.getElementById('conflictEmptyTablesList');
+  if (!emptyListEl) return;
+
+  const currentT = pendingConflictData.table_name;
+  const allTables = state.tableList || [];
+  const emptyTables = allTables.filter(t => {
+    if (t === currentT) return false;
+    const ord = state.tableOrders[t];
+    return !ord || !ord.items || ord.items.length === 0;
+  });
+
+  if (emptyTables.length === 0) {
+    showToast('Hiện tại quán đã hết bàn trống! Vui lòng chọn Gộp món hoặc Hủy.', 'warning');
+    return;
+  }
+
+  emptyListEl.innerHTML = emptyTables.map(t => `
+    <button onclick="selectConflictNewTable('${t}')" class="p-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 border border-slate-200 hover:border-blue-300 rounded-xl flex flex-col items-center justify-center text-center transition-all">
+      <i class="fa-solid fa-chair text-slate-400 text-lg mb-1"></i>
+      <span class="font-bold text-xs text-slate-800">${t}</span>
+    </button>
+  `).join('');
+
+  const modal = document.getElementById('conflictMoveSelectModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeConflictMoveModal() {
+  const modal = document.getElementById('conflictMoveSelectModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+// Khi nhân viên chạm chọn một bàn trống mới
+async function selectConflictNewTable(newTable) {
+  if (!pendingConflictData) return;
+  const oldTable = pendingConflictData.table_name;
+  const incomingOrder = pendingConflictData.incoming_order;
+
+  // Cập nhật đơn vào bàn mới
+  incomingOrder.table_name = newTable;
+  state.tableOrders[newTable] = incomingOrder;
+
+  // Cập nhật bàn cũ theo dữ liệu của máy trước trên server
+  if (pendingConflictData.existing_order) {
+    state.tableOrders[oldTable] = pendingConflictData.existing_order;
+  }
+
+  localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+
+  // Gửi lưu bàn mới lên server
+  try {
+    await api('/api/tables/order', {
+      method: 'POST',
+      body: JSON.stringify({
+        table_name: newTable,
+        order_data: incomingOrder,
+        check_conflict: false
+      })
+    });
+  } catch (e) {
+    queueOfflineOrder(newTable, incomingOrder);
+  }
+
+  closeConflictMoveModal();
+  closeTableConflictModal();
+  closeTableCartDrawer();
+
+  // In phiếu bếp cho bàn mới
+  const items = incomingOrder.items || [];
+  const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const orderForPrint = {
+    order_code: incomingOrder.orderCode || 'BEP-CHUYEN',
+    created_at: new Date().toISOString(),
+    table_name: newTable,
+    cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
+    note: incomingOrder.note || '',
+    payment_method: 'cash',
+    subtotal: totalAmount,
+    discount: 0,
+    total: totalAmount,
+    items: items.map(item => ({
+      product_name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      total: item.price * item.quantity
+    }))
+  };
+  printReceipt(orderForPrint);
+
+  showToast(`Đã chuyển toàn bộ món sang ${newTable} và in phiếu bếp!`);
+  state.currentTable = newTable;
   showTableFloor();
 }
 

@@ -939,13 +939,63 @@ app.get('/api/tables/events', (req, res) => {
   });
 });
 
-// 3. POST /api/tables/order: Cập nhật hoặc lưu đơn của bàn (Đồng bộ tức thì)
+// 3. POST /api/tables/order: Cập nhật hoặc lưu đơn của bàn (Hỗ trợ phát hiện xung đột khi mạng lag)
 app.post('/api/tables/order', (req, res) => {
   try {
-    const { table_name, order_data } = req.body;
+    const { table_name, order_data, check_conflict, merge } = req.body;
     if (!table_name) return res.status(400).json({ error: 'Thiếu tên bàn!' });
 
-    const orderJson = typeof order_data === 'string' ? order_data : JSON.stringify(order_data || {});
+    const incomingOrder = typeof order_data === 'string' ? JSON.parse(order_data || '{}') : (order_data || {});
+
+    // Kiểm tra xem bàn hiện tại đã có đơn chưa
+    const existingRow = db.prepare('SELECT order_data FROM active_table_orders WHERE table_name = ?').get(table_name);
+    let existingOrder = null;
+    if (existingRow && existingRow.order_data) {
+      try {
+        existingOrder = JSON.parse(existingRow.order_data);
+      } catch (e) {}
+    }
+
+    // 1. Kiểm tra xung đột (Race Condition khi 2 máy đặt cùng bàn lúc mạng lag)
+    if (check_conflict && existingOrder && existingOrder.items && existingOrder.items.length > 0) {
+      const existingCode = existingOrder.orderCode;
+      const incomingCode = incomingOrder.orderCode;
+      // Nếu 2 máy có mã order khác nhau -> phát hiện trùng bàn!
+      if (existingCode && incomingCode && existingCode !== incomingCode) {
+        return res.status(409).json({
+          conflict: true,
+          error: `Bàn ${table_name} vừa được nhân viên khác đặt món trước!`,
+          table_name,
+          existing_order: existingOrder,
+          incoming_order: incomingOrder
+        });
+      }
+    }
+
+    let finalOrder = incomingOrder;
+
+    // 2. Xử lý gộp món khi nhân viên xác nhận Gộp (merge: true)
+    if (merge && existingOrder && existingOrder.items && Array.isArray(existingOrder.items)) {
+      const mergedItems = [...existingOrder.items];
+      if (incomingOrder.items && Array.isArray(incomingOrder.items)) {
+        for (const incItem of incomingOrder.items) {
+          const found = mergedItems.find(it => it.id === incItem.id);
+          if (found) {
+            found.quantity = (found.quantity || 1) + (incItem.quantity || 1);
+          } else {
+            mergedItems.push({ ...incItem });
+          }
+        }
+      }
+      finalOrder = {
+        ...existingOrder,
+        items: mergedItems,
+        note: [existingOrder.note, incomingOrder.note].filter(Boolean).join(' | '),
+        updated_at: new Date().toISOString()
+      };
+    }
+
+    const orderJson = JSON.stringify(finalOrder);
 
     const upsert = db.prepare(`
       INSERT INTO active_table_orders (table_name, order_data, updated_at)
@@ -958,11 +1008,11 @@ app.post('/api/tables/order', (req, res) => {
     broadcastTableUpdate({
       type: 'table_order_updated',
       table_name,
-      order_data: JSON.parse(orderJson),
+      order_data: finalOrder,
       all_table_orders: allOrders
     });
 
-    res.json({ success: true, table_name });
+    res.json({ success: true, table_name, order_data: finalOrder });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

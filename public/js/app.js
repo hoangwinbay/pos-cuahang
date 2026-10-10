@@ -81,7 +81,10 @@ async function api(url, options = {}) {
       if (res.status === 401) {
         openLoginModal();
       }
-      throw new Error(data.error || 'Có lỗi xảy ra khi gọi máy chủ');
+      const errorObj = new Error(data.error || data.message || 'Có lỗi xảy ra khi gọi máy chủ');
+      errorObj.status = res.status;
+      errorObj.data = data;
+      throw errorObj;
     }
     return data;
   } catch (err) {

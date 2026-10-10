@@ -475,6 +475,103 @@
   </div>
 
   <!-- ============================================================= -->
+  <!-- MODAL: CẢNH BÁO XUNG ĐỘT TRÙNG BÀN KHI MẠNG YẾU -->
+  <!-- ============================================================= -->
+  <div id="tableConflictModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden modal-enter flex flex-col max-h-[90vh]">
+      <div class="px-4 py-3 bg-amber-500 text-white flex items-center justify-between shrink-0">
+        <h3 class="font-bold text-sm sm:text-base flex items-center">
+          <i class="fa-solid fa-triangle-exclamation mr-2 text-amber-200"></i>
+          <span>Cảnh Báo: Bàn Đã Có Khách Đặt!</span>
+        </h3>
+        <button onclick="closeTableConflictModal()" class="text-white/80 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-4 space-y-3.5 overflow-y-auto text-xs sm:text-sm">
+        <div class="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-xl leading-relaxed text-xs">
+          Do mạng lag, <strong id="conflictTableName" class="text-amber-800 font-bold">Bàn 1</strong> vừa được máy khác gửi đơn in bếp trước ít giây. Hệ thống đã giữ nguyên để không làm mất món của đồng nghiệp.
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <!-- Đơn đã có trên bàn -->
+          <div class="border border-slate-200 rounded-xl p-2.5 bg-slate-50 flex flex-col">
+            <div class="font-bold text-slate-700 mb-1.5 flex items-center text-[11px] uppercase">
+              <i class="fa-solid fa-check text-emerald-600 mr-1"></i> Đơn Đang Có
+            </div>
+            <div id="conflictExistingItems" class="space-y-1 max-h-36 overflow-y-auto text-slate-600 divide-y divide-slate-100 flex-1">
+              <!-- Rendered by JS -->
+            </div>
+            <div id="conflictExistingTotal" class="mt-2 pt-1 border-t border-slate-200 font-bold text-emerald-700 text-right text-[11px]">
+              0 ₫
+            </div>
+          </div>
+
+          <!-- Món nhân viên vừa chọn -->
+          <div class="border border-amber-200 rounded-xl p-2.5 bg-amber-50/50 flex flex-col">
+            <div class="font-bold text-amber-800 mb-1.5 flex items-center text-[11px] uppercase">
+              <i class="fa-solid fa-plus text-amber-600 mr-1"></i> Món Bạn Vừa Chọn
+            </div>
+            <div id="conflictIncomingItems" class="space-y-1 max-h-36 overflow-y-auto text-amber-900 divide-y divide-amber-100/50 flex-1">
+              <!-- Rendered by JS -->
+            </div>
+            <div id="conflictIncomingTotal" class="mt-2 pt-1 border-t border-amber-200 font-bold text-amber-700 text-right text-[11px]">
+              0 ₫
+            </div>
+          </div>
+        </div>
+
+        <div class="text-[11px] text-slate-500 font-medium text-center">
+          Vui lòng chọn hướng xử lý phù hợp cho khách:
+        </div>
+      </div>
+
+      <div class="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row gap-2 shrink-0">
+        <button onclick="resolveConflictMerge()" class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center space-x-1.5 shadow-sm">
+          <i class="fa-solid fa-object-group"></i>
+          <span>Gộp Vào Bàn Này</span>
+        </button>
+        <button onclick="resolveConflictMoveTable()" class="flex-1 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center space-x-1.5 shadow-sm">
+          <i class="fa-solid fa-arrow-right-arrow-left"></i>
+          <span>Đổi Sang Bàn Khác</span>
+        </button>
+        <button onclick="closeTableConflictModal()" class="py-2.5 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs sm:text-sm">
+          <span>Hủy Bỏ</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- MODAL: CHỌN BÀN MỚI KHI CHUYỂN BÀN DO XUNG ĐỘT -->
+  <!-- ============================================================= -->
+  <div id="conflictMoveSelectModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden modal-enter flex flex-col max-h-[85vh]">
+      <div class="px-4 py-3 bg-blue-600 text-white flex items-center justify-between shrink-0">
+        <h3 class="font-bold text-sm flex items-center">
+          <i class="fa-solid fa-chair mr-2"></i>
+          <span>Chọn Bàn Trống Để Chuyển Món</span>
+        </h3>
+        <button onclick="closeConflictMoveModal()" class="text-white/80 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="p-4 overflow-y-auto">
+        <p class="text-xs text-slate-500 mb-3">Chạm vào một bàn đang trống bên dưới để chuyển các món vừa chọn sang:</p>
+        <div id="conflictEmptyTablesList" class="grid grid-cols-3 gap-2.5">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+      <div class="p-3 bg-slate-50 border-t border-slate-200 text-right shrink-0">
+        <button onclick="closeConflictMoveModal()" class="py-2 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs">
+          <span>Quay Lại</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
   <!-- MODAL: XÁC NHẬN THANH TOÁN & GIẢI PHÓNG BÀN (KHÔNG QR) -->
   <!-- ============================================================= -->
   <div id="checkoutModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 hidden">
