@@ -1577,107 +1577,34 @@ function printReceipt(order) {
 function executeWindowPrint(order) {
   const receiptHtml = generateReceiptHtml(order);
 
-  // 1. Cập nhật DOM chính cho in thường
+  // 1. Cập nhật DOM chính để in hệ thống
   const container = document.getElementById('printable-receipt');
   if (container) {
     container.innerHTML = receiptHtml;
   }
 
-  // 2. Kiểm tra nếu đang mở trong Zalo WebView (Zalo chặn hoàn toàn hộp thoại in)
-  const isZalo = /Zalo/i.test(navigator.userAgent);
-  if (isZalo) {
-    openMobileReceiptModal(order, receiptHtml, true);
-    return;
-  }
-
-  // 3. Với thiết bị di động (Android / iOS):
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isZalo = /Zalo/i.test(navigator.userAgent);
+
   if (isMobile) {
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isIOS) {
-      try {
-        window.print();
-      } catch (e) {
-        openMobileReceiptModal(order, receiptHtml, false);
-      }
-    } else {
-      printMobileDirect(receiptHtml, order);
+    // 2. TRÊN THIẾT BỊ DI ĐỘNG (IPHONE / ANDROID):
+    // Luôn mở giao diện xem phiếu nhiệt trực quan trước mắt nhân viên
+    openMobileReceiptModal(order, receiptHtml, isZalo);
+
+    // Kích hoạt hộp thoại in hệ thống (AirPrint trên iPhone / Spooler trên Android)
+    if (!isZalo) {
+      setTimeout(() => {
+        try {
+          window.print();
+        } catch (e) {
+          console.warn('Lỗi gọi window.print trên mobile:', e);
+        }
+      }, 350);
     }
   } else {
-    // Desktop: in trực tiếp
+    // 3. TRÊN MÁY TÍNH (PC):
     window.print();
   }
-}
-
-function printMobileDirect(receiptHtml, order) {
-  let iframe = document.getElementById('pos-print-iframe');
-  if (!iframe) {
-    iframe = document.createElement('iframe');
-    iframe.id = 'pos-print-iframe';
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '1px';
-    iframe.style.height = '1px';
-    iframe.style.opacity = '0.01';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-  }
-
-  const doc = iframe.contentWindow.document;
-  doc.open();
-  doc.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Phiếu Báo Bếp</title>
-      <style>
-        @page { size: 80mm auto; margin: 0; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-          margin: 0;
-          padding: 6mm 4mm;
-          font-family: 'Courier New', Courier, monospace, sans-serif;
-          font-size: 13px;
-          line-height: 1.35;
-          color: #000;
-          background: #fff;
-          width: 80mm;
-          max-width: 100%;
-        }
-        .receipt-title { font-size: 15px; font-weight: bold; text-align: center; text-transform: uppercase; margin-bottom: 2px; }
-        .receipt-header { text-align: center; font-size: 11px; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 8px; }
-        .receipt-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-        .receipt-table th { border-bottom: 1px dashed #000; text-align: left; padding: 4px 0; font-size: 11px; }
-        .receipt-table td { padding: 3px 0; font-size: 11px; vertical-align: top; }
-        .receipt-divider { border-bottom: 1px dashed #000; margin: 6px 0; }
-        .receipt-summary { width: 100%; margin-top: 4px; }
-        .receipt-summary td { padding: 2px 0; font-size: 12px; }
-        .receipt-total { font-size: 15px; font-weight: bold; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 6px 0; }
-        .receipt-footer { text-align: center; font-size: 11px; margin-top: 12px; padding-top: 6px; }
-      </style>
-    </head>
-    <body>
-      ${receiptHtml}
-    </body>
-    </html>
-  `);
-  doc.close();
-
-  setTimeout(() => {
-    try {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
-    } catch (e) {
-      console.warn('Iframe print error, falling back to window.print:', e);
-      try {
-        window.print();
-      } catch (err) {
-        if (order) openMobileReceiptModal(order, receiptHtml, false);
-      }
-    }
-  }, 100);
 }
 
 function openMobileReceiptModal(order, receiptHtml, isZalo = false) {
@@ -1700,7 +1627,9 @@ function openMobileReceiptModal(order, receiptHtml, isZalo = false) {
 function closeMobileReceiptModal() {
   const modal = document.getElementById('mobileReceiptModal');
   if (modal) modal.classList.add('hidden');
-  showTableFloor();
+  if (state.activeScreen === 'order') {
+    showTableFloor();
+  }
 }
 
 function triggerDirectSystemPrint() {
@@ -1708,10 +1637,56 @@ function triggerDirectSystemPrint() {
     const receiptHtml = generateReceiptHtml(lastPrintedOrder);
     const container = document.getElementById('printable-receipt');
     if (container) container.innerHTML = receiptHtml;
-    printMobileDirect(receiptHtml, lastPrintedOrder);
-  } else {
-    window.print();
   }
+  try {
+    window.print();
+  } catch (e) {
+    showToast('Trình duyệt chưa hỗ trợ in trực tiếp. Bạn có thể sao chép phiếu để gửi cho bếp!', 'warning');
+  }
+}
+
+function copyReceiptTextToClipboard() {
+  if (!lastPrintedOrder) {
+    showToast('Chưa có thông tin phiếu!', 'error');
+    return;
+  }
+  const o = lastPrintedOrder;
+  const itemsText = (o.items || []).map((it, idx) => `${idx + 1}. ${it.product_name || it.name} x${it.quantity} = ${formatMoney(it.total || it.price * it.quantity)}`).join('\n');
+  const text = `📋 PHIẾU BÁO BẾP: ${o.table_name || 'Bàn'}\n` +
+               `Mã: ${o.order_code || ''}\n` +
+               `Thời gian: ${formatDateTime(o.created_at || new Date())}\n` +
+               (o.note ? `Ghi chú: ${o.note}\n` : '') +
+               `-------------------------\n` +
+               `${itemsText}\n` +
+               `-------------------------\n` +
+               `TỔNG TIỀN: ${formatMoney(o.total || 0)}`;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Đã sao chép nội dung phiếu! Bạn có thể dán vào Zalo gửi bếp.', 'success');
+    }).catch(() => {
+      fallbackCopyText(text);
+    });
+  } else {
+    fallbackCopyText(text);
+  }
+}
+
+function fallbackCopyText(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showToast('Đã sao chép nội dung phiếu! Bạn có thể dán vào Zalo gửi bếp.', 'success');
+  } catch (e) {
+    showToast('Đã chọn nội dung phiếu, hãy nhấn Sao chép', 'info');
+  }
+  document.body.removeChild(ta);
 }
 
 function openPrinterModal() {
@@ -1723,10 +1698,11 @@ function closePrinterModal() {
 }
 
 function testPrintSample() {
+  closePrinterModal();
   const sampleOrder = {
-    order_code: 'BEP-MAU',
+    order_code: 'BEP-MAU-01',
     created_at: new Date().toISOString(),
-    table_name: 'Bàn 1 (Thử nghiệm)',
+    table_name: 'Bàn 1 (In Thử Nghiệm)',
     note: 'Ít đá, ít cay',
     payment_method: 'cash',
     total: 45000,
