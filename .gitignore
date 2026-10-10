@@ -3,4 +3,6 @@ pos.db-shm
 pos.db-wal
 .env
 .DS_Store
+bin/
+current_tunnel_url.txt
 *.log
