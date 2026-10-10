@@ -669,21 +669,10 @@ function openLoginModal() {
   const userInput = document.getElementById('loginUsernameInput');
   const passInput = document.getElementById('loginPasswordInput');
   const errBox = document.getElementById('loginErrorMsg');
-  const roleLabel = document.getElementById('loginDeviceRoleLabel');
 
   if (errBox) errBox.classList.add('hidden');
   if (passInput) passInput.value = '';
   if (userInput && !userInput.value) userInput.value = 'admin';
-
-  if (roleLabel) {
-    const isHost = isHostServerMachine();
-    const currentRole = state.currentUser?.role;
-    if (currentRole === 'admin') {
-      roleLabel.innerHTML = '<span class="text-emerald-700 font-bold">Chủ Quán (Toàn quyền)</span>';
-    } else {
-      roleLabel.innerHTML = `<span class="text-blue-700 font-bold">Nhân Viên Gọi Món</span> ${isHost ? '(Máy chủ)' : '(Thiết bị quét)'}`;
-    }
-  }
 
   if (modal) modal.classList.remove('hidden');
 }
