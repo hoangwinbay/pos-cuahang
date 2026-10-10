@@ -1724,29 +1724,21 @@ function printReceipt(order) {
 function executeWindowPrint(order) {
   const receiptHtml = generateReceiptHtml(order);
 
-  // 1. Cập nhật DOM chính (để dự phòng và cho mobile AirPrint)
-  const container = document.getElementById('printable-receipt');
-  if (container) {
-    container.innerHTML = receiptHtml;
+  // 1. Cập nhật DOM chính #printable-receipt để in
+  let container = document.getElementById('printable-receipt');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'printable-receipt';
+    const appEl = document.getElementById('app') || document.body;
+    appEl.insertBefore(container, appEl.firstChild);
   }
+  container.innerHTML = receiptHtml;
 
-  // 2. Mở modal xem trước phiếu nhiệt trên màn hình (cả laptop và điện thoại)
-  openMobileReceiptModal(order, receiptHtml, false);
-
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-  if (isMobile) {
-    // Trên thiết bị di động (Safari iOS / Android / Zalo):
-    // Kích hoạt AirPrint hệ thống đồng bộ trực tiếp
-    try {
-      window.print();
-    } catch (err) {
-      console.warn('Lỗi gọi window.print trên mobile:', err);
-    }
-    printViaIsolatedIframe(receiptHtml);
-  } else {
-    // Trên Laptop / Máy tính PC (Chrome / Edge / Firefox):
-    // Dùng Iframe cách ly độc lập hoàn toàn để in sạch 100%, không bao giờ bị trắng trang
+  // 2. Kích hoạt trực tiếp hộp thoại in hệ thống (Chrome Print / iOS AirPrint)
+  try {
+    window.print();
+  } catch (err) {
+    console.warn('Lỗi gọi window.print:', err);
     printViaIsolatedIframe(receiptHtml);
   }
 }
@@ -1973,36 +1965,6 @@ function openReceiptPrintWindow() {
   win.document.close();
 }
 
-function openMobileReceiptModal(order, receiptHtml) {
-  lastPrintedOrder = order;
-  const modal = document.getElementById('mobileReceiptModal');
-  const tableTitle = document.getElementById('mobileReceiptTableTitle');
-  const content = document.getElementById('mobileReceiptContent');
-  const zaloNotice = document.getElementById('mobileZaloNotice');
-
-  let orderSource = order.source;
-  if (!orderSource && order.table_name && state.tableOrders && state.tableOrders[order.table_name]) {
-    orderSource = state.tableOrders[order.table_name].source;
-  }
-  if (!orderSource) orderSource = state.currentSource || 'taicho';
-  const sourceLabel = (orderSource === 'mangve' || (order.table_name && order.table_name.toLowerCase().includes('mang về'))) ? 'Mang về' : 'Tại chỗ';
-
-  if (tableTitle) tableTitle.innerText = `${order.table_name || 'Bàn'} (${sourceLabel})`;
-  if (content) content.innerHTML = receiptHtml || generateReceiptHtml(order);
-
-  // Ẩn bảng thông báo Zalo gây hiểu nhầm
-  if (zaloNotice) zaloNotice.classList.add('hidden');
-
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeMobileReceiptModal() {
-  const modal = document.getElementById('mobileReceiptModal');
-  if (modal) modal.classList.add('hidden');
-  if (state.activeScreen === 'order') {
-    showTableFloor();
-  }
-}
 
 async function sendPrintJobToServer() {
   if (!lastPrintedOrder) {

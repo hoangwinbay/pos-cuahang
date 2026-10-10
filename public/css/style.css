@@ -193,8 +193,25 @@ body {
     print-color-adjust: exact !important;
   }
 
-  /* Ẩn triệt để TẤT CẢ các thành phần khác của app khi in */
-  body > *:not(#printable-receipt) {
+  /* Ẩn tất cả các phần tử con trực tiếp của body trừ #app và #printable-receipt */
+  body > *:not(#app):not(#printable-receipt) {
+    display: none !important;
+  }
+
+  /* Khung chứa #app: chỉ hiển thị khối in #printable-receipt */
+  #app {
+    display: block !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  /* Ẩn tất cả con bên trong #app ngoại trừ #printable-receipt */
+  #app > *:not(#printable-receipt) {
     display: none !important;
   }
 
@@ -205,10 +222,10 @@ body {
     width: 80mm !important;
     max-width: 80mm !important;
     margin: 0 !important;
-    padding: 6mm 4mm !important;
+    padding: 4mm 3mm !important;
     background: #ffffff !important;
     color: #000000 !important;
-    font-family: 'Courier New', Courier, monospace !important;
+    font-family: 'Courier New', Courier, monospace, sans-serif !important;
     font-size: 13px !important;
     line-height: 1.35 !important;
     box-sizing: border-box !important;
