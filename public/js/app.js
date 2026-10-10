@@ -842,9 +842,9 @@ async function openServerConfigModal() {
         const qrImg = document.getElementById('serverQrCodeImg');
 
         if (wifiInput) wifiInput.value = info.wifi_url || '';
-        if (tunnelInput) tunnelInput.value = info.tunnel_url || '';
+        if (tunnelInput) tunnelInput.value = info.tunnel_url || info.cloud_url || '';
 
-        const targetUrl = info.tunnel_url || info.wifi_url;
+        const targetUrl = info.tunnel_url || info.cloud_url || info.wifi_url;
         if (qrImg && targetUrl) {
           qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(targetUrl)}`;
         }
@@ -860,6 +860,43 @@ async function openServerConfigModal() {
 
 function closeServerConfigModal() {
   const modal = document.getElementById('modalServerConfig');
+  if (modal) modal.classList.add('hidden');
+}
+
+// =============================================================
+// MODAL ZALO MINI APP (BẢN TEST MỚI NHẤT)
+// =============================================================
+let currentZaloTestUrl = 'https://zalo.me/s/3906597427562388428/?env=TESTING&version=18';
+
+async function openZaloModal() {
+  const modal = document.getElementById('modalZaloApp');
+  if (!modal) return;
+
+  const urlInput = document.getElementById('zaloModalUrlInput');
+  const directLink = document.getElementById('zaloModalDirectLink');
+  const qrImg = document.getElementById('zaloModalQrImg');
+
+  try {
+    const res = await fetch('/api/server-info');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.zalo_test_url) {
+        currentZaloTestUrl = data.zalo_test_url;
+      }
+    }
+  } catch (e) {}
+
+  if (urlInput) urlInput.value = currentZaloTestUrl;
+  if (directLink) directLink.href = currentZaloTestUrl;
+  if (qrImg) {
+    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentZaloTestUrl)}`;
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeZaloModal() {
+  const modal = document.getElementById('modalZaloApp');
   if (modal) modal.classList.add('hidden');
 }
 

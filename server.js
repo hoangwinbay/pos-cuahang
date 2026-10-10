@@ -1035,12 +1035,23 @@ app.get('/api/server-info', (req, res) => {
     }
   } catch (e) {}
 
+  let zaloTestUrl = 'https://zalo.me/s/3906597427562388428/?env=TESTING';
+  try {
+    const fs = require('node:fs');
+    const zaloFile = path.join(__dirname, 'latest_zalo_test_url.txt');
+    if (fs.existsSync(zaloFile)) {
+      const saved = fs.readFileSync(zaloFile, 'utf8').trim();
+      if (saved) zaloTestUrl = saved;
+    }
+  } catch (e) {}
+
   res.json({
     local_ip: localIp,
     port: PORT,
     wifi_url: `http://${localIp}:${PORT}`,
     tunnel_url: tunnelUrl,
-    cloud_url: 'https://pos-cuahang.onrender.com'
+    cloud_url: 'https://pos-cuahang.onrender.com',
+    zalo_test_url: zaloTestUrl
   });
 });
 

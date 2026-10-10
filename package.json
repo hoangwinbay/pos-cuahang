@@ -11,7 +11,7 @@
     "pos": "node scripts/start-pos.js",
     "dev": "node --watch server.js",
     "build": "node scripts/build-mount.js",
-    "deploy:zalo": "node scripts/build-mount.js && npx zmp-cli deploy -e -o public -t -m \"Bun Mam Mien Tay POS\"",
+    "deploy:zalo": "node scripts/deploy-zalo.js",
     "start:zalo": "npx zmp-cli start",
     "login:zalo": "npx zmp-cli login"
   },

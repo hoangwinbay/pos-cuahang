@@ -235,10 +235,17 @@
         <span>Chuyển Vai Trò (Chủ / NV)</span>
       </button>
 
-      <a href="https://zalo.me/s/3906597427562388428/" target="_blank" class="w-full p-3 rounded-xl hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-blue-100 bg-blue-50/40">
+      <button onclick="openZaloModal(); toggleSideDrawer(false);" class="w-full p-3 rounded-xl hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-blue-100 bg-blue-50/40">
         <i class="fa-solid fa-mobile-screen-button text-blue-600 text-base w-6 text-center"></i>
-        <span>Mở Zalo Mini App</span>
-      </a>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center space-x-1.5">
+            <span>Mở Zalo Mini App</span>
+            <span class="bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded font-black uppercase">Bản Test</span>
+          </div>
+          <p class="text-[10px] text-slate-400 font-normal truncate">Quét mã QR mở ngay trên điện thoại</p>
+        </div>
+        <i class="fa-solid fa-qrcode text-blue-500 text-sm"></i>
+      </button>
 
       <button onclick="openConnectedDevicesModal(); toggleSideDrawer(false);" class="w-full p-3 rounded-xl hover:bg-blue-50 text-slate-700 hover:text-blue-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-blue-100 bg-blue-50/40">
         <i class="fa-solid fa-network-wired text-blue-600 text-base w-6 text-center"></i>
@@ -960,6 +967,21 @@
           <p class="text-[11px] text-slate-400">Dán link này vào mục Cài đặt trên điện thoại chạy Zalo Mini App.</p>
         </div>
 
+        <!-- 3. Mở Zalo Mini App (Bản Test Mới Nhất) -->
+        <div class="border border-blue-200 bg-blue-50/60 rounded-xl p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-blue-900 flex items-center">
+              <i class="fa-solid fa-mobile-screen-button text-blue-600 mr-1.5"></i> Mở Zalo Mini App (Bản Test):
+            </span>
+            <span class="text-[10px] bg-blue-200 text-blue-900 px-1.5 py-0.5 rounded font-bold">KHUYÊN DÙNG</span>
+          </div>
+          <p class="text-[11px] text-blue-800">Quét mã QR để mở trực tiếp bản thử nghiệm mới nhất trên Zalo điện thoại.</p>
+          <button onclick="closeServerConfigModal(); openZaloModal();" class="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors shadow-xs">
+            <i class="fa-solid fa-qrcode"></i>
+            <span>Xem Mã QR & Link Zalo Bản Test</span>
+          </button>
+        </div>
+
         <div class="text-center pt-2">
           <div class="inline-block p-2 bg-white border border-slate-200 rounded-2xl shadow-xs">
             <img id="serverQrCodeImg" src="" alt="QR Code" class="w-40 h-40 mx-auto object-contain">
@@ -994,18 +1016,124 @@
     </div>
   </div>
 
+  <!-- Modal Mở Zalo Mini App (Bản Thử Nghiệm / Test Mới Nhất) -->
+  <div id="modalZaloApp" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl p-5 space-y-4 max-h-[92vh] overflow-y-auto">
+      <!-- Header -->
+      <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base text-slate-800 leading-tight">Zalo Mini App</h3>
+            <span class="inline-flex items-center text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Bản Test Mới Nhất
+            </span>
+          </div>
+        </div>
+        <button onclick="closeZaloModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Banner thông báo -->
+      <div class="bg-blue-50/80 border border-blue-200 rounded-xl p-3 text-xs text-blue-950 space-y-1">
+        <div class="font-bold flex items-center text-blue-800">
+          <i class="fa-solid fa-circle-info mr-1.5 text-blue-600"></i>
+          Mở Phiên Bản Thử Nghiệm (Testing)
+        </div>
+        <p class="text-[11px] text-blue-900/90 leading-relaxed">
+          Quét mã QR dưới đây bằng <b>ứng dụng Zalo</b> trên điện thoại để vào trực tiếp phiên bản mới nhất (không bị thông báo <i>"Đang phát triển"</i>).
+        </p>
+      </div>
+
+      <!-- Khung Mã QR lớn & rõ ràng -->
+      <div class="text-center bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+        <div class="inline-block p-2.5 bg-white rounded-2xl shadow-xs border border-slate-200/80">
+          <img 
+            id="zaloModalQrImg" 
+            src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https%3A%2F%2Fzalo.me%2Fs%2F3906597427562388428%2F%3Fenv%3DTESTING%26version%3D18" 
+            alt="Mã QR Zalo Mini App" 
+            class="w-48 h-48 sm:w-52 sm:h-52 mx-auto object-contain"
+          >
+        </div>
+        <div class="text-[11px] text-slate-500 font-semibold flex items-center justify-center space-x-1">
+          <i class="fa-solid fa-camera text-slate-400"></i>
+          <span>Quét bằng ứng dụng Zalo trên điện thoại</span>
+        </div>
+      </div>
+
+      <!-- Đường Link Trực Tiếp & Nút Sao Chép -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-bold text-slate-700 flex items-center justify-between">
+          <span>Đường dẫn bản test:</span>
+          <span class="text-[10px] text-slate-400 font-normal">Phiên bản mới nhất</span>
+        </label>
+        <div class="flex items-center space-x-1.5">
+          <input 
+            type="text" 
+            id="zaloModalUrlInput" 
+            readonly 
+            value="https://zalo.me/s/3906597427562388428/?env=TESTING&version=18" 
+            class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-blue-700 select-all outline-none"
+          >
+          <button 
+            onclick="copyToClipboard('zaloModalUrlInput')" 
+            class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold border border-blue-200 flex items-center space-x-1 shrink-0 transition-colors" 
+            title="Sao chép đường dẫn"
+          >
+            <i class="fa-regular fa-copy"></i>
+            <span>Sao chép</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Nút mở trực tiếp -->
+      <div class="space-y-2 pt-1">
+        <a 
+          id="zaloModalDirectLink" 
+          href="https://zalo.me/s/3906597427562388428/?env=TESTING&version=18" 
+          target="_blank" 
+          class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-2 shadow-md shadow-blue-600/20 transition-all text-center"
+        >
+          <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          <span>Mở Liên Kết Zalo Trên Tab Mới</span>
+        </a>
+
+        <button 
+          onclick="closeZaloModal()" 
+          class="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors"
+        >
+          Đóng
+        </button>
+      </div>
+
+      <!-- Hướng dẫn đồng bộ -->
+      <div class="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1">
+        <div class="font-bold flex items-center text-amber-800">
+          <i class="fa-solid fa-lightbulb mr-1 text-amber-600"></i>
+          Lưu ý kết nối:
+        </div>
+        <p class="leading-relaxed">
+          Zalo Mini App tự động đồng bộ thực đơn và đặt bàn với máy chủ Cloud Render (<span class="font-mono font-bold">pos-cuahang.onrender.com</span>). Nếu muốn kết nối mạng Wi-Fi nội bộ tại quán, vào mục Cài Đặt trên Mini App để đổi địa chỉ máy chủ.
+        </p>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div id="toastContainer" class="fixed bottom-16 sm:bottom-6 right-4 left-4 sm:left-auto z-50 flex flex-col space-y-2 pointer-events-none items-center sm:items-end"></div>
 
   </div> <!-- /#app: Zalo Mini App Root Container -->
 
   <!-- JavaScript Modules -->
-  <script src="js/mount.js?v=20261011_0230_nofile"></script>
-  <script src="js/app.js?v=20261011_0230_nofile"></script>
-  <script src="js/pos.js?v=20261011_0230_nofile"></script>
-  <script src="js/products.js?v=20261011_0230_nofile"></script>
-  <script src="js/orders.js?v=20261011_0230_nofile"></script>
-  <script src="js/reports.js?v=20261011_0230_nofile"></script>
+  <script src="js/mount.js?v=20261011_0238_zalotest"></script>
+  <script src="js/app.js?v=20261011_0238_zalotest"></script>
+  <script src="js/pos.js?v=20261011_0238_zalotest"></script>
+  <script src="js/products.js?v=20261011_0238_zalotest"></script>
+  <script src="js/orders.js?v=20261011_0238_zalotest"></script>
+  <script src="js/reports.js?v=20261011_0238_zalotest"></script>
 
 </body>
 </html>
