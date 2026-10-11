@@ -524,6 +524,15 @@ function toggleCurrentTableSource() {
   }
 }
 
+// Thứ tự ưu tiên hiển thị chuẩn: Hộp mang về -> Bún mắm -> Đồ gọi thêm -> Đồ uống
+const PREFERRED_CAT_ORDER = ['hộp mang về', 'bún mắm', 'đồ gọi thêm', 'đồ uống'];
+
+function getCategoryPriority(catName) {
+  const lower = (catName || '').trim().toLowerCase();
+  const idx = PREFERRED_CAT_ORDER.indexOf(lower);
+  return idx !== -1 ? idx : 999;
+}
+
 // Thanh danh mục cuộn ngang
 function renderOrderCategoriesPills() {
   const container = document.getElementById('orderCategoryPills');
@@ -531,7 +540,14 @@ function renderOrderCategoriesPills() {
 
   const totalCount = state.products.length;
 
-  const pillsHtml = state.categories.map(cat => {
+  const sortedCategories = [...(state.categories || [])].sort((a, b) => {
+    const priA = getCategoryPriority(a.name);
+    const priB = getCategoryPriority(b.name);
+    if (priA !== priB) return priA - priB;
+    return (a.id || 0) - (b.id || 0);
+  });
+
+  const pillsHtml = sortedCategories.map(cat => {
     const isActive = currentSelectedCategory == cat.id;
     return `
       <button 
@@ -579,9 +595,10 @@ async function loadPosCategories() {
   } catch (err) {
     console.warn('Failed to load categories (using fallback/cache):', err);
     state.categories = JSON.parse(localStorage.getItem('pos_cached_categories') || 'null') || [
-      { id: 1, name: 'Bún Mắm & Bún Nước Lèo' },
-      { id: 2, name: 'Món Thêm & Ăn Kèm' },
-      { id: 3, name: 'Nước Giải Khát' }
+      { id: 1, name: 'Hộp mang về' },
+      { id: 2, name: 'Bún mắm' },
+      { id: 3, name: 'Đồ gọi thêm' },
+      { id: 4, name: 'Đồ uống' }
     ];
   }
 }
@@ -595,16 +612,28 @@ async function loadPosProducts() {
   } catch (err) {
     console.warn('Failed to load products (using fallback/cache):', err);
     state.products = JSON.parse(localStorage.getItem('pos_cached_products') || 'null') || [
-      { id: 1, barcode: 'BM01', name: 'Bún mắm đặc biệt (Tôm, Mực, Heo quay, Cá)', category_id: 1, price: 65000, stock: 999, unit: 'tô', image: '' },
-      { id: 2, barcode: 'BM02', name: 'Bún mắm thập cẩm', category_id: 1, price: 55000, stock: 999, unit: 'tô', image: '' },
-      { id: 3, barcode: 'BM03', name: 'Bún mắm hải sản', category_id: 1, price: 60000, stock: 999, unit: 'tô', image: '' },
-      { id: 4, barcode: 'BM04', name: 'Bún nước lèo Sóc Trăng', category_id: 1, price: 50000, stock: 999, unit: 'tô', image: '' },
-      { id: 5, barcode: 'BM05', name: 'Heo quay thêm', category_id: 2, price: 25000, stock: 999, unit: 'đĩa', image: '' },
-      { id: 6, barcode: 'BM06', name: 'Chả cá thác lác thêm', category_id: 2, price: 20000, stock: 999, unit: 'phần', image: '' },
-      { id: 7, barcode: 'BM07', name: 'Rau đắng & bông súng thêm', category_id: 2, price: 10000, stock: 999, unit: 'đĩa', image: '' },
-      { id: 8, barcode: 'DU01', name: 'Trà đá đường', category_id: 3, price: 5000, stock: 999, unit: 'ly', image: '' },
-      { id: 9, barcode: 'DU02', name: 'Nước mía sầu riêng', category_id: 3, price: 15000, stock: 999, unit: 'ly', image: '' },
-      { id: 10, barcode: 'DU03', name: 'Mủ trôm hạt é nha đam', category_id: 3, price: 20000, stock: 999, unit: 'ly', image: '' }
+      { id: 1, barcode: 'HMV01', name: 'Hộp mang về', category_id: 1, price: 5000, stock: 999, unit: 'hộp', image: '' },
+      { id: 2, barcode: 'BM01', name: 'Bún mắm chả cá', category_id: 2, price: 45000, stock: 999, unit: 'tô', image: '' },
+      { id: 3, barcode: 'BM02', name: 'Bún mắm heo quay', category_id: 2, price: 55000, stock: 999, unit: 'tô', image: '' },
+      { id: 4, barcode: 'BM03', name: 'Bún mắm chả cá heo quay', category_id: 2, price: 60000, stock: 999, unit: 'tô', image: '' },
+      { id: 5, barcode: 'BM04', name: 'Bún mắm cá tươi', category_id: 2, price: 55000, stock: 999, unit: 'tô', image: '' },
+      { id: 6, barcode: 'BM05', name: 'Bún mắm mực', category_id: 2, price: 80000, stock: 999, unit: 'tô', image: '' },
+      { id: 7, barcode: 'BM06', name: 'Bún mắm tôm', category_id: 2, price: 80000, stock: 999, unit: 'tô', image: '' },
+      { id: 8, barcode: 'BM07', name: 'Bún mắm đầy đủ', category_id: 2, price: 80000, stock: 999, unit: 'tô', image: '' },
+      { id: 9, barcode: 'BM08', name: 'Bún mắm đặc biệt', category_id: 2, price: 100000, stock: 999, unit: 'tô', image: '' },
+      { id: 10, barcode: 'THEM01', name: 'Thêm tôm', category_id: 3, price: 18000, stock: 999, unit: 'phần', image: '' },
+      { id: 11, barcode: 'THEM02', name: 'Thêm trứng vịt lộn', category_id: 3, price: 10000, stock: 999, unit: 'quả', image: '' },
+      { id: 12, barcode: 'THEM03', name: 'Thêm chả cá', category_id: 3, price: 20000, stock: 999, unit: 'phần', image: '' },
+      { id: 13, barcode: 'THEM04', name: 'Thêm mực', category_id: 3, price: 40000, stock: 999, unit: 'phần', image: '' },
+      { id: 14, barcode: 'THEM05', name: 'Thêm cá tươi', category_id: 3, price: 40000, stock: 999, unit: 'phần', image: '' },
+      { id: 15, barcode: 'THEM06', name: 'Thêm heo quay', category_id: 3, price: 40000, stock: 999, unit: 'phần', image: '' },
+      { id: 16, barcode: 'THEM07', name: 'Thêm rau', category_id: 3, price: 5000, stock: 999, unit: 'đĩa', image: '' },
+      { id: 17, barcode: 'DU01', name: 'Trà đá', category_id: 4, price: 5000, stock: 999, unit: 'ly', image: '' },
+      { id: 18, barcode: 'DU02', name: 'Sữa đậu', category_id: 4, price: 10000, stock: 999, unit: 'ly', image: '' },
+      { id: 19, barcode: 'DU03', name: 'Coca', category_id: 4, price: 15000, stock: 999, unit: 'lon', image: '' },
+      { id: 20, barcode: 'DU04', name: 'Dừa tươi', category_id: 4, price: 25000, stock: 999, unit: 'quả', image: '' },
+      { id: 21, barcode: 'DU05', name: 'Bia', category_id: 4, price: 25000, stock: 999, unit: 'lon', image: '' },
+      { id: 22, barcode: 'DU06', name: 'Lavie', category_id: 4, price: 10000, stock: 999, unit: 'chai', image: '' }
     ];
   }
 }
@@ -667,8 +696,17 @@ function renderGroupedDishList() {
     groups[catName].push(p);
   });
 
-  container.innerHTML = Object.keys(groups).map(catName => {
-    const dishRows = groups[catName].map(p => {
+  // Thứ tự ưu tiên hiển thị: Hộp mang về -> Bún mắm -> Đồ gọi thêm -> Đồ uống
+  const sortedCatNames = Object.keys(groups).sort((a, b) => {
+    const priA = getCategoryPriority(a);
+    const priB = getCategoryPriority(b);
+    if (priA !== priB) return priA - priB;
+    return a.localeCompare(b, 'vi');
+  });
+
+  container.innerHTML = sortedCatNames.map(catName => {
+    const sortedDishes = groups[catName].sort((a, b) => (a.id || 0) - (b.id || 0));
+    const dishRows = sortedDishes.map(p => {
       const existingInTable = currentItems.find(item => item.id === p.id);
       const currentQty = existingInTable ? existingInTable.quantity : 0;
       const hasImage = isActualImage(p.image);

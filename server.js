@@ -364,7 +364,7 @@ app.get('/api/products', (req, res) => {
       query += ` AND p.stock <= 10`;
     }
 
-    query += ` ORDER BY p.id DESC`;
+    query += ` ORDER BY COALESCE(c.id, 999) ASC, p.id ASC`;
 
     const products = db.prepare(query).all(...params);
 
