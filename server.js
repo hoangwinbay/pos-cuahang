@@ -991,10 +991,9 @@ function trackDeviceActivity(req, customData = {}) {
     firstConnected: new Date().toISOString()
   };
 
-  // Giữ nguyên tên nếu thiết bị đã được người dùng đặt tên riêng
-  const assignedName = existing.customName 
-    ? existing.name 
-    : (customData.deviceName || req.query.deviceName || req.body?.deviceName || existing.name);
+  const clientProvidedName = customData.deviceName || req.query.deviceName || req.body?.deviceName;
+  const defaultFallbackName = deviceType === 'desktop' ? 'Máy tính Quầy Thu Ngân' : `Điện Thoại (${platform})`;
+  const assignedName = clientProvidedName || (existing ? existing.name : defaultFallbackName);
 
   const updated = {
     ...existing,
@@ -1016,14 +1015,14 @@ function trackDeviceActivity(req, customData = {}) {
   try {
     db.prepare(`
       INSERT INTO devices (id, name, platform, device_type, ip, role, user_name, last_seen, custom_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
       ON CONFLICT(id) DO UPDATE SET
         platform = excluded.platform,
         device_type = excluded.device_type,
         ip = excluded.ip,
         last_seen = excluded.last_seen,
-        name = CASE WHEN devices.custom_name = 1 THEN devices.name ELSE excluded.name END
-    `).run(deviceId, assignedName, platform, deviceType, clientIp || '127.0.0.1', updated.role, updated.userName, now, existing.customName ? 1 : 0);
+        name = excluded.name
+    `).run(deviceId, assignedName, platform, deviceType, clientIp || '127.0.0.1', updated.role, updated.userName, now);
   } catch (e) {}
 
   return updated;

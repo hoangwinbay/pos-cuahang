@@ -948,20 +948,204 @@ function getDeviceId() {
   return id;
 }
 
-function getDeviceName() {
-  const custom = localStorage.getItem('pos_device_name');
-  if (custom && custom.trim()) return custom.trim();
+// Bảng tra cứu toàn diện mã máy Apple iPhone sang tên thương mại
+const APPLE_DEVICE_MAP = {
+  'iPhone17,2': 'iPhone 16 Pro Max',
+  'iPhone17,1': 'iPhone 16 Pro',
+  'iPhone17,4': 'iPhone 16 Plus',
+  'iPhone17,3': 'iPhone 16',
+  'iPhone16,2': 'iPhone 15 Pro Max',
+  'iPhone16,1': 'iPhone 15 Pro',
+  'iPhone15,5': 'iPhone 15 Plus',
+  'iPhone15,4': 'iPhone 15',
+  'iPhone15,3': 'iPhone 14 Pro Max',
+  'iPhone15,2': 'iPhone 14 Pro',
+  'iPhone14,8': 'iPhone 14 Plus',
+  'iPhone14,7': 'iPhone 14',
+  'iPhone14,3': 'iPhone 13 Pro Max',
+  'iPhone14,2': 'iPhone 13 Pro',
+  'iPhone14,5': 'iPhone 13',
+  'iPhone14,4': 'iPhone 13 mini',
+  'iPhone13,4': 'iPhone 12 Pro Max',
+  'iPhone13,3': 'iPhone 12 Pro',
+  'iPhone13,2': 'iPhone 12',
+  'iPhone13,1': 'iPhone 12 mini',
+  'iPhone14,6': 'iPhone SE (Gen 3)',
+  'iPhone12,8': 'iPhone SE (Gen 2)',
+  'iPhone12,5': 'iPhone 11 Pro Max',
+  'iPhone12,3': 'iPhone 11 Pro',
+  'iPhone12,1': 'iPhone 11',
+  'iPhone11,8': 'iPhone XR',
+  'iPhone11,6': 'iPhone XS Max',
+  'iPhone11,4': 'iPhone XS Max',
+  'iPhone11,2': 'iPhone XS',
+  'iPhone10,6': 'iPhone X',
+  'iPhone10,3': 'iPhone X',
+  'iPhone10,5': 'iPhone 8 Plus',
+  'iPhone10,2': 'iPhone 8 Plus',
+  'iPhone10,4': 'iPhone 8',
+  'iPhone10,1': 'iPhone 8',
+  'iPhone9,4': 'iPhone 7 Plus',
+  'iPhone9,2': 'iPhone 7 Plus',
+  'iPhone9,3': 'iPhone 7',
+  'iPhone9,1': 'iPhone 7',
+  'iPhone8,4': 'iPhone SE (Gen 1)',
+  'iPhone8,2': 'iPhone 6s Plus',
+  'iPhone8,1': 'iPhone 6s'
+};
 
-  const isZalo = /Zalo/i.test(navigator.userAgent) || typeof window.zmp !== 'undefined';
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+let cachedDeviceModel = null;
 
-  if (isZalo) {
-    return isIOS ? 'iPhone (Zalo Mini App)' : 'Android (Zalo Mini App)';
+function detectAppleDeviceFallback() {
+  const w = Math.min(window.screen.width, window.screen.height);
+  const h = Math.max(window.screen.width, window.screen.height);
+  const dpr = Math.round((window.devicePixelRatio || 1) * 10) / 10;
+
+  let gpu = '';
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (gl) {
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      if (dbg) gpu = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '';
+    }
+  } catch (e) {}
+
+  // 375 x 812 @3x (iPhone 11 Pro, X, XS, 12 mini, 13 mini)
+  if (w === 375 && h === 812 && Math.round(dpr) === 3) {
+    if (gpu.includes('A13')) return 'iPhone 11 Pro';
+    if (gpu.includes('A14')) return 'iPhone 12 mini';
+    if (gpu.includes('A15')) return 'iPhone 13 mini';
+    if (gpu.includes('A12')) return 'iPhone XS';
+    if (gpu.includes('A11')) return 'iPhone X';
+    return 'iPhone 11 Pro';
   }
-  if (isIOS) return 'iPhone (Safari POS)';
-  if (isMobile) return 'Điện Thoại Android';
-  return 'Máy Tính / Laptop Quầy';
+
+  // 414 x 896 (iPhone 11 @2x, iPhone 11 Pro Max / XS Max @3x)
+  if (w === 414 && h === 896) {
+    if (Math.round(dpr) === 2) return 'iPhone 11';
+    if (Math.round(dpr) === 3) {
+      if (gpu.includes('A13')) return 'iPhone 11 Pro Max';
+      return 'iPhone 11 Pro Max';
+    }
+    return 'iPhone 11';
+  }
+
+  // 390 x 844 @3x (iPhone 12, 12 Pro, 13, 13 Pro, 14)
+  if (w === 390 && h === 844) {
+    if (gpu.includes('A14')) return 'iPhone 12 / 12 Pro';
+    if (gpu.includes('A15')) return 'iPhone 13 / 14';
+    return 'iPhone 12 / 13';
+  }
+
+  // 428 x 926 @3x (iPhone 12 Pro Max, 13 Pro Max, 14 Plus)
+  if (w === 428 && h === 926) {
+    if (gpu.includes('A14')) return 'iPhone 12 Pro Max';
+    if (gpu.includes('A15')) return 'iPhone 13 Pro Max';
+    return 'iPhone 12/13 Pro Max';
+  }
+
+  // 393 x 852 @3x (iPhone 14 Pro, 15, 15 Pro, 16)
+  if (w === 393 && h === 852) {
+    if (gpu.includes('A18')) return 'iPhone 16';
+    if (gpu.includes('A17')) return 'iPhone 15 Pro';
+    if (gpu.includes('A16')) return 'iPhone 14 Pro / 15';
+    return 'iPhone 15 / 14 Pro';
+  }
+
+  // 430 x 932 @3x (iPhone 14 Pro Max, 15 Plus, 15 Pro Max, 16 Plus)
+  if (w === 430 && h === 932) {
+    if (gpu.includes('A18')) return 'iPhone 16 Plus';
+    if (gpu.includes('A17')) return 'iPhone 15 Pro Max';
+    return 'iPhone 15 Pro Max';
+  }
+
+  // 402 x 874 @3x (iPhone 16 Pro)
+  if (w === 402 && h === 874) return 'iPhone 16 Pro';
+  // 440 x 956 @3x (iPhone 16 Pro Max)
+  if (w === 440 && h === 956) return 'iPhone 16 Pro Max';
+
+  // 375 x 667 @2x (iPhone SE 2/3, 8, 7)
+  if (w === 375 && h === 667) return 'iPhone SE';
+  // 414 x 736 @3x (iPhone 8 Plus, 7 Plus)
+  if (w === 414 && h === 736) return 'iPhone Plus';
+
+  if (/iPad/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    return 'iPad';
+  }
+
+  return 'iPhone';
+}
+
+function detectAndroidDevice() {
+  const ua = navigator.userAgent;
+  const match = ua.match(/Android\s+[^;]+;\s+([^;)]+?)(?:\s+Build|\))/i);
+  if (match && match[1]) {
+    const raw = match[1].trim();
+    if (raw && raw.length > 2 && !raw.startsWith('K') && !raw.startsWith('wv')) {
+      return raw;
+    }
+  }
+  return 'Điện Thoại Android';
+}
+
+function getAutoDetectedModel() {
+  if (cachedDeviceModel) return cachedDeviceModel;
+
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  const zmpSdk = window.zmp || window.ZMP;
+
+  // 1. Lấy model trực tiếp từ Zalo Mini App SDK
+  if (zmpSdk) {
+    try {
+      let sysInfo = null;
+      if (typeof zmpSdk.getSystemInfoSync === 'function') {
+        sysInfo = zmpSdk.getSystemInfoSync();
+      }
+      if (sysInfo && sysInfo.model) {
+        const rawModel = String(sysInfo.model).trim();
+        if (APPLE_DEVICE_MAP[rawModel]) {
+          cachedDeviceModel = APPLE_DEVICE_MAP[rawModel];
+          return cachedDeviceModel;
+        }
+        if (rawModel && rawModel !== 'unknown') {
+          cachedDeviceModel = rawModel;
+          return cachedDeviceModel;
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 2. Nhận diện iPhone/iPad trên iOS
+  if (isIOS) {
+    cachedDeviceModel = detectAppleDeviceFallback();
+    return cachedDeviceModel;
+  }
+
+  // 3. Nhận diện Android
+  if (isAndroid) {
+    cachedDeviceModel = detectAndroidDevice();
+    return cachedDeviceModel;
+  }
+
+  // 4. Laptop / Máy tính
+  if (/Windows/i.test(ua)) {
+    cachedDeviceModel = 'Laptop / Máy Tính Windows';
+    return cachedDeviceModel;
+  }
+  if (/Mac/i.test(ua)) {
+    cachedDeviceModel = 'MacBook / macOS';
+    return cachedDeviceModel;
+  }
+
+  cachedDeviceModel = 'Máy Quầy Thu Ngân';
+  return cachedDeviceModel;
+}
+
+function getDeviceName() {
+  return getAutoDetectedModel();
 }
 
 function getDevicePlatform() {
@@ -1117,9 +1301,6 @@ async function loadConnectedDevices(silent = false) {
               <div class="flex items-center space-x-1.5">
                 <span class="font-bold text-slate-800 text-xs sm:text-sm truncate">${escapeHtml(dev.name)}</span>
                 ${isSelf ? '<span class="text-[9px] bg-blue-600 text-white font-black px-1.5 py-0.2 rounded-full shrink-0">MÁY NÀY</span>' : ''}
-                <button onclick="promptRenameDevice('${escapeJs(dev.id)}', '${escapeJs(dev.name)}', ${isSelf})" class="text-slate-400 hover:text-blue-600 p-1 rounded-md hover:bg-slate-100 transition-colors shrink-0" title="Bấm để đặt tên riêng cho máy này">
-                  <i class="fa-solid fa-pen text-[10px]"></i>
-                </button>
               </div>
               <div class="text-[11px] text-slate-400 font-medium flex items-center space-x-2 mt-0.5">
                 <span>${escapeHtml(dev.platform)}</span>
@@ -1162,46 +1343,6 @@ async function loadConnectedDevices(silent = false) {
       </div>
     `;
   }
-}
-
-async function promptRenameDevice(devId, currentName, isSelf) {
-  const newName = prompt(
-    `Nhập tên gợi nhớ cho thiết bị:\n(Ví dụ: "u dont have the internet poor u", "iPhone của tôi", "Máy Order 1")`,
-    currentName || ''
-  );
-  if (newName && newName.trim() && newName.trim() !== currentName) {
-    const trimmed = newName.trim();
-    if (isSelf) {
-      localStorage.setItem('pos_device_name', trimmed);
-    }
-    try {
-      await api('/api/devices/rename', {
-        method: 'PUT',
-        body: JSON.stringify({
-          deviceId: devId,
-          newName: trimmed
-        })
-      });
-      showToast(`Đã đổi tên thiết bị thành "${trimmed}"!`, 'success');
-      loadConnectedDevices(true);
-    } catch (e) {
-      if (isSelf) {
-        showToast('Đã lưu tên thiết bị trên máy!', 'success');
-        loadConnectedDevices(true);
-      } else {
-        showToast('Không thể đổi tên: ' + (e.message || 'Lỗi kết nối'), 'error');
-      }
-    }
-  }
-}
-
-async function promptRenameCurrentDevice() {
-  promptRenameDevice(getDeviceId(), getDeviceName(), true);
-}
-
-function escapeJs(str) {
-  if (!str) return '';
-  return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
 async function deleteConnectedDevice(devId) {
@@ -1378,10 +1519,47 @@ function initZaloMiniApp() {
 
   try {
     const zmpSdk = window.zmp || window.ZMP;
-    if (zmpSdk && typeof zmpSdk.setNavigationBarTitle === 'function') {
+    if (!zmpSdk) return;
+
+    if (typeof zmpSdk.setNavigationBarTitle === 'function') {
       zmpSdk.setNavigationBarTitle({
-        title: state.settings.store_name || 'BÚN MẮM MIỀN TÂY'
+        title: (state.settings && state.settings.store_name) ? state.settings.store_name : 'BÚN MẮM MIỀN TÂY'
       });
+    }
+
+    const applyModel = (raw) => {
+      if (!raw) return;
+      const modelStr = String(raw).trim();
+      const detected = (typeof APPLE_DEVICE_MAP !== 'undefined' && APPLE_DEVICE_MAP[modelStr]) ? APPLE_DEVICE_MAP[modelStr] : modelStr;
+      if (detected && detected !== 'unknown') {
+        cachedDeviceModel = detected;
+        if (typeof sendDeviceHeartbeat === 'function') {
+          sendDeviceHeartbeat();
+        }
+      }
+    };
+
+    if (typeof zmpSdk.getSystemInfoSync === 'function') {
+      try {
+        const sys = zmpSdk.getSystemInfoSync();
+        if (sys && sys.model) applyModel(sys.model);
+      } catch (e) {}
+    }
+
+    if (typeof zmpSdk.getSystemInfo === 'function') {
+      try {
+        const res = zmpSdk.getSystemInfo({
+          success: (sys) => {
+            if (sys && sys.model) applyModel(sys.model);
+          },
+          fail: () => {}
+        });
+        if (res && typeof res.then === 'function') {
+          res.then((sys) => {
+            if (sys && sys.model) applyModel(sys.model);
+          }).catch(() => {});
+        }
+      } catch (e) {}
     }
   } catch (e) {
     console.debug('ZMP SDK init notice:', e);
