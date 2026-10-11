@@ -1000,6 +1000,10 @@ async function sendDeviceHeartbeat() {
     if (res && res.totalOnline !== undefined) {
       updateConnectedDeviceBadgeUI(res.totalOnline);
     }
+
+    if (res?.device?.name && res.device.customName && res.device.name !== devName) {
+      localStorage.setItem('pos_device_name', res.device.name);
+    }
   } catch (e) {}
 }
 
@@ -1113,6 +1117,9 @@ async function loadConnectedDevices(silent = false) {
               <div class="flex items-center space-x-1.5">
                 <span class="font-bold text-slate-800 text-xs sm:text-sm truncate">${escapeHtml(dev.name)}</span>
                 ${isSelf ? '<span class="text-[9px] bg-blue-600 text-white font-black px-1.5 py-0.2 rounded-full shrink-0">MÁY NÀY</span>' : ''}
+                <button onclick="promptRenameDevice('${escapeJs(dev.id)}', '${escapeJs(dev.name)}', ${isSelf})" class="text-slate-400 hover:text-blue-600 p-1 rounded-md hover:bg-slate-100 transition-colors shrink-0" title="Bấm để đặt tên riêng cho máy này">
+                  <i class="fa-solid fa-pen text-[10px]"></i>
+                </button>
               </div>
               <div class="text-[11px] text-slate-400 font-medium flex items-center space-x-2 mt-0.5">
                 <span>${escapeHtml(dev.platform)}</span>
@@ -1157,27 +1164,44 @@ async function loadConnectedDevices(silent = false) {
   }
 }
 
-async function promptRenameCurrentDevice() {
-  const current = getDeviceName();
-  const newName = prompt('Nhập tên gợi nhớ cho thiết bị này (Ví dụ: Máy Em Lan, Laptop Quầy, Máy Order Bàn):', current);
-  if (newName && newName.trim() && newName.trim() !== current) {
+async function promptRenameDevice(devId, currentName, isSelf) {
+  const newName = prompt(
+    `Nhập tên gợi nhớ cho thiết bị:\n(Ví dụ: "u dont have the internet poor u", "iPhone của tôi", "Máy Order 1")`,
+    currentName || ''
+  );
+  if (newName && newName.trim() && newName.trim() !== currentName) {
     const trimmed = newName.trim();
-    localStorage.setItem('pos_device_name', trimmed);
+    if (isSelf) {
+      localStorage.setItem('pos_device_name', trimmed);
+    }
     try {
       await api('/api/devices/rename', {
         method: 'PUT',
         body: JSON.stringify({
-          deviceId: getDeviceId(),
+          deviceId: devId,
           newName: trimmed
         })
       });
-      showToast('Đã đổi tên thiết bị!', 'success');
+      showToast(`Đã đổi tên thiết bị thành "${trimmed}"!`, 'success');
       loadConnectedDevices(true);
     } catch (e) {
-      showToast('Đã lưu tên thiết bị trên máy!', 'success');
-      loadConnectedDevices(true);
+      if (isSelf) {
+        showToast('Đã lưu tên thiết bị trên máy!', 'success');
+        loadConnectedDevices(true);
+      } else {
+        showToast('Không thể đổi tên: ' + (e.message || 'Lỗi kết nối'), 'error');
+      }
     }
   }
+}
+
+async function promptRenameCurrentDevice() {
+  promptRenameDevice(getDeviceId(), getDeviceName(), true);
+}
+
+function escapeJs(str) {
+  if (!str) return '';
+  return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
 async function deleteConnectedDevice(devId) {

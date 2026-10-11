@@ -85,6 +85,18 @@ function initDatabase() {
       table_name TEXT PRIMARY KEY,
       sort_order INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS devices (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      platform TEXT,
+      device_type TEXT,
+      ip TEXT,
+      role TEXT,
+      user_name TEXT,
+      last_seen INTEGER,
+      custom_name INTEGER DEFAULT 0
+    );
   `);
 
   // Seed default table definitions if empty

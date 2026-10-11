@@ -933,6 +933,25 @@ app.get('/api/backup/export-json', requireAdmin, (req, res) => {
 // -------------------------------------------------------------
 const connectedDevices = new Map();
 
+// Khởi tạo danh sách thiết bị đã lưu từ database SQLite
+try {
+  const savedDevices = db.prepare('SELECT * FROM devices').all();
+  for (const row of savedDevices) {
+    connectedDevices.set(row.id, {
+      id: row.id,
+      name: row.name,
+      platform: row.platform || '',
+      deviceType: row.device_type || '',
+      ip: row.ip || '127.0.0.1',
+      role: row.role || 'staff',
+      userName: row.user_name || 'Nhân Viên',
+      lastSeen: row.last_seen || 0,
+      customName: row.custom_name === 1,
+      isOnline: false
+    });
+  }
+} catch (e) {}
+
 function trackDeviceActivity(req, customData = {}) {
   const deviceId = req.query.deviceId || req.body?.deviceId || req.headers['x-device-id'] || 'device_' + (req.ip || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
   const userAgent = req.headers['user-agent'] || '';
@@ -968,13 +987,19 @@ function trackDeviceActivity(req, customData = {}) {
   const existing = connectedDevices.get(deviceId) || {
     id: deviceId,
     name: customData.deviceName || req.query.deviceName || req.body?.deviceName || (deviceType === 'desktop' ? 'Máy tính Quầy Thu Ngân' : `Điện Thoại (${platform})`),
+    customName: false,
     firstConnected: new Date().toISOString()
   };
+
+  // Giữ nguyên tên nếu thiết bị đã được người dùng đặt tên riêng
+  const assignedName = existing.customName 
+    ? existing.name 
+    : (customData.deviceName || req.query.deviceName || req.body?.deviceName || existing.name);
 
   const updated = {
     ...existing,
     id: deviceId,
-    name: customData.deviceName || req.query.deviceName || req.body?.deviceName || existing.name,
+    name: assignedName,
     platform: platform,
     deviceType: deviceType,
     ip: clientIp || '127.0.0.1',
@@ -986,6 +1011,21 @@ function trackDeviceActivity(req, customData = {}) {
   };
 
   connectedDevices.set(deviceId, updated);
+
+  // Lưu hoặc cập nhật vào database SQLite
+  try {
+    db.prepare(`
+      INSERT INTO devices (id, name, platform, device_type, ip, role, user_name, last_seen, custom_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        platform = excluded.platform,
+        device_type = excluded.device_type,
+        ip = excluded.ip,
+        last_seen = excluded.last_seen,
+        name = CASE WHEN devices.custom_name = 1 THEN devices.name ELSE excluded.name END
+    `).run(deviceId, assignedName, platform, deviceType, clientIp || '127.0.0.1', updated.role, updated.userName, now, existing.customName ? 1 : 0);
+  } catch (e) {}
+
   return updated;
 }
 
@@ -1177,11 +1217,31 @@ app.post('/api/devices/heartbeat', (req, res) => {
 app.put('/api/devices/rename', (req, res) => {
   const { deviceId, newName } = req.body || {};
   if (!deviceId || !newName) return res.status(400).json({ error: 'Thiếu dữ liệu' });
-  const dev = connectedDevices.get(deviceId);
+  const trimmed = newName.trim();
+  let dev = connectedDevices.get(deviceId);
   if (dev) {
-    dev.name = newName.trim();
+    dev.name = trimmed;
+    dev.customName = true;
+    connectedDevices.set(deviceId, dev);
+  } else {
+    dev = {
+      id: deviceId,
+      name: trimmed,
+      customName: true,
+      lastSeen: Date.now()
+    };
     connectedDevices.set(deviceId, dev);
   }
+
+  // Lưu vào SQLite để không bị mất khi khởi động lại server
+  try {
+    db.prepare(`
+      INSERT INTO devices (id, name, platform, device_type, ip, role, user_name, last_seen, custom_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, custom_name = 1
+    `).run(deviceId, trimmed, dev.platform || '', dev.deviceType || '', dev.ip || '', dev.role || '', dev.userName || '', dev.lastSeen || Date.now());
+  } catch (e) {}
+
   res.json({ success: true, device: dev });
 });
 
@@ -1189,6 +1249,9 @@ app.put('/api/devices/rename', (req, res) => {
 app.delete('/api/devices/:id', (req, res) => {
   const { id } = req.params;
   connectedDevices.delete(id);
+  try {
+    db.prepare('DELETE FROM devices WHERE id = ?').run(id);
+  } catch (e) {}
   res.json({ success: true });
 });
 

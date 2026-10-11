@@ -1082,7 +1082,7 @@
 
       <!-- Action bar -->
       <div class="px-5 py-2.5 bg-slate-50/40 border-b border-slate-100 flex items-center justify-between text-xs">
-        <span class="text-slate-500 font-medium">Tự động cập nhật trực tiếp</span>
+        <span class="text-slate-500 font-medium flex items-center"><i class="fa-solid fa-pen text-[10px] text-blue-500 mr-1.5"></i>Bấm ✏️ ở từng máy để đặt tên riêng</span>
         <div class="flex items-center space-x-2.5">
           <button onclick="promptRenameCurrentDevice()" class="text-slate-600 hover:text-blue-600 font-bold hover:underline flex items-center space-x-1">
             <i class="fa-solid fa-pen-to-square text-[11px]"></i>
@@ -1256,7 +1256,7 @@
         <div class="inline-block p-2.5 bg-white rounded-2xl shadow-xs border border-slate-200/80">
           <img 
             id="zaloModalQrImg" 
-            src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https%3A%2F%2Fzalo.me%2Fs%2F3906597427562388428%2F%3Fenv%3DTESTING%26version%3D31" 
+            src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https%3A%2F%2Fzalo.me%2Fs%2F3906597427562388428%2F%3Fenv%3DTESTING%26version%3D32" 
             alt="Mã QR Zalo Mini App" 
             class="w-48 h-48 sm:w-52 sm:h-52 mx-auto object-contain"
           >
@@ -1278,7 +1278,7 @@
             type="text" 
             id="zaloModalUrlInput" 
             readonly 
-            value="https://zalo.me/s/3906597427562388428/?env=TESTING&version=31" 
+            value="https://zalo.me/s/3906597427562388428/?env=TESTING&version=32" 
             class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-blue-700 select-all outline-none"
           >
           <button 
@@ -1296,7 +1296,7 @@
       <div class="space-y-2 pt-1">
         <a 
           id="zaloModalDirectLink" 
-          href="https://zalo.me/s/3906597427562388428/?env=TESTING&version=31" 
+          href="https://zalo.me/s/3906597427562388428/?env=TESTING&version=32" 
           target="_blank" 
           class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-2 shadow-md shadow-blue-600/20 transition-all text-center"
         >
@@ -1331,12 +1331,12 @@
   </div> <!-- /#app: Zalo Mini App Root Container -->
 
   <!-- JavaScript Modules -->
-  <script src="js/mount.js?v=20261011_btnxacnhan"></script>
-  <script src="js/app.js?v=20261011_btnxacnhan"></script>
-  <script src="js/pos.js?v=20261011_btnxacnhan"></script>
-  <script src="js/products.js?v=20261011_btnxacnhan"></script>
-  <script src="js/orders.js?v=20261011_btnxacnhan"></script>
-  <script src="js/reports.js?v=20261011_btnxacnhan"></script>
+  <script src="js/mount.js?v=20261011_devname"></script>
+  <script src="js/app.js?v=20261011_devname"></script>
+  <script src="js/pos.js?v=20261011_devname"></script>
+  <script src="js/products.js?v=20261011_devname"></script>
+  <script src="js/orders.js?v=20261011_devname"></script>
+  <script src="js/reports.js?v=20261011_devname"></script>
 
 </body>
 </html>
