@@ -340,16 +340,6 @@
             <p class="text-[11px] text-slate-400">Bàn phục vụ, món ăn & cài đặt quán</p>
           </div>
         </div>
-        <div class="flex items-center space-x-1.5 sm:space-x-2">
-          <button onclick="openCategoryModal()" class="px-2.5 sm:px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center space-x-1">
-            <i class="fa-solid fa-layer-group text-emerald-600"></i>
-            <span>+ Danh Mục</span>
-          </button>
-          <button onclick="openAddDishModal()" class="px-2.5 sm:px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1">
-            <i class="fa-solid fa-plus"></i>
-            <span>+ Thêm Món</span>
-          </button>
-        </div>
       </div>
 
       <!-- 1. Quản Lý Danh Sách Bàn (Thêm & Xóa Bàn) -->
@@ -360,10 +350,6 @@
             <span>Danh Sách Bàn Phục Vụ</span>
             <span id="manageTablesCount" class="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold">0 bàn</span>
           </div>
-          <button onclick="promptAddTableFromManagement()" class="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center space-x-1">
-            <i class="fa-solid fa-plus text-[10px]"></i>
-            <span>Thêm Bàn</span>
-          </button>
         </div>
 
         <!-- Ô nhập thêm bàn nhanh -->
@@ -413,11 +399,18 @@
         </div>
       </div>
 
-      <!-- 2. Danh Sách Món -->
+      <!-- 3. Danh Sách Món -->
       <div class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div class="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 flex justify-between">
-          <span>Danh Sách Món Đang Bán</span>
-          <span id="menuTotalCount" class="text-emerald-700 font-bold">0 món</span>
+        <div class="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between items-center">
+          <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-utensils text-emerald-600"></i>
+            <span>Danh Sách Món Đang Bán</span>
+            <span id="menuTotalCount" class="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold">0 món</span>
+          </div>
+          <button onclick="openAddDishModal()" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center space-x-1">
+            <i class="fa-solid fa-plus text-[10px]"></i>
+            <span>Thêm Món</span>
+          </button>
         </div>
         <div class="divide-y divide-slate-100" id="menuDishesList"></div>
       </div>
