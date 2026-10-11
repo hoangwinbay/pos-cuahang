@@ -2,6 +2,8 @@
    POS ORDER - STYLESHEET (EMERALD GREEN THEME)
    ============================================================ */
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 :root {
   --primary-color: #059669; /* Emerald 600 */
   --primary-dark: #047857;  /* Emerald 700 */
@@ -9,8 +11,8 @@
   --accent-color: #d97706;  /* Amber 600 */
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+body, button, input, select, textarea {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
