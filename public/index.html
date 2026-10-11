@@ -41,14 +41,14 @@
   <div id="screen-tables" class="w-full h-full flex flex-col overflow-hidden">
     
     <!-- Header: Menu ☰ + Tên Quán -->
-    <header class="bg-white border-b border-slate-200 px-3 py-2.5 flex items-center justify-between shrink-0 shadow-2xs z-10">
+    <header class="bg-white border-b border-slate-200 px-3.5 py-2.5 flex items-center justify-between shrink-0 shadow-2xs z-10">
       <div class="flex items-center space-x-2.5">
         <button onclick="toggleSideDrawer(true)" class="w-9 h-9 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-700 text-lg active:bg-slate-200" title="Menu">
           <i class="fa-solid fa-bars"></i>
         </button>
         <div>
           <div class="flex items-center space-x-1.5">
-            <h1 id="headerStoreName" class="font-black text-base text-slate-800 leading-tight">BÚN MẮM MIỀN TÂY</h1>
+            <h1 id="headerStoreName" class="font-black text-base sm:text-lg text-slate-900 leading-tight">BÚN MẮM MIỀN TÂY</h1>
             <span id="realtimeSyncDot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs animate-pulse" title="Đang đồng bộ trực tiếp thời gian thực"></span>
           </div>
         </div>
@@ -56,34 +56,34 @@
     </header>
 
     <!-- Nguồn: Mang về / Tại chỗ (Giống ảnh 1) -->
-    <div class="bg-white px-3.5 py-2 border-b border-slate-200/80 flex items-center space-x-3 shrink-0">
-      <span class="text-xs font-bold text-slate-500">Nguồn:</span>
+    <div class="bg-white px-3.5 py-2.5 border-b border-slate-200/80 flex items-center space-x-3 shrink-0">
+      <span class="text-xs sm:text-sm font-bold text-slate-600">Nguồn:</span>
       <div class="bg-slate-100 p-0.5 rounded-xl flex items-center space-x-1">
-        <button onclick="setOrderSource('mangve')" id="btnSourceMangVe" class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 transition-all">
+        <button onclick="setOrderSource('mangve')" id="btnSourceMangVe" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 transition-all">
           Mang về
         </button>
-        <button onclick="setOrderSource('taicho')" id="btnSourceTaiCho" class="px-3 py-1 rounded-lg text-xs font-bold bg-white text-emerald-700 shadow-xs transition-all">
+        <button onclick="setOrderSource('taicho')" id="btnSourceTaiCho" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-white text-emerald-700 shadow-xs transition-all">
           Tại chỗ
         </button>
       </div>
     </div>
 
     <!-- Phân loại Khu Vực / Trạng thái bàn (Ảnh 1) -->
-    <div class="bg-white px-3.5 pt-2 border-b border-slate-200 flex items-center justify-between shrink-0">
-      <div class="flex items-center space-x-4 text-xs font-bold">
-        <button onclick="filterTableArea('all')" id="tabAreaAll" class="area-tab pb-2 border-b-2 border-emerald-600 text-emerald-700">
+    <div class="bg-white px-3.5 pt-2.5 border-b border-slate-200 flex items-center justify-between shrink-0">
+      <div class="flex items-center space-x-3 sm:space-x-4 text-xs sm:text-sm font-bold">
+        <button onclick="filterTableArea('all')" id="tabAreaAll" class="area-tab pb-2.5 border-b-2 border-emerald-600 text-emerald-700">
           Tất cả bàn
         </button>
-        <button onclick="filterTableArea('occupied')" id="tabAreaOccupied" class="area-tab pb-2 text-slate-500 hover:text-slate-800">
+        <button onclick="filterTableArea('occupied')" id="tabAreaOccupied" class="area-tab pb-2.5 text-slate-500 hover:text-slate-800">
           BÀN CÓ KHÁCH
         </button>
-        <button onclick="filterTableArea('empty')" id="tabAreaEmpty" class="area-tab pb-2 text-slate-500 hover:text-slate-800">
+        <button onclick="filterTableArea('empty')" id="tabAreaEmpty" class="area-tab pb-2.5 text-slate-500 hover:text-slate-800">
           BÀN TRỐNG
         </button>
       </div>
 
-      <button onclick="promptAddCustomTable()" class="text-xs font-bold text-emerald-600 hover:text-emerald-700 pb-2 flex items-center space-x-1">
-        <i class="fa-solid fa-plus text-[10px]"></i>
+      <button onclick="promptAddCustomTable()" class="text-xs sm:text-sm font-bold text-emerald-600 hover:text-emerald-700 pb-2.5 flex items-center space-x-1">
+        <i class="fa-solid fa-plus text-xs"></i>
         <span>Thêm bàn</span>
       </button>
     </div>

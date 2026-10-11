@@ -292,11 +292,11 @@ function setOrderSource(source) {
   const btnTaiCho = document.getElementById('btnSourceTaiCho');
 
   if (source === 'mangve') {
-    btnMangVe.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-white text-emerald-700 shadow-xs transition-all';
-    btnTaiCho.className = 'px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 transition-all';
+    btnMangVe.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-white text-emerald-700 shadow-xs transition-all';
+    btnTaiCho.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 transition-all';
   } else {
-    btnTaiCho.className = 'px-3 py-1 rounded-lg text-xs font-bold bg-white text-emerald-700 shadow-xs transition-all';
-    btnMangVe.className = 'px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 transition-all';
+    btnTaiCho.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-white text-emerald-700 shadow-xs transition-all';
+    btnMangVe.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-slate-600 transition-all';
   }
 
   renderTableGrid();
@@ -314,9 +314,9 @@ function filterTableArea(filter) {
   Object.keys(tabs).forEach(k => {
     if (tabs[k]) {
       if (k === filter) {
-        tabs[k].className = 'area-tab pb-2 border-b-2 border-emerald-600 text-emerald-700 font-bold';
+        tabs[k].className = 'area-tab pb-2.5 border-b-2 border-emerald-600 text-emerald-700 font-bold';
       } else {
-        tabs[k].className = 'area-tab pb-2 text-slate-500 hover:text-slate-800 font-bold';
+        tabs[k].className = 'area-tab pb-2.5 text-slate-500 hover:text-slate-800 font-bold';
       }
     }
   });
@@ -387,35 +387,35 @@ function renderTableGrid() {
           class="table-card ${isMangVe ? 'bg-amber-600' : 'bg-emerald-600'} text-white rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between shadow-sm cursor-pointer aspect-square active:scale-95 transition-all"
         >
           <div class="flex items-center justify-between">
-            <span class="font-black text-xs sm:text-sm tracking-tight text-white">${tableName}</span>
+            <span class="font-black text-sm sm:text-base tracking-tight text-white">${tableName}</span>
             ${isMangVe 
-              ? `<span class="text-[9px] font-black bg-amber-200 text-amber-950 px-1.5 py-0.5 rounded shadow-2xs">MANG VỀ</span>` 
-              : `<span class="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>`}
+              ? `<span class="text-[10px] font-black bg-amber-200 text-amber-950 px-1.5 py-0.5 rounded shadow-2xs">MANG VỀ</span>` 
+              : `<span class="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-pulse"></span>`}
           </div>
 
           <div class="my-auto text-center py-1">
-            <div class="text-xs sm:text-sm font-black text-white leading-tight">
+            <div class="text-sm sm:text-base font-black text-white leading-tight">
               ${formatMoney(totalAmount)}
             </div>
-            <div class="text-[10px] sm:text-xs text-white/90 font-semibold mt-0.5">
+            <div class="text-xs sm:text-sm text-white/95 font-bold mt-0.5">
               ${totalCount} Món
             </div>
           </div>
 
-          <div class="flex items-center justify-between text-[10px] text-white/80 font-medium">
+          <div class="flex items-center justify-between text-[11px] sm:text-xs text-white/90 font-medium">
             <span>${isMangVe ? 'Mang về' : 'Tại chỗ'}</span>
             <span>${elapsedMin}p</span>
           </div>
         </div>
       `;
     } else {
-      // BÀN TRỐNG: Nền trắng viền xám nhẹ nhàng bo góc
+      // BÀN TRỐNG: Nền trắng viền xám nhẹ nhàng bo góc, chữ Bàn to rõ nét
       return `
         <div 
           onclick="openTableOrder('${tableName}')"
-          class="table-card bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl p-2.5 flex items-center justify-center text-slate-700 shadow-2xs cursor-pointer aspect-square active:scale-95 transition-all hover:bg-slate-50"
+          class="table-card bg-white border border-slate-200 hover:border-emerald-300 rounded-2xl p-2.5 flex items-center justify-center text-slate-800 shadow-2xs cursor-pointer aspect-square active:scale-95 transition-all hover:bg-slate-50"
         >
-          <span class="font-bold text-xs sm:text-sm text-slate-700">${tableName}</span>
+          <span class="font-extrabold text-base sm:text-lg text-slate-800 tracking-tight">${tableName}</span>
         </div>
       `;
     }
