@@ -354,29 +354,13 @@ function getApiBaseUrl() {
     return custom.trim().replace(/\/$/, '');
   }
 
-  // Nếu đang mở trực tiếp trên chính web Render hoặc máy chủ nội bộ:
-  if (window.location.hostname === 'pos-cuahang.onrender.com' ||
-      window.location.hostname === 'localhost' || 
-      window.location.hostname === '127.0.0.1' || 
-      /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname)) {
-    return '';
-  }
-
-  // Mặc định cho Zalo Mini App: Kết nối trực tiếp về Render của quán!
-  return DEFAULT_CLOUD_SERVER;
+  // Chạy trực tiếp cùng host với máy chủ web
+  return '';
 }
 
 // API Helper with Automatic Offline / Standalone Fallback
 async function api(url, options = {}) {
   const base = getApiBaseUrl();
-  const isZaloCdn = window.location.hostname.includes('zdn.vn') || 
-                    window.location.hostname.includes('zalo.me');
-
-  // Neu dang tren Zalo Mini App ma khong co base (hiem khi xay ra):
-  if (!base && isZaloCdn) {
-    return handleOfflineApi(url, options);
-  }
-
   const fullUrl = url.startsWith('http') ? url : (base ? `${base}${url}` : url);
 
   try {
@@ -431,12 +415,11 @@ function isHostServerMachine() {
     return true;
   }
   
-  // Thiết bị quét: Điện thoại, Zalo Mini App, hoặc mở từ mã QR bàn
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Zalo/i.test(navigator.userAgent || '');
-  const isZalo = window.location.search.includes('zalo') || !!window.ZaloJavaScriptInterface;
+  // Thiết bị di động hoặc mở từ mã QR bàn
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
   const isTableScan = window.location.search.includes('table=');
   
-  if (isMobile || isZalo || isTableScan) {
+  if (isMobile || isTableScan) {
     return false;
   }
   
@@ -1095,42 +1078,20 @@ function getAutoDetectedModel() {
   const ua = navigator.userAgent;
   const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isAndroid = /Android/i.test(ua);
-  const zmpSdk = window.zmp || window.ZMP;
 
-  // 1. Lấy model trực tiếp từ Zalo Mini App SDK
-  if (zmpSdk) {
-    try {
-      let sysInfo = null;
-      if (typeof zmpSdk.getSystemInfoSync === 'function') {
-        sysInfo = zmpSdk.getSystemInfoSync();
-      }
-      if (sysInfo && sysInfo.model) {
-        const rawModel = String(sysInfo.model).trim();
-        if (APPLE_DEVICE_MAP[rawModel]) {
-          cachedDeviceModel = APPLE_DEVICE_MAP[rawModel];
-          return cachedDeviceModel;
-        }
-        if (rawModel && rawModel !== 'unknown') {
-          cachedDeviceModel = rawModel;
-          return cachedDeviceModel;
-        }
-      }
-    } catch (e) {}
-  }
-
-  // 2. Nhận diện iPhone/iPad trên iOS
+  // 1. Nhận diện iPhone/iPad trên iOS
   if (isIOS) {
     cachedDeviceModel = detectAppleDeviceFallback();
     return cachedDeviceModel;
   }
 
-  // 3. Nhận diện Android
+  // 2. Nhận diện Android
   if (isAndroid) {
     cachedDeviceModel = detectAndroidDevice();
     return cachedDeviceModel;
   }
 
-  // 4. Laptop / Máy tính
+  // 3. Laptop / Máy tính
   if (/Windows/i.test(ua)) {
     cachedDeviceModel = 'Laptop / Máy Tính Windows';
     return cachedDeviceModel;
@@ -1149,9 +1110,8 @@ function getDeviceName() {
 }
 
 function getDevicePlatform() {
-  if (/Zalo/i.test(navigator.userAgent) || typeof window.zmp !== 'undefined') return 'Zalo Mini App';
-  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return 'iOS (iPhone / iPad)';
-  if (/Android/i.test(navigator.userAgent)) return 'Android';
+  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) return 'iOS (Safari / Web)';
+  if (/Android/i.test(navigator.userAgent)) return 'Android (Web)';
   if (/Windows/i.test(navigator.userAgent)) return 'Windows PC';
   if (/Mac/i.test(navigator.userAgent)) return 'macOS';
   return 'Web Browser';
@@ -1272,15 +1232,15 @@ async function loadConnectedDevices(silent = false) {
       let iconHtml = '<i class="fa-solid fa-laptop text-indigo-600 text-lg"></i>';
       let iconBg = 'bg-indigo-50 border-indigo-100';
 
-      if (dev.platform.includes('Zalo')) {
-        iconHtml = '<i class="fa-solid fa-comment-dots text-blue-600 text-lg"></i>';
-        iconBg = 'bg-blue-50 border-blue-100';
-      } else if (dev.platform.includes('iOS') || /iPhone|iPad/i.test(dev.platform)) {
+      if (dev.platform.includes('iOS') || /iPhone|iPad/i.test(dev.platform)) {
         iconHtml = '<i class="fa-brands fa-apple text-slate-800 text-lg"></i>';
         iconBg = 'bg-slate-100 border-slate-200';
       } else if (dev.platform.includes('Android')) {
         iconHtml = '<i class="fa-brands fa-android text-emerald-600 text-lg"></i>';
         iconBg = 'bg-emerald-50 border-emerald-100';
+      } else if (dev.platform.includes('Windows')) {
+        iconHtml = '<i class="fa-brands fa-windows text-blue-600 text-lg"></i>';
+        iconBg = 'bg-blue-50 border-blue-100';
       }
 
       const elapsedSec = Math.floor((Date.now() - (dev.lastSeen || Date.now())) / 1000);
@@ -1421,41 +1381,52 @@ function closeServerConfigModal() {
 }
 
 // =============================================================
-// MODAL ZALO MINI APP (BẢN TEST MỚI NHẤT)
+// MODAL MỞ POS TRÊN ĐIỆN THOẠI (FULL WEB BROWSER)
 // =============================================================
-let currentZaloTestUrl = 'https://zalo.me/s/3906597427562388428/?env=TESTING&version=27';
+let currentMobileWebUrl = '';
 
-async function openZaloModal() {
-  const modal = document.getElementById('modalZaloApp');
+async function openMobileConnectModal() {
+  const modal = document.getElementById('modalMobileConnect') || document.getElementById('modalZaloApp');
   if (!modal) return;
 
-  const urlInput = document.getElementById('zaloModalUrlInput');
-  const directLink = document.getElementById('zaloModalDirectLink');
-  const qrImg = document.getElementById('zaloModalQrImg');
+  const urlInput = document.getElementById('mobileModalUrlInput') || document.getElementById('zaloModalUrlInput');
+  const directLink = document.getElementById('mobileModalDirectLink') || document.getElementById('zaloModalDirectLink');
+  const qrImg = document.getElementById('mobileModalQrImg') || document.getElementById('zaloModalQrImg');
 
-  try {
-    const res = await fetch('/api/server-info');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.zalo_test_url) {
-        currentZaloTestUrl = data.zalo_test_url;
+  let targetUrl = window.location.origin;
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    try {
+      const res = await fetch('/api/server-info');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.tunnel_url) {
+          targetUrl = data.tunnel_url;
+        } else if (data.local_ip) {
+          targetUrl = `http://${data.local_ip}:3000`;
+        } else if (data.cloud_url) {
+          targetUrl = data.cloud_url;
+        }
       }
-    }
-  } catch (e) {}
+    } catch (e) {}
+  }
 
-  if (urlInput) urlInput.value = currentZaloTestUrl;
-  if (directLink) directLink.href = currentZaloTestUrl;
+  currentMobileWebUrl = targetUrl;
+  if (urlInput) urlInput.value = targetUrl;
+  if (directLink) directLink.href = targetUrl;
   if (qrImg) {
-    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(currentZaloTestUrl)}`;
+    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(targetUrl)}`;
   }
 
   modal.classList.remove('hidden');
 }
 
-function closeZaloModal() {
-  const modal = document.getElementById('modalZaloApp');
+function closeMobileConnectModal() {
+  const modal = document.getElementById('modalMobileConnect') || document.getElementById('modalZaloApp');
   if (modal) modal.classList.add('hidden');
 }
+
+const openZaloModal = openMobileConnectModal;
+const closeZaloModal = closeMobileConnectModal;
 
 async function testServerConnection() {
   const input = document.getElementById('inputServerUrl');
@@ -1510,62 +1481,6 @@ function saveServerConfig() {
   }
 }
 
-// =============================================================
-// ZALO MINI APP SDK INTEGRATION (App ID: 3906597427562388428)
-// =============================================================
-function initZaloMiniApp() {
-  const isZaloEnv = /Zalo/i.test(navigator.userAgent) || typeof window.zmp !== 'undefined';
-  if (!isZaloEnv) return;
-
-  try {
-    const zmpSdk = window.zmp || window.ZMP;
-    if (!zmpSdk) return;
-
-    if (typeof zmpSdk.setNavigationBarTitle === 'function') {
-      zmpSdk.setNavigationBarTitle({
-        title: (state.settings && state.settings.store_name) ? state.settings.store_name : 'BÚN MẮM MIỀN TÂY'
-      });
-    }
-
-    const applyModel = (raw) => {
-      if (!raw) return;
-      const modelStr = String(raw).trim();
-      const detected = (typeof APPLE_DEVICE_MAP !== 'undefined' && APPLE_DEVICE_MAP[modelStr]) ? APPLE_DEVICE_MAP[modelStr] : modelStr;
-      if (detected && detected !== 'unknown') {
-        cachedDeviceModel = detected;
-        if (typeof sendDeviceHeartbeat === 'function') {
-          sendDeviceHeartbeat();
-        }
-      }
-    };
-
-    if (typeof zmpSdk.getSystemInfoSync === 'function') {
-      try {
-        const sys = zmpSdk.getSystemInfoSync();
-        if (sys && sys.model) applyModel(sys.model);
-      } catch (e) {}
-    }
-
-    if (typeof zmpSdk.getSystemInfo === 'function') {
-      try {
-        const res = zmpSdk.getSystemInfo({
-          success: (sys) => {
-            if (sys && sys.model) applyModel(sys.model);
-          },
-          fail: () => {}
-        });
-        if (res && typeof res.then === 'function') {
-          res.then((sys) => {
-            if (sys && sys.model) applyModel(sys.model);
-          }).catch(() => {});
-        }
-      } catch (e) {}
-    }
-  } catch (e) {
-    console.debug('ZMP SDK init notice:', e);
-  }
-}
-
 // App Initialization
 async function startApp() {
   if ('serviceWorker' in navigator) {
@@ -1578,7 +1493,6 @@ async function startApp() {
 
   await initAuth();
   await loadSettings();
-  initZaloMiniApp();
 
   if (typeof initPos === 'function') {
     await initPos();

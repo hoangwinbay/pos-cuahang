@@ -8,7 +8,7 @@ const htmlContent = fs.readFileSync(indexHtmlPath, 'utf8');
 
 // Match everything inside <div id="app" ...> ... </div> <!-- /#app: Zalo Mini App Root Container -->
 const startMarker = '<div id="app" class="w-full h-full flex flex-col overflow-hidden">';
-const endMarker = '</div> <!-- /#app: Zalo Mini App Root Container -->';
+const endMarker = '</div> <!-- /#app: POS Root Container -->';
 
 const startIndex = htmlContent.indexOf(startMarker);
 const endIndex = htmlContent.indexOf(endMarker);

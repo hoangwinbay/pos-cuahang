@@ -960,10 +960,7 @@ function trackDeviceActivity(req, customData = {}) {
   let deviceType = customData.deviceType || req.query.deviceType || req.body?.deviceType || '';
 
   if (!platform) {
-    if (/Zalo/i.test(userAgent)) {
-      platform = 'Zalo Mini App';
-      deviceType = 'mobile';
-    } else if (/iPhone|iPad|iPod/i.test(userAgent)) {
+    if (/iPhone|iPad|iPod/i.test(userAgent)) {
       platform = 'iOS (iPhone / iPad)';
       deviceType = 'mobile';
     } else if (/Android/i.test(userAgent)) {
@@ -1134,23 +1131,12 @@ app.get('/api/server-info', (req, res) => {
     }
   } catch (e) {}
 
-  let zaloTestUrl = 'https://zalo.me/s/3906597427562388428/?env=TESTING';
-  try {
-    const fs = require('node:fs');
-    const zaloFile = path.join(__dirname, 'latest_zalo_test_url.txt');
-    if (fs.existsSync(zaloFile)) {
-      const saved = fs.readFileSync(zaloFile, 'utf8').trim();
-      if (saved) zaloTestUrl = saved;
-    }
-  } catch (e) {}
-
   res.json({
     local_ip: localIp,
     port: PORT,
     wifi_url: `http://${localIp}:${PORT}`,
     tunnel_url: tunnelUrl,
-    cloud_url: 'https://pos-cuahang.onrender.com',
-    zalo_test_url: zaloTestUrl
+    cloud_url: 'https://pos-cuahang.onrender.com'
   });
 });
 
@@ -1375,7 +1361,7 @@ app.post('/api/tables/custom', (req, res) => {
   }
 });
 
-// 6. POST /api/print-job: Nhận lệnh in từ thiết bị di động / Zalo Mini App và phát tới máy in tại quầy
+// 6. POST /api/print-job: Nhận lệnh in từ thiết bị di động (Web Browser) và phát tới máy in tại quầy
 app.post('/api/print-job', (req, res) => {
   try {
     const { order, sender_device_id } = req.body;

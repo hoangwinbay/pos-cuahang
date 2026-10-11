@@ -7,15 +7,13 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Zalo Mini App SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/zmp-sdk@2.53.0/index.umd.min.js"></script>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#059669">
   <link rel="stylesheet" href="css/style.css?v=20261010_1955">
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden select-none">
 
-  <!-- Zalo Mini App Root Container -->
+  <!-- App Root Container -->
   <div id="app" class="w-full h-full flex flex-col overflow-hidden">
 
   <!-- Khung in hóa đơn nhiệt 80mm (Chỉ hiển thị khi bấm In) -->
@@ -220,10 +218,10 @@
         <span>Máy in</span>
       </button>
 
-      <!-- 6. Zalo Mini App -->
-      <button onclick="openZaloModal(); toggleSideDrawer(false);" class="w-full p-3 rounded-xl hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-slate-100">
-        <i class="fa-solid fa-qrcode text-blue-600 text-base w-6 text-center"></i>
-        <span>Zalo Mini App</span>
+      <!-- 6. Mở trên điện thoại -->
+      <button onclick="openMobileConnectModal(); toggleSideDrawer(false);" class="w-full p-3 rounded-xl hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-slate-100">
+        <i class="fa-solid fa-mobile-screen-button text-blue-600 text-base w-6 text-center"></i>
+        <span>Mở trên điện thoại</span>
       </button>
 
       <!-- 7. Đăng Xuất (hoặc Đăng Nhập) -->
@@ -1150,35 +1148,20 @@
           </div>
         </div>
 
-        <!-- 2. Zalo Mini App qua HTTPS Tunnel -->
+        <!-- 2. Truy cập từ xa / Internet -->
         <div class="border border-slate-200 rounded-xl p-3 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-slate-800 flex items-center">
-              <i class="fa-solid fa-shield-halved text-emerald-600 mr-1.5"></i> Đường dẫn cho Zalo Mini App:
+              <i class="fa-solid fa-globe text-emerald-600 mr-1.5"></i> Đường dẫn Internet / Cloud:
             </span>
           </div>
           <div class="flex items-center space-x-1.5">
-            <input type="text" id="displayTunnelUrl" readonly placeholder="Đang tạo link bảo mật..." class="flex-1 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-emerald-700">
+            <input type="text" id="displayTunnelUrl" readonly placeholder="https://pos-cuahang.onrender.com" class="flex-1 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-emerald-700">
             <button onclick="copyToClipboard('displayTunnelUrl')" class="px-2.5 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg text-xs font-bold">
               <i class="fa-regular fa-copy"></i>
             </button>
           </div>
-          <p class="text-[11px] text-slate-400">Dán link này vào mục Cài đặt trên điện thoại chạy Zalo Mini App.</p>
-        </div>
-
-        <!-- 3. Mở Zalo Mini App (Bản Test Mới Nhất) -->
-        <div class="border border-blue-200 bg-blue-50/60 rounded-xl p-3 space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-blue-900 flex items-center">
-              <i class="fa-solid fa-mobile-screen-button text-blue-600 mr-1.5"></i> Mở Zalo Mini App (Bản Test):
-            </span>
-            <span class="text-[10px] bg-blue-200 text-blue-900 px-1.5 py-0.5 rounded font-bold">KHUYÊN DÙNG</span>
-          </div>
-          <p class="text-[11px] text-blue-800">Quét mã QR để mở trực tiếp bản thử nghiệm mới nhất trên Zalo điện thoại.</p>
-          <button onclick="closeServerConfigModal(); openZaloModal();" class="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 transition-colors shadow-xs">
-            <i class="fa-solid fa-qrcode"></i>
-            <span>Xem Mã QR & Link Zalo Bản Test</span>
-          </button>
+          <p class="text-[11px] text-slate-400">Dùng link này để mở Web POS trên điện thoại từ xa (qua 4G/5G hoặc ngoài quán).</p>
         </div>
 
         <div class="text-center pt-2">
@@ -1215,8 +1198,8 @@
     </div>
   </div>
 
-  <!-- Modal Mở Zalo Mini App (Bản Thử Nghiệm / Test Mới Nhất) -->
-  <div id="modalZaloApp" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+  <!-- Modal Mở POS Trên Điện Thoại (Web Browser) -->
+  <div id="modalMobileConnect" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl p-5 space-y-4 max-h-[92vh] overflow-y-auto">
       <!-- Header -->
       <div class="flex items-center justify-between border-b pb-3 border-slate-100">
@@ -1225,13 +1208,13 @@
             <i class="fa-solid fa-mobile-screen-button"></i>
           </div>
           <div>
-            <h3 class="font-black text-base text-slate-800 leading-tight">Zalo Mini App</h3>
+            <h3 class="font-black text-base text-slate-800 leading-tight">Mở POS Trên Điện Thoại</h3>
             <span class="inline-flex items-center text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              <i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Bản Test Mới Nhất
+              <i class="fa-solid fa-globe text-emerald-600 mr-1"></i>Web App Đầy Đủ
             </span>
           </div>
         </div>
-        <button onclick="closeZaloModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors">
+        <button onclick="closeMobileConnectModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors">
           <i class="fa-solid fa-xmark text-lg"></i>
         </button>
       </div>
@@ -1239,46 +1222,46 @@
       <!-- Banner thông báo -->
       <div class="bg-blue-50/80 border border-blue-200 rounded-xl p-3 text-xs text-blue-950 space-y-1">
         <div class="font-bold flex items-center text-blue-800">
-          <i class="fa-solid fa-circle-info mr-1.5 text-blue-600"></i>
-          Mở Phiên Bản Thử Nghiệm (Testing)
+          <i class="fa-solid fa-qrcode mr-1.5 text-blue-600"></i>
+          Quét Mã QR Để Mở Giao Diện Web
         </div>
         <p class="text-[11px] text-blue-900/90 leading-relaxed">
-          Quét mã QR dưới đây bằng <b>ứng dụng Zalo</b> trên điện thoại để vào trực tiếp phiên bản mới nhất (không bị thông báo <i>"Đang phát triển"</i>).
+          Mở ứng dụng <b>Camera</b> trên điện thoại (iPhone hoặc Android) để quét mã QR dưới đây, giao diện Web POS sẽ mở ngay lập tức trên trình duyệt Safari/Chrome.
         </p>
       </div>
 
-      <!-- Khung Mã QR lớn & rõ ràng -->
+      <!-- Khung Mã QR -->
       <div class="text-center bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
         <div class="inline-block p-2.5 bg-white rounded-2xl shadow-xs border border-slate-200/80">
           <img 
-            id="zaloModalQrImg" 
-            src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https%3A%2F%2Fzalo.me%2Fs%2F3906597427562388428%2F%3Fenv%3DTESTING%26version%3D34" 
-            alt="Mã QR Zalo Mini App" 
+            id="mobileModalQrImg" 
+            src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https%3A%2F%2Fpos-cuahang.onrender.com" 
+            alt="Mã QR Web POS" 
             class="w-48 h-48 sm:w-52 sm:h-52 mx-auto object-contain"
           >
         </div>
         <div class="text-[11px] text-slate-500 font-semibold flex items-center justify-center space-x-1">
           <i class="fa-solid fa-camera text-slate-400"></i>
-          <span>Quét bằng ứng dụng Zalo trên điện thoại</span>
+          <span>Dùng Camera iPhone / Android quét mã</span>
         </div>
       </div>
 
       <!-- Đường Link Trực Tiếp & Nút Sao Chép -->
       <div class="space-y-1.5">
         <label class="block text-xs font-bold text-slate-700 flex items-center justify-between">
-          <span>Đường dẫn bản test:</span>
-          <span class="text-[10px] text-slate-400 font-normal">Phiên bản mới nhất</span>
+          <span>Đường dẫn Web POS:</span>
+          <span class="text-[10px] text-slate-400 font-normal">Safari / Chrome</span>
         </label>
         <div class="flex items-center space-x-1.5">
           <input 
             type="text" 
-            id="zaloModalUrlInput" 
+            id="mobileModalUrlInput" 
             readonly 
-            value="https://zalo.me/s/3906597427562388428/?env=TESTING&version=34" 
+            value="https://pos-cuahang.onrender.com" 
             class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-blue-700 select-all outline-none"
           >
           <button 
-            onclick="copyToClipboard('zaloModalUrlInput')" 
+            onclick="copyToClipboard('mobileModalUrlInput')" 
             class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold border border-blue-200 flex items-center space-x-1 shrink-0 transition-colors" 
             title="Sao chép đường dẫn"
           >
@@ -1291,31 +1274,31 @@
       <!-- Nút mở trực tiếp -->
       <div class="space-y-2 pt-1">
         <a 
-          id="zaloModalDirectLink" 
-          href="https://zalo.me/s/3906597427562388428/?env=TESTING&version=34" 
+          id="mobileModalDirectLink" 
+          href="https://pos-cuahang.onrender.com" 
           target="_blank" 
           class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-2 shadow-md shadow-blue-600/20 transition-all text-center"
         >
           <i class="fa-solid fa-arrow-up-right-from-square"></i>
-          <span>Mở Liên Kết Zalo Trên Tab Mới</span>
+          <span>Mở Web POS Trên Tab Mới</span>
         </a>
 
         <button 
-          onclick="closeZaloModal()" 
+          onclick="closeMobileConnectModal()" 
           class="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors"
         >
           Đóng
         </button>
       </div>
 
-      <!-- Hướng dẫn đồng bộ -->
+      <!-- Mẹo toàn màn hình -->
       <div class="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1">
         <div class="font-bold flex items-center text-amber-800">
           <i class="fa-solid fa-lightbulb mr-1 text-amber-600"></i>
-          Lưu ý kết nối:
+          Mẹo dùng như ứng dụng (App):
         </div>
         <p class="leading-relaxed">
-          Zalo Mini App tự động đồng bộ thực đơn và đặt bàn với máy chủ Cloud Render (<span class="font-mono font-bold">pos-cuahang.onrender.com</span>). Nếu muốn kết nối mạng Wi-Fi nội bộ tại quán, vào mục Cài Đặt trên Mini App để đổi địa chỉ máy chủ.
+          Trên <b>Safari (iPhone)</b>: Bấm nút Chia sẻ <i class="fa-solid fa-arrow-up-from-bracket"></i> > chọn <b>"Thêm vào Màn hình chính" (Add to Home Screen)</b> để dùng toàn màn hình mượt mà không vướng thanh địa chỉ.
         </p>
       </div>
     </div>
@@ -1324,15 +1307,14 @@
   <!-- Toast Notification -->
   <div id="toastContainer" class="fixed bottom-16 sm:bottom-6 right-4 left-4 sm:left-auto z-50 flex flex-col space-y-2 pointer-events-none items-center sm:items-end"></div>
 
-  </div> <!-- /#app: Zalo Mini App Root Container -->
+  </div> <!-- /#app: POS Root Container -->
 
   <!-- JavaScript Modules -->
-  <script src="js/mount.js?v=20261011_devname"></script>
-  <script src="js/app.js?v=20261011_devname"></script>
-  <script src="js/pos.js?v=20261011_devname"></script>
-  <script src="js/products.js?v=20261011_devname"></script>
-  <script src="js/orders.js?v=20261011_devname"></script>
-  <script src="js/reports.js?v=20261011_devname"></script>
+  <script src="js/app.js?v=20261011_web"></script>
+  <script src="js/pos.js?v=20261011_web"></script>
+  <script src="js/products.js?v=20261011_web"></script>
+  <script src="js/orders.js?v=20261011_web"></script>
+  <script src="js/reports.js?v=20261011_web"></script>
 
 </body>
 </html>

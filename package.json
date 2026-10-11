@@ -10,10 +10,7 @@
     "start": "node server.js",
     "pos": "node scripts/start-pos.js",
     "dev": "node --watch server.js",
-    "build": "node scripts/build-mount.js",
-    "deploy:zalo": "node scripts/deploy-zalo.js",
-    "start:zalo": "npx zmp-cli start",
-    "login:zalo": "npx zmp-cli login"
+    "build": "node scripts/build-mount.js"
   },
   "keywords": ["pos", "point-of-sale", "vietqr", "mobile"],
   "author": "",

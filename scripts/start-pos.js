@@ -50,16 +50,14 @@ function printBanner() {
   console.log(' 2. DIEN THOAI DUNG CHUNG WI-FI QUAN (Mo Safari/Chrome):');
   console.log(`    -> http://${localIp}:3000\n`);
   if (tunnelUrl) {
-    console.log(' 3. DIEN THOAI CHAY ZALO MINI APP:');
-    console.log('    -> Mo Mini App > Bam Bieu tuong Cai dat (banh rang hoac nut Cau hinh)');
-    console.log('    -> Dan duong dan HTTPS sau vao o "Dia chi may chu POS":');
-    console.log(`    -> ${tunnelUrl}`);
+    console.log(' 3. DIEN THOAI TRUY CAP TU XA / INTERNET (Safari/Chrome):');
+    console.log(`    -> ${tunnelUrl}\n`);
   }
   console.log('='.repeat(68) + '\n');
 }
 
 if (fs.existsSync(cloudflaredPath)) {
-  console.log('Dang thiet lap duong truyen HTTPS bao mat cho Zalo Mini App...');
+  console.log('Dang thiet lap duong truyen HTTPS truy cap tu xa...');
   tunnelProc = spawn(cloudflaredPath, ['tunnel', '--url', 'http://localhost:3000'], {
     cwd: path.join(__dirname, '..')
   });
