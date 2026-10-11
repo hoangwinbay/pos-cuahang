@@ -552,10 +552,10 @@ function renderOrderCategoriesPills() {
     return `
       <button 
         onclick="filterOrderCategory(${cat.id})" 
-        class="cat-pill px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+        class="cat-pill px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold uppercase whitespace-nowrap transition-all ${
           isActive 
-            ? 'bg-emerald-600 text-white shadow-xs' 
-            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            ? 'bg-[#0369a1] text-white shadow-xs' 
+            : 'bg-[#eaedf0] hover:bg-slate-200 text-slate-800'
         }"
         data-id="${cat.id}"
       >
@@ -567,14 +567,14 @@ function renderOrderCategoriesPills() {
   container.innerHTML = `
     <button 
       onclick="filterOrderCategory('all')" 
-      class="cat-pill px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+      class="cat-pill px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold uppercase whitespace-nowrap transition-all ${
         currentSelectedCategory === 'all' 
-          ? 'bg-emerald-600 text-white shadow-xs' 
-          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+          ? 'bg-[#0369a1] text-white shadow-xs' 
+          : 'bg-[#eaedf0] hover:bg-slate-200 text-slate-800'
       }"
       data-id="all"
     >
-      Tất cả (${totalCount})
+      TẤT CẢ (${totalCount})
     </button>
     ${pillsHtml}
   `;
@@ -711,47 +711,57 @@ function renderGroupedDishList() {
       const currentQty = existingInTable ? existingInTable.quantity : 0;
       const hasImage = isActualImage(p.image);
 
+      let fallbackIcon = 'fa-bowl-food';
+      const lowerCat = catName.toLowerCase();
+      if (lowerCat.includes('uống')) {
+        fallbackIcon = 'fa-glass-water';
+      } else if (lowerCat.includes('hộp')) {
+        fallbackIcon = 'fa-box-archive';
+      }
+
       return `
-        <div class="dish-row bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/90 shadow-2xs flex items-center justify-between gap-2.5">
-          <!-- Thumbnail ảnh hoặc khung giữ chỗ sạch sẽ -->
-          <div class="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-100 flex items-center justify-center">
+        <div class="dish-row bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-xs flex items-center justify-between gap-3 sm:gap-4 transition-all hover:border-slate-300">
+          <!-- Thumbnail ảnh hoặc khung giữ chỗ màu xanh nhạt theo mẫu FABiOrder -->
+          <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-[#e0ecf7] shrink-0 border border-[#d2e2f0] flex items-center justify-center text-[#7397ba]">
             ${hasImage ? `
               <img src="${p.image}" alt="${p.name}" class="w-full h-full object-cover">
             ` : `
-              <i class="fa-regular fa-image text-slate-300 text-lg"></i>
+              <i class="fa-solid ${fallbackIcon} text-xl text-[#7397ba]"></i>
             `}
           </div>
 
           <!-- Tên món & Giá -->
-          <div class="min-w-0 flex-1">
-            <h4 class="font-bold text-xs sm:text-sm text-slate-800 line-clamp-2 leading-snug">
+          <div class="min-w-0 flex-1 flex flex-col justify-center">
+            <h4 class="font-bold text-sm sm:text-base text-slate-900 leading-snug">
               ${p.name}
             </h4>
-            <div class="text-xs font-black text-emerald-700 mt-0.5">
+            <div class="text-xs sm:text-sm font-bold text-[#ea650d] mt-1">
               ${formatMoney(p.price)}
             </div>
           </div>
 
-          <!-- Bộ nút Stepper [-]  SL  [+] trực tiếp (Ảnh 2) -->
-          <div class="flex items-center space-x-1.5 shrink-0 bg-slate-50 p-1 rounded-xl border border-slate-200">
+          <!-- Bộ nút Stepper [-]  SL  [+] trực tiếp viền trắng bo tròn -->
+          <div class="flex items-center justify-between shrink-0 bg-white border border-slate-200 rounded-xl px-2.5 py-1 min-w-[104px] sm:min-w-[118px] shadow-2xs">
             <button 
               type="button"
               onclick="changeDishQty(${p.id}, -1)" 
-              class="stepper-btn w-7 h-7 rounded-lg border border-slate-300 bg-white flex items-center justify-center text-slate-600 active:bg-slate-100 text-xs font-bold transition-all"
+              class="w-7 h-7 flex items-center justify-center text-slate-700 hover:text-slate-900 active:scale-90 text-sm font-bold select-none cursor-pointer transition-all"
+              title="Giảm 1"
             >
-              <i class="fa-solid fa-minus text-[10px]"></i>
+              <i class="fa-solid fa-minus text-xs"></i>
             </button>
 
-            <span id="dish-qty-${p.id}" class="w-6 text-center text-xs font-black text-slate-800">
+            <span id="dish-qty-${p.id}" class="w-7 text-center text-sm sm:text-base font-bold text-slate-900 select-none">
               ${currentQty}
             </span>
 
             <button 
               type="button"
               onclick="changeDishQty(${p.id}, 1)" 
-              class="stepper-btn w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center active:bg-emerald-800 text-xs font-bold shadow-2xs transition-all"
+              class="w-7 h-7 flex items-center justify-center text-slate-700 hover:text-slate-900 active:scale-90 text-sm font-bold select-none cursor-pointer transition-all"
+              title="Thêm 1"
             >
-              <i class="fa-solid fa-plus text-[10px]"></i>
+              <i class="fa-solid fa-plus text-xs"></i>
             </button>
           </div>
         </div>
@@ -759,11 +769,11 @@ function renderGroupedDishList() {
     }).join('');
 
     return `
-      <div class="space-y-2">
-        <h3 class="text-[11px] font-black text-slate-400 uppercase tracking-wider px-1">
+      <div class="space-y-2.5">
+        <h3 class="text-sm sm:text-base font-extrabold text-slate-900 uppercase tracking-wide px-0.5 pt-1">
           ${catName}
         </h3>
-        <div class="space-y-2">
+        <div class="space-y-3">
           ${dishRows}
         </div>
       </div>
