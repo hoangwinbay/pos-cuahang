@@ -1265,7 +1265,7 @@ async function loadConnectedDevices(silent = false) {
       }
 
       return `
-        <div class="border ${isSelf ? 'border-blue-400 bg-blue-50/20 shadow-2xs' : 'border-slate-200 bg-white'} rounded-2xl p-3 sm:p-3.5 flex items-center justify-between space-x-3 transition-all hover:border-blue-300">
+        <div class="border ${isSelf ? 'border-emerald-500 bg-emerald-50/30 shadow-2xs' : 'border-slate-200 bg-white'} rounded-2xl p-3 sm:p-3.5 flex items-center justify-between space-x-3 transition-all hover:border-emerald-300">
           <div class="flex items-center space-x-3 truncate">
             <div class="w-10 h-10 rounded-xl ${iconBg} border flex items-center justify-center shrink-0">
               ${iconHtml}
@@ -1273,7 +1273,7 @@ async function loadConnectedDevices(silent = false) {
             <div class="truncate">
               <div class="flex items-center space-x-1.5">
                 <span class="font-bold text-slate-800 text-xs sm:text-sm truncate">${escapeHtml(dev.name)}</span>
-                ${isSelf ? '<span class="text-[9px] bg-blue-600 text-white font-black px-1.5 py-0.2 rounded-full shrink-0">MÁY NÀY</span>' : ''}
+                ${isSelf ? '<span class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.2 rounded-full shrink-0">MÁY NÀY</span>' : ''}
               </div>
               <div class="text-[11px] text-slate-400 font-medium flex items-center space-x-2 mt-0.5">
                 <span>${escapeHtml(dev.platform)}</span>

@@ -554,8 +554,8 @@ function renderOrderCategoriesPills() {
         onclick="filterOrderCategory(${cat.id})" 
         class="cat-pill px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold uppercase whitespace-nowrap transition-all ${
           isActive 
-            ? 'bg-[#0369a1] text-white shadow-xs' 
-            : 'bg-[#eaedf0] hover:bg-slate-200 text-slate-800'
+            ? 'bg-emerald-600 text-white shadow-xs' 
+            : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
         }"
         data-id="${cat.id}"
       >
@@ -569,8 +569,8 @@ function renderOrderCategoriesPills() {
       onclick="filterOrderCategory('all')" 
       class="cat-pill px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold uppercase whitespace-nowrap transition-all ${
         currentSelectedCategory === 'all' 
-          ? 'bg-[#0369a1] text-white shadow-xs' 
-          : 'bg-[#eaedf0] hover:bg-slate-200 text-slate-800'
+          ? 'bg-emerald-600 text-white shadow-xs' 
+          : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
       }"
       data-id="all"
     >
@@ -721,12 +721,12 @@ function renderGroupedDishList() {
 
       return `
         <div class="dish-row bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-xs flex items-center justify-between gap-3 sm:gap-4 transition-all hover:border-slate-300">
-          <!-- Thumbnail ảnh hoặc khung giữ chỗ màu xanh nhạt theo mẫu FABiOrder -->
-          <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-[#e0ecf7] shrink-0 border border-[#d2e2f0] flex items-center justify-center text-[#7397ba]">
+          <!-- Thumbnail ảnh hoặc khung giữ chỗ màu xanh lá pastel chuẩn tone thương hiệu -->
+          <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-emerald-50 shrink-0 border border-emerald-100 flex items-center justify-center text-emerald-600">
             ${hasImage ? `
               <img src="${p.image}" alt="${p.name}" class="w-full h-full object-cover">
             ` : `
-              <i class="fa-solid ${fallbackIcon} text-xl text-[#7397ba]"></i>
+              <i class="fa-solid ${fallbackIcon} text-xl text-emerald-600"></i>
             `}
           </div>
 
@@ -1350,7 +1350,7 @@ function resolveConflictMoveTable() {
   }
 
   emptyListEl.innerHTML = emptyTables.map(t => `
-    <button onclick="selectConflictNewTable('${t}')" class="p-3 bg-slate-50 hover:bg-blue-50 active:bg-blue-100 border border-slate-200 hover:border-blue-300 rounded-xl flex flex-col items-center justify-center text-center transition-all">
+    <button onclick="selectConflictNewTable('${t}')" class="p-3 bg-slate-50 hover:bg-emerald-50 active:bg-emerald-100 border border-slate-200 hover:border-emerald-300 rounded-xl flex flex-col items-center justify-center text-center transition-all">
       <i class="fa-solid fa-chair text-slate-400 text-lg mb-1"></i>
       <span class="font-bold text-xs text-slate-800">${t}</span>
     </button>
