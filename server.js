@@ -1098,11 +1098,11 @@ function getAllActiveTableOrders() {
 function getAllTableDefinitions() {
   try {
     const rows = db.prepare('SELECT table_name FROM table_definitions ORDER BY sort_order ASC, rowid ASC').all();
-    if (rows && rows.length > 0) {
+    if (rows) {
       return rows.map(r => r.table_name);
     }
   } catch (err) {}
-  return ["Bàn 1", "Bàn 2", "Bàn 3", "Bàn 4", "Bàn 5", "Bàn 6", "Bàn 7", "Bàn 8", "Bàn 9", "Bàn 10", "Bàn 11", "Bàn 12"];
+  return [];
 }
 
 // GET /api/server-info: Thông tin IP nội bộ và đường dẫn Tunnel cho di động kết nối
@@ -1353,6 +1353,32 @@ app.post('/api/tables/custom', (req, res) => {
     broadcastTableUpdate({
       type: 'table_list_updated',
       tables
+    });
+
+    res.json({ success: true, tables });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5b. DELETE /api/tables/:tableName: Xóa bàn khỏi hệ thống
+app.delete('/api/tables/:tableName', (req, res) => {
+  try {
+    const tableName = decodeURIComponent(req.params.tableName).trim();
+    if (!tableName) return res.status(400).json({ error: 'Thiếu tên bàn!' });
+
+    // Xóa khỏi bảng table_definitions
+    db.prepare('DELETE FROM table_definitions WHERE table_name = ?').run(tableName);
+    // Xóa đơn đang hoạt động của bàn nếu có
+    db.prepare('DELETE FROM active_table_orders WHERE table_name = ?').run(tableName);
+
+    const tables = getAllTableDefinitions();
+    const allOrders = getAllActiveTableOrders();
+
+    broadcastTableUpdate({
+      type: 'table_list_updated',
+      tables,
+      all_table_orders: allOrders
     });
 
     res.json({ success: true, tables });

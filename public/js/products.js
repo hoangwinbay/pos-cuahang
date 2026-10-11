@@ -31,6 +31,7 @@ async function loadMenuDishes() {
 
     renderCategoriesList(categories);
     renderMenuDishesList(products);
+    renderManageTablesList();
   } catch (err) {
     showToast('Lỗi khi tải danh sách món: ' + err.message, 'error');
   }
@@ -426,4 +427,122 @@ async function saveStoreSettings(e) {
 // Giữ alias an toàn
 const populateVietQrSettings = populateStoreSettings;
 const saveVietQrSettings = saveStoreSettings;
+
+// =============================================================
+// QUẢN LÝ DANH SÁCH BÀN (THÊM & XÓA BÀN PHỤC VỤ)
+// =============================================================
+function renderManageTablesList() {
+  const container = document.getElementById('manageTablesListContainer');
+  const countBadge = document.getElementById('manageTablesCount');
+  if (!container) return;
+
+  const tables = state.tableList || [];
+  if (countBadge) countBadge.textContent = `${tables.length} bàn`;
+
+  if (tables.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-full text-center py-6 text-slate-400 text-xs italic">
+        Chưa có bàn nào trong hệ thống. Hãy nhập tên và thêm bàn ở trên!
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = tables.map(tableName => {
+    const hasOrder = state.tableOrders && state.tableOrders[tableName] && state.tableOrders[tableName].items?.length > 0;
+    const safeName = tableName.replace(/'/g, "\\'");
+    return `
+      <div class="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200/90 rounded-xl hover:border-slate-300 hover:bg-white transition-all shadow-2xs group">
+        <div class="flex items-center space-x-2 min-w-0 pr-1">
+          <i class="fa-solid fa-chair ${hasOrder ? 'text-amber-500' : 'text-emerald-600'} text-xs shrink-0"></i>
+          <span class="font-extrabold text-xs sm:text-sm text-slate-800 truncate" title="${tableName}">${tableName}</span>
+          ${hasOrder ? '<span class="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded-full shrink-0">Có khách</span>' : ''}
+        </div>
+        <button 
+          type="button" 
+          onclick="confirmDeleteTable('${safeName}')" 
+          class="w-7 h-7 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center shrink-0 transition-colors"
+          title="Xóa bàn ${tableName}"
+        >
+          <i class="fa-regular fa-trash-can text-xs"></i>
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function handleQuickAddTable(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('inputQuickTableName');
+  const name = input ? input.value.trim() : '';
+  if (!name) return;
+
+  if (state.tableList && state.tableList.includes(name)) {
+    showToast(`Bàn "${name}" đã có trong danh sách!`, 'warning');
+    return;
+  }
+
+  try {
+    const res = await api('/api/tables/custom', {
+      method: 'POST',
+      body: JSON.stringify({ table_name: name })
+    });
+
+    if (res && res.tables) {
+      state.tableList = res.tables;
+    } else if (!state.tableList.includes(name)) {
+      state.tableList.push(name);
+    }
+    localStorage.setItem('pos_table_list', JSON.stringify(state.tableList));
+
+    if (input) input.value = '';
+    renderManageTablesList();
+    if (typeof renderTableGrid === 'function') renderTableGrid();
+    showToast(`Đã thêm bàn "${name}" thành công!`, 'success');
+  } catch (err) {
+    showToast('Lỗi khi thêm bàn: ' + err.message, 'error');
+  }
+}
+
+async function confirmDeleteTable(tableName) {
+  const hasOrder = state.tableOrders && state.tableOrders[tableName] && state.tableOrders[tableName].items?.length > 0;
+  const msg = hasOrder 
+    ? `CẢNH BÁO: Bàn "${tableName}" đang có khách/đang gọi món!\nBạn có chắc chắn muốn xóa bàn này khỏi danh sách không?`
+    : `Bạn có chắc muốn xóa "${tableName}" khỏi danh sách bàn phục vụ?`;
+
+  if (!confirm(msg)) return;
+
+  try {
+    const res = await api(`/api/tables/${encodeURIComponent(tableName)}`, {
+      method: 'DELETE'
+    });
+
+    if (res && res.tables) {
+      state.tableList = res.tables;
+    } else {
+      state.tableList = (state.tableList || []).filter(t => t !== tableName);
+    }
+
+    if (state.tableOrders && state.tableOrders[tableName]) {
+      delete state.tableOrders[tableName];
+      localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    }
+    localStorage.setItem('pos_table_list', JSON.stringify(state.tableList));
+
+    renderManageTablesList();
+    if (typeof renderTableGrid === 'function') renderTableGrid();
+    showToast(`Đã xóa bàn "${tableName}" thành công!`, 'success');
+  } catch (err) {
+    showToast('Lỗi khi xóa bàn: ' + err.message, 'error');
+  }
+}
+
+function promptAddTableFromManagement() {
+  const custom = prompt('Nhập tên bàn mới (VD: Bàn 13, Bàn VIP, Sân thượng...):', '');
+  if (custom && custom.trim()) {
+    const input = document.getElementById('inputQuickTableName');
+    if (input) input.value = custom.trim();
+    handleQuickAddTable();
+  }
+}
 

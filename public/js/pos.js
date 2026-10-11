@@ -200,6 +200,8 @@ function connectTableEventSource() {
         if (payload.tables) {
           state.tableList = payload.tables;
           localStorage.setItem('pos_table_list', JSON.stringify(state.tableList));
+          if (typeof renderTableGrid === 'function') renderTableGrid();
+          if (typeof renderManageTablesList === 'function') renderManageTablesList();
         }
         if (payload.all_table_orders !== undefined) {
           applyIncomingTableOrders(payload.all_table_orders);

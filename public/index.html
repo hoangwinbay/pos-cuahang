@@ -208,10 +208,10 @@
         <span>Thống Kê Doanh Thu</span>
       </button>
 
-      <!-- 2. Quản lý thực đơn (Chỉ Admin) -->
+      <!-- 2. Quản lý (Chỉ Admin) -->
       <button onclick="navigateTo('menu')" id="drawerBtnMenu" class="w-full p-3 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left">
-        <i class="fa-solid fa-utensils text-emerald-600 text-base w-6 text-center"></i>
-        <span>Quản lý thực đơn</span>
+        <i class="fa-solid fa-sliders text-emerald-600 text-base w-6 text-center"></i>
+        <span>Quản lý</span>
       </button>
 
       <!-- 3. Thiết bị -->
@@ -324,7 +324,7 @@
   </div>
 
   <!-- ============================================================= -->
-  <!-- VIEW PHỤ: QUẢN LÝ THỰC ĐƠN & THÔNG TIN QUÁN -->
+  <!-- VIEW PHỤ: QUẢN LÝ (BÀN, THỰC ĐƠN & THÔNG TIN QUÁN) -->
   <!-- ============================================================= -->
   <div id="view-menu" class="tab-view w-full h-full flex-col p-3 sm:p-4 overflow-y-auto bg-slate-100 hidden">
     <div class="max-w-3xl mx-auto w-full space-y-4">
@@ -336,23 +336,65 @@
             <i class="fa-solid fa-arrow-left"></i>
           </button>
           <div>
-            <h2 class="text-sm font-black text-slate-800">Quản Lý Thực Đơn</h2>
-            <p class="text-[11px] text-slate-400">Món ăn & Danh mục thực đơn</p>
+            <h2 class="text-sm sm:text-base font-black text-slate-800">Quản Lý</h2>
+            <p class="text-[11px] text-slate-400">Bàn phục vụ, món ăn & cài đặt quán</p>
           </div>
         </div>
-        <div class="flex items-center space-x-2">
-          <button onclick="openCategoryModal()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5">
+        <div class="flex items-center space-x-1.5 sm:space-x-2">
+          <button onclick="openCategoryModal()" class="px-2.5 sm:px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center space-x-1">
             <i class="fa-solid fa-layer-group text-emerald-600"></i>
             <span>+ Danh Mục</span>
           </button>
-          <button onclick="openAddDishModal()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5">
+          <button onclick="openAddDishModal()" class="px-2.5 sm:px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1">
             <i class="fa-solid fa-plus"></i>
             <span>+ Thêm Món</span>
           </button>
         </div>
       </div>
 
-      <!-- 1. Danh Mục Thực Đơn (Thêm & Sửa Danh Mục) -->
+      <!-- 1. Quản Lý Danh Sách Bàn (Thêm & Xóa Bàn) -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div class="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between items-center">
+          <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-chair text-emerald-600"></i>
+            <span>Danh Sách Bàn Phục Vụ</span>
+            <span id="manageTablesCount" class="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold">0 bàn</span>
+          </div>
+          <button onclick="promptAddTableFromManagement()" class="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center space-x-1">
+            <i class="fa-solid fa-plus text-[10px]"></i>
+            <span>Thêm Bàn</span>
+          </button>
+        </div>
+
+        <!-- Ô nhập thêm bàn nhanh -->
+        <div class="p-3 border-b border-slate-100 bg-slate-50/40">
+          <form onsubmit="handleQuickAddTable(event)" class="flex items-center space-x-2">
+            <input 
+              type="text" 
+              id="inputQuickTableName" 
+              placeholder="Nhập tên bàn (VD: Bàn 13, Bàn VIP, Ngoài trời...)" 
+              class="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-600 shadow-2xs placeholder:text-slate-400"
+              required
+            >
+            <button 
+              type="submit" 
+              class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs shrink-0 flex items-center space-x-1"
+            >
+              <i class="fa-solid fa-plus text-xs"></i>
+              <span>Thêm Bàn</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Danh sách bàn hiển thị dạng thẻ/chip kèm nút xóa -->
+        <div class="p-3">
+          <div id="manageTablesListContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            <!-- Inject table chips here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Danh Mục Thực Đơn (Thêm & Sửa Danh Mục) -->
       <div class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         <div class="p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex justify-between items-center">
           <div class="flex items-center space-x-2">

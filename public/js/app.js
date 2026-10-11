@@ -159,6 +159,16 @@ function handleOfflineApi(url, options = {}) {
     return { success: true, tables: state.tableList };
   }
 
+  // 6b. DELETE /api/tables/:tableName (Xóa bàn)
+  if (path.startsWith('/api/tables/') && method === 'DELETE') {
+    const tableName = decodeURIComponent(path.replace('/api/tables/', '')).trim();
+    state.tableList = (state.tableList || []).filter(t => t !== tableName);
+    delete state.tableOrders[tableName];
+    localStorage.setItem('pos_table_list', JSON.stringify(state.tableList));
+    localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    return { success: true, tables: state.tableList };
+  }
+
   // 7. /api/categories (GET, POST, PUT, DELETE)
   if (path.startsWith('/api/categories')) {
     let list = JSON.parse(localStorage.getItem('pos_cached_categories') || 'null') || [
@@ -866,6 +876,7 @@ function navigateTo(target) {
   } else if (target === 'menu') {
     if (viewMenu) { viewMenu.classList.remove('hidden'); viewMenu.classList.add('flex'); }
     if (typeof loadMenuDishes === 'function') loadMenuDishes();
+    if (typeof renderManageTablesList === 'function') renderManageTablesList();
     if (typeof populateStoreSettings === 'function') populateStoreSettings();
   }
 }
