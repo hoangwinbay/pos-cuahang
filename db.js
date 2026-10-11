@@ -165,13 +165,27 @@ function initDatabase() {
     db.exec("UPDATE products SET image = '' WHERE image NOT LIKE 'data:image%' AND image NOT LIKE 'http%' AND image NOT LIKE '/%';");
   } catch (e) {}
 
+  // Chuyển đổi dữ liệu sang toàn bộ thực đơn chuẩn của Bún Mắm Miền Tây
+  try {
+    const hasCorrectMenu = db.prepare("SELECT COUNT(*) as count FROM categories WHERE name = 'Hộp mang về'").get()?.count > 0;
+    if (!hasCorrectMenu) {
+      db.exec('DELETE FROM products;');
+      db.exec('DELETE FROM categories;');
+      db.exec('DELETE FROM active_table_orders;');
+      try {
+        db.exec("DELETE FROM sqlite_sequence WHERE name IN ('categories', 'products');");
+      } catch (e) {}
+    }
+  } catch (e) {}
+
   // Seed default categories & products if empty
   const categoryCount = db.prepare('SELECT COUNT(*) as count FROM categories').get().count;
   if (categoryCount === 0) {
     const insertCat = db.prepare('INSERT INTO categories (name, icon) VALUES (?, ?)');
+    insertCat.run('Hộp mang về', '');
+    insertCat.run('Bún mắm', '');
+    insertCat.run('Đồ gọi thêm', '');
     insertCat.run('Đồ uống', '');
-    insertCat.run('Bánh kẹo & Ăn vặt', '');
-    insertCat.run('Món ăn nhanh', '');
 
     const catMap = {};
     const cats = db.prepare('SELECT id, name FROM categories').all();
@@ -185,14 +199,35 @@ function initDatabase() {
     `);
 
     const seedProducts = [
-      ['8935049500018', 'Cà phê đen đá', catMap['Đồ uống'], 0, 20000, 9999, 'ly', ''],
-      ['8935049500025', 'Cà phê sữa đá', catMap['Đồ uống'], 0, 25000, 9999, 'ly', ''],
-      ['8935049500032', 'Bạc xỉu đá', catMap['Đồ uống'], 0, 28000, 9999, 'ly', ''],
-      ['8935049500049', 'Trà đào cam sả', catMap['Đồ uống'], 0, 30000, 9999, 'ly', ''],
-      ['8935049500056', 'Trà chanh tắc đá', catMap['Đồ uống'], 0, 18000, 9999, 'ly', ''],
-      ['8935049500063', 'Bánh mì pate trứng', catMap['Món ăn nhanh'], 0, 25000, 9999, 'phần', ''],
-      ['8935049500070', 'Khoai tây chiên', catMap['Món ăn nhanh'], 0, 25000, 9999, 'phần', ''],
-      ['8935049500087', 'Hướng dương rang húng lìu', catMap['Bánh kẹo & Ăn vặt'], 0, 15000, 9999, 'đĩa', '']
+      // 1. Hộp mang về
+      ['HMV01', 'Hộp mang về', catMap['Hộp mang về'], 0, 5000, 9999, 'hộp', ''],
+
+      // 2. Bún mắm
+      ['BM01', 'Bún mắm chả cá', catMap['Bún mắm'], 0, 45000, 9999, 'tô', ''],
+      ['BM02', 'Bún mắm heo quay', catMap['Bún mắm'], 0, 55000, 9999, 'tô', ''],
+      ['BM03', 'Bún mắm chả cá heo quay', catMap['Bún mắm'], 0, 60000, 9999, 'tô', ''],
+      ['BM04', 'Bún mắm cá tươi', catMap['Bún mắm'], 0, 55000, 9999, 'tô', ''],
+      ['BM05', 'Bún mắm mực', catMap['Bún mắm'], 0, 80000, 9999, 'tô', ''],
+      ['BM06', 'Bún mắm tôm', catMap['Bún mắm'], 0, 80000, 9999, 'tô', ''],
+      ['BM07', 'Bún mắm đầy đủ', catMap['Bún mắm'], 0, 80000, 9999, 'tô', ''],
+      ['BM08', 'Bún mắm đặc biệt', catMap['Bún mắm'], 0, 100000, 9999, 'tô', ''],
+
+      // 3. Đồ gọi thêm
+      ['THEM01', 'Thêm tôm', catMap['Đồ gọi thêm'], 0, 18000, 9999, 'phần', ''],
+      ['THEM02', 'Thêm trứng vịt lộn', catMap['Đồ gọi thêm'], 0, 10000, 9999, 'quả', ''],
+      ['THEM03', 'Thêm chả cá', catMap['Đồ gọi thêm'], 0, 20000, 9999, 'phần', ''],
+      ['THEM04', 'Thêm mực', catMap['Đồ gọi thêm'], 0, 40000, 9999, 'phần', ''],
+      ['THEM05', 'Thêm cá tươi', catMap['Đồ gọi thêm'], 0, 40000, 9999, 'phần', ''],
+      ['THEM06', 'Thêm heo quay', catMap['Đồ gọi thêm'], 0, 40000, 9999, 'phần', ''],
+      ['THEM07', 'Thêm rau', catMap['Đồ gọi thêm'], 0, 5000, 9999, 'đĩa', ''],
+
+      // 4. Đồ uống
+      ['DU01', 'Trà đá', catMap['Đồ uống'], 0, 5000, 9999, 'ly', ''],
+      ['DU02', 'Sữa đậu', catMap['Đồ uống'], 0, 10000, 9999, 'ly', ''],
+      ['DU03', 'Coca', catMap['Đồ uống'], 0, 15000, 9999, 'lon', ''],
+      ['DU04', 'Dừa tươi', catMap['Đồ uống'], 0, 25000, 9999, 'quả', ''],
+      ['DU05', 'Bia', catMap['Đồ uống'], 0, 25000, 9999, 'lon', ''],
+      ['DU06', 'Lavie', catMap['Đồ uống'], 0, 10000, 9999, 'chai', '']
     ];
 
     for (const p of seedProducts) {
