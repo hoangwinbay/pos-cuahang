@@ -903,21 +903,83 @@ function openTableCartDrawer() {
   const title = document.getElementById('cartDrawerTableTitle');
   if (title) title.textContent = `${currentTable} (${sourceLabel})`;
 
+  const currentNote = state.tableOrders[currentTable]?.note || '';
   const noteInput = document.getElementById('orderNoteInput');
+  const noteBox = document.getElementById('orderNoteBox');
+  if (noteBox) {
+    noteBox.classList.add('hidden');
+  }
+
   if (noteInput) {
-    noteInput.value = state.tableOrders[currentTable]?.note || '';
-    noteInput.onchange = () => {
-      if (state.tableOrders[currentTable]) {
-        state.tableOrders[currentTable].note = noteInput.value.trim();
-        localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+    noteInput.value = currentNote;
+    noteInput.oninput = () => {
+      const val = noteInput.value.trim();
+      if (!state.tableOrders[currentTable]) {
+        state.tableOrders[currentTable] = {
+          source: state.currentSource,
+          startTime: Date.now(),
+          items: [],
+          note: val
+        };
+      } else {
+        state.tableOrders[currentTable].note = val;
+      }
+      localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+      updateOrderNoteDisplay(val);
+      syncTableOrderToServer(currentTable);
+    };
+    noteInput.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        toggleOrderNoteBox(false);
       }
     };
   }
+
+  updateOrderNoteDisplay(currentNote);
 
   renderCartDrawerItems();
 
   drawer.classList.remove('translate-x-full');
   backdrop.classList.remove('hidden');
+}
+
+function updateOrderNoteDisplay(note) {
+  const noteBadge = document.getElementById('orderNoteBadge');
+  const noteBtnLabel = document.getElementById('orderNoteBtnLabel');
+
+  if (note) {
+    if (noteBadge) {
+      noteBadge.textContent = note;
+      noteBadge.classList.remove('hidden');
+    }
+    if (noteBtnLabel) noteBtnLabel.textContent = 'Ghi chú:';
+  } else {
+    if (noteBadge) {
+      noteBadge.textContent = '';
+      noteBadge.classList.add('hidden');
+    }
+    if (noteBtnLabel) noteBtnLabel.textContent = 'Ghi chú';
+  }
+}
+
+function toggleOrderNoteBox(forceOpen) {
+  const box = document.getElementById('orderNoteBox');
+  const input = document.getElementById('orderNoteInput');
+  if (!box) return;
+
+  const isCurrentlyHidden = box.classList.contains('hidden');
+  const willOpen = typeof forceOpen === 'boolean' ? forceOpen : isCurrentlyHidden;
+
+  if (willOpen) {
+    box.classList.remove('hidden');
+    setTimeout(() => {
+      input?.focus();
+      if (input) input.select();
+    }, 80);
+  } else {
+    box.classList.add('hidden');
+  }
 }
 
 function closeTableCartDrawer() {
