@@ -48,12 +48,6 @@ window.__POS_HTML_TEMPLATE__ = ${JSON.stringify(innerHtml)};
       c.src = 'https://cdn.jsdelivr.net/npm/chart.js';
       document.head.appendChild(c);
     }
-    // 4. Confetti
-    if (!document.querySelector('script[src*="canvas-confetti"]')) {
-      const cf = document.createElement('script');
-      cf.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js';
-      document.head.appendChild(cf);
-    }
   }
 
   function mountPosApp() {

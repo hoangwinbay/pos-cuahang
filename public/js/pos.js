@@ -1463,13 +1463,6 @@ async function completeCheckoutOrder() {
     closeCheckoutModal();
     closeTableCartDrawer();
 
-    // Confetti chúc mừng
-    try {
-      if (typeof confetti === 'function') {
-        confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
-      }
-    } catch (e) {}
-
     showToast(`Đã thanh toán ${currentTable}, bàn đã trống!`);
 
     // Quay lại màn hình Sơ Đồ Bàn (bàn sẽ chuyển sang màu xám trống)
