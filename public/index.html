@@ -159,9 +159,9 @@
       </div>
 
       <div class="flex items-center space-x-1.5">
-        <button onclick="printKitchenSlip()" id="btnPrintKitchen" class="py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors flex items-center space-x-1 shadow-xs" title="In phiếu chuyển cho đầu bếp">
-          <i class="fa-solid fa-print"></i>
-          <span>In Phiếu Bếp</span>
+        <button onclick="printKitchenSlip()" id="btnPrintKitchen" class="py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors flex items-center space-x-1 shadow-xs" title="Xác nhận gọi món">
+          <i class="fa-solid fa-circle-check"></i>
+          <span>Xác Nhận</span>
         </button>
         <button onclick="openCheckoutModal()" id="btnBottomCheckout" class="py-2.5 px-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl text-xs sm:text-sm flex items-center space-x-1.5 shadow-md transition-all">
           <i class="fa-solid fa-money-bill-wave"></i>
@@ -451,8 +451,8 @@
           onclick="printKitchenSlip()" 
           class="w-full py-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold rounded-xl shadow-xs transition-all flex items-center justify-center space-x-1.5 text-xs sm:text-sm"
         >
-          <i class="fa-solid fa-print"></i>
-          <span>IN PHIẾU BẾP</span>
+          <i class="fa-solid fa-circle-check"></i>
+          <span>XÁC NHẬN</span>
         </button>
         <button 
           id="btnCartDrawerCheckout" 
@@ -474,8 +474,8 @@
     <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden modal-enter flex flex-col max-h-[90vh]">
       <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
         <h3 class="font-bold text-slate-800 text-sm flex items-center">
-          <i class="fa-solid fa-print text-amber-500 mr-2"></i>
-          <span>Xác Nhận In Phiếu Bếp</span>
+          <i class="fa-solid fa-circle-check text-amber-500 mr-2"></i>
+          <span>Xác Nhận</span>
         </h3>
         <button onclick="closeKitchenConfirmModal()" class="text-slate-400 hover:text-slate-600 p-1">
           <i class="fa-solid fa-xmark text-lg"></i>
@@ -492,17 +492,13 @@
         <!-- Danh Sách Đầy Đủ Các Món Để Nhân Viên Xác Định -->
         <div>
           <div class="text-[11px] font-bold text-slate-400 uppercase mb-1.5 flex items-center justify-between">
-            <span>Danh Sách Món Báo Bếp</span>
-            <span class="text-slate-400 text-[10px]">Kiểm tra trước khi in</span>
+            <span>Danh Sách</span>
+            <span class="text-slate-400 text-[10px]">Kiểm tra món</span>
           </div>
           <div id="kitchenConfirmItemsList" class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 max-h-48 overflow-y-auto divide-y divide-slate-100 text-xs">
             <!-- Injected by pos.js -->
           </div>
         </div>
-
-        <p class="text-[11px] text-slate-400 text-center">
-          Bấm "Báo Bếp" để gửi đơn cho đầu bếp chuẩn bị món. Bấm "Hủy" để quay lại chỉnh sửa món.
-        </p>
       </div>
 
       <div class="p-3 bg-slate-50 border-t border-slate-200 flex items-center space-x-2 shrink-0">
@@ -510,8 +506,8 @@
           <span>Hủy</span>
         </button>
         <button onclick="executePrintKitchenSlip()" class="flex-1 py-2.5 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black rounded-xl text-xs sm:text-sm transition-colors flex items-center justify-center space-x-1.5 shadow-sm">
-          <i class="fa-solid fa-bell-concierge"></i>
-          <span>Xác Nhận Báo Bếp</span>
+          <i class="fa-solid fa-circle-check"></i>
+          <span>Xác Nhận</span>
         </button>
       </div>
     </div>
@@ -795,8 +791,8 @@
         <span>Xem danh sách món & Ghi chú</span>
       </button>
       <button onclick="printKitchenSlip(); closeTableActionsMenu();" class="w-full py-2.5 px-3 bg-amber-50 hover:bg-amber-100 rounded-xl text-xs font-bold text-amber-800 flex items-center space-x-2 text-left">
-        <i class="fa-solid fa-print text-amber-600 w-5"></i>
-        <span>In phiếu chuyển đầu bếp</span>
+        <i class="fa-solid fa-circle-check text-amber-600 w-5"></i>
+        <span>Xác nhận gọi món</span>
       </button>
       <button onclick="openCheckoutModal(); closeTableActionsMenu();" class="w-full py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 rounded-xl text-xs font-bold text-emerald-800 flex items-center space-x-2 text-left">
         <i class="fa-solid fa-money-bill-wave text-emerald-600 w-5"></i>
@@ -1260,7 +1256,7 @@
         <div class="inline-block p-2.5 bg-white rounded-2xl shadow-xs border border-slate-200/80">
           <img 
             id="zaloModalQrImg" 
-            src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https%3A%2F%2Fzalo.me%2Fs%2F3906597427562388428%2F%3Fenv%3DTESTING%26version%3D30" 
+            src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https%3A%2F%2Fzalo.me%2Fs%2F3906597427562388428%2F%3Fenv%3DTESTING%26version%3D31" 
             alt="Mã QR Zalo Mini App" 
             class="w-48 h-48 sm:w-52 sm:h-52 mx-auto object-contain"
           >
@@ -1282,7 +1278,7 @@
             type="text" 
             id="zaloModalUrlInput" 
             readonly 
-            value="https://zalo.me/s/3906597427562388428/?env=TESTING&version=30" 
+            value="https://zalo.me/s/3906597427562388428/?env=TESTING&version=31" 
             class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-blue-700 select-all outline-none"
           >
           <button 
@@ -1300,7 +1296,7 @@
       <div class="space-y-2 pt-1">
         <a 
           id="zaloModalDirectLink" 
-          href="https://zalo.me/s/3906597427562388428/?env=TESTING&version=30" 
+          href="https://zalo.me/s/3906597427562388428/?env=TESTING&version=31" 
           target="_blank" 
           class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-2 shadow-md shadow-blue-600/20 transition-all text-center"
         >
@@ -1335,12 +1331,12 @@
   </div> <!-- /#app: Zalo Mini App Root Container -->
 
   <!-- JavaScript Modules -->
-  <script src="js/mount.js?v=20261011_noconfetti"></script>
-  <script src="js/app.js?v=20261011_noconfetti"></script>
-  <script src="js/pos.js?v=20261011_noconfetti"></script>
-  <script src="js/products.js?v=20261011_noconfetti"></script>
-  <script src="js/orders.js?v=20261011_noconfetti"></script>
-  <script src="js/reports.js?v=20261011_noconfetti"></script>
+  <script src="js/mount.js?v=20261011_btnxacnhan"></script>
+  <script src="js/app.js?v=20261011_btnxacnhan"></script>
+  <script src="js/pos.js?v=20261011_btnxacnhan"></script>
+  <script src="js/products.js?v=20261011_btnxacnhan"></script>
+  <script src="js/orders.js?v=20261011_btnxacnhan"></script>
+  <script src="js/reports.js?v=20261011_btnxacnhan"></script>
 
 </body>
 </html>

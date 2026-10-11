@@ -1022,7 +1022,7 @@ function printKitchenSlip() {
   const items = tableOrder?.items || [];
 
   if (items.length === 0) {
-    showToast('Bàn chưa có món nào để in báo bếp!', 'error');
+    showToast('Bàn chưa có món nào để xác nhận!', 'error');
     return;
   }
 
@@ -1166,7 +1166,7 @@ function executePrintKitchenSlip() {
   });
 
   // 4. CHUYỂN VỀ SƠ ĐỒ BÀN
-  showToast(`Đã báo món ${currentTable} chuyển cho bếp!`);
+  showToast(`Đã xác nhận món ${currentTable}!`);
   if (state.activeScreen !== 'tables') showTableFloor();
 }
 
@@ -1407,7 +1407,7 @@ function handleBackFromOrderScreen() {
   // Nếu bàn có món nhưng CHƯA TỪNG in gửi bếp:
   if (order && order.items && order.items.length > 0 && !order.hasPrintedKitchen) {
     const shouldClear = confirm(
-      `${currentTable} vừa chọn món nhưng CHƯA IN BÁO BẾP.\n\n` +
+      `${currentTable} vừa chọn món nhưng CHƯA BẤM XÁC NHẬN.\n\n` +
       `- Bấm [OK] để: HỦY GỌI MÓN (Trả bàn về trống)\n` +
       `- Bấm [Hủy] để: GIỮ BÀN (Lưu lại để chọn tiếp sau)`
     );
