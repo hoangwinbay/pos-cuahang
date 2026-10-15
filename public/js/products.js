@@ -390,6 +390,8 @@ async function populateStoreSettings() {
     await loadSettings();
     const nameInput = document.getElementById('setting_store_name');
     if (nameInput) nameInput.value = state.settings.store_name || '';
+    const addressInput = document.getElementById('setting_store_address');
+    if (addressInput) addressInput.value = state.settings.store_address || '';
     const footerInput = document.getElementById('setting_receipt_footer');
     if (footerInput) footerInput.value = state.settings.receipt_footer || 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán';
   } catch (err) {
@@ -402,9 +404,11 @@ async function saveStoreSettings(e) {
 
   try {
     const storeName = document.getElementById('setting_store_name').value.trim();
+    const storeAddress = document.getElementById('setting_store_address')?.value.trim() || '';
     const footer = document.getElementById('setting_receipt_footer').value.trim();
     const payload = {
       store_name: storeName,
+      store_address: storeAddress,
       receipt_footer: footer
     };
 

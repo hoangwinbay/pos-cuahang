@@ -1630,10 +1630,15 @@ function setupVietQRDisplay() {}
 // =============================================================
 // IN HÓA ĐƠN NHIỆT / PHIẾU BÁO BẾP (80mm / 58mm & BLUETOOTH)
 // =============================================================
+function formatReceiptNum(val) {
+  const num = Math.round(Number(val) || 0);
+  return num.toLocaleString('en-US');
+}
+
 function generateReceiptHtml(order) {
-  const storeName = state.settings.store_name || 'BÚN MẮM MIỀN TÂY';
-  const tableName = order.table_name || 'Bàn 1';
-  const footerText = state.settings.receipt_footer || 'Quý khách vui lòng kiểm tra lại hóa đơn khi thanh toán';
+  const storeName = state.settings.store_name || 'Bún mắm miền Tây';
+  const storeAddress = state.settings.store_address || '324 Bạch Mai';
+  const footerNotice = state.settings.receipt_footer || 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán';
 
   // Xác định hình thức: Mang về hay Tại chỗ
   let orderSource = order.source;
@@ -1649,41 +1654,71 @@ function generateReceiptHtml(order) {
                    (order.table_name && order.table_name.toLowerCase().includes('mang về'));
   const sourceLabel = isMangVe ? 'MANG VỀ' : 'TẠI CHỖ';
 
-  const itemsHtml = (order.items || []).map((item, idx) => `
-    <tr>
-      <td colspan="2" style="font-weight: bold; padding-top: 4px;">${idx + 1}. ${item.product_name || item.name}</td>
-    </tr>
-    <tr>
-      <td style="padding-left: 10px;">${item.quantity} phần x ${formatMoney(item.price)}</td>
-      <td style="text-align: right; font-weight: bold;">${formatMoney(item.total || item.price * item.quantity)}</td>
-    </tr>
-  `).join('');
+  let rawTable = (order.table_name || 'Bàn 1').trim();
+  let tableDisplay = rawTable;
+  if (!tableDisplay.toLowerCase().startsWith('bàn') && !tableDisplay.toLowerCase().startsWith('mang')) {
+    tableDisplay = 'Bàn ' + tableDisplay;
+  }
+
+  const createdAt = order.created_at ? new Date(order.created_at) : new Date();
+  const dateStr = String(createdAt.getDate()).padStart(2, '0') + '/' + 
+                  String(createdAt.getMonth() + 1).padStart(2, '0') + '/' + 
+                  createdAt.getFullYear();
+  const timeStr = String(createdAt.getHours()).padStart(2, '0') + ':' + 
+                  String(createdAt.getMinutes()).padStart(2, '0');
+  const cashierName = order.cashier_name || (state.currentUser ? state.currentUser.name : '.');
+
+  const itemsHtml = (order.items || []).map((item, idx) => {
+    const qty = Number(item.quantity) || 1;
+    const price = Number(item.price) || 0;
+    const total = Number(item.total !== undefined ? item.total : price * qty);
+    const itemName = item.product_name || item.name || '';
+    return `
+      <tr>
+        <td style="text-align: center; vertical-align: top; padding: 4px 1px;">${idx + 1}</td>
+        <td style="text-align: left; vertical-align: top; padding: 4px 2px; word-break: break-word;">${itemName}</td>
+        <td style="text-align: center; vertical-align: top; padding: 4px 1px;">${qty}</td>
+        <td style="text-align: right; vertical-align: top; padding: 4px 1px; white-space: nowrap;">${formatReceiptNum(price)}</td>
+        <td style="text-align: right; vertical-align: top; padding: 4px 1px; white-space: nowrap;">${formatReceiptNum(total)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const subtotal = Number(order.subtotal !== undefined ? order.subtotal : (order.total || 0));
+  const discount = Number(order.discount || 0);
+  const finalTotal = Number(order.total !== undefined ? order.total : (subtotal - discount));
+
+  const isChuyenKhoan = order.payment_method === 'transfer' || 
+                        order.payment_method === 'bank' || 
+                        order.payment_method === 'qr' ||
+                        order.payment_method === 'chuyenkhoan';
+  const paymentMethodLabel = isChuyenKhoan ? 'Thanh toán chuyển khoản' : 'Thanh toán tiền mặt';
 
   return `
-    <div class="receipt-title">${storeName}</div>
-    <div class="receipt-header">
-      <div style="font-size: 16px; font-weight: 900; margin: 4px 0; text-transform: uppercase; letter-spacing: 0.5px;">
-        HÓA ĐƠN THANH TOÁN
-      </div>
-      <div style="margin: 5px 0 3px 0; padding: 4px 0; border: 1px dashed #000;">
-        <div style="font-size: 20px; font-weight: 900; color: #000;">
-          📍 ${tableName}
-        </div>
-        <div style="font-size: 15px; font-weight: 900; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px;">
-          [ ${sourceLabel} ]
-        </div>
-      </div>
-      <div style="margin-top: 4px;">Hình thức: <strong>${sourceLabel}</strong></div>
-      <div>Mã hóa đơn: <strong>${order.order_code}</strong></div>
-      <div>Giờ: ${formatDateTime(order.created_at || new Date())}</div>
-      ${order.note ? `<div style="font-style: italic; font-weight: bold; margin-top: 2px;">Ghi chú: ${order.note}</div>` : ''}
+    <div class="receipt-title" style="font-size: 16px; font-weight: 900; text-align: center; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">
+      HÓA ĐƠN THANH TOÁN
     </div>
 
-    <table class="receipt-table">
+    <div class="receipt-meta" style="font-size: 11.5px; line-height: 1.45; margin-bottom: 6px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <span>Bàn: <strong>${tableDisplay} - ${sourceLabel}</strong></span>
+        <span>Ngày: ${dateStr}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <span>Giờ vào: ${timeStr}</span>
+        <span>TN: ${cashierName || '.'}</span>
+      </div>
+      ${order.note ? `<div style="font-style: italic; margin-top: 2px;">Ghi chú: ${order.note}</div>` : ''}
+    </div>
+
+    <table class="receipt-table" style="width: 100%; border-collapse: collapse; margin: 6px 0;">
       <thead>
-        <tr>
-          <th>Món / SL x Giá</th>
-          <th style="text-align: right;">Tiền</th>
+        <tr style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-size: 11px;">
+          <th style="width: 8%; text-align: center; padding: 4px 1px; border-right: 1px solid #000; font-weight: bold;">STT</th>
+          <th style="width: 42%; text-align: center; padding: 4px 2px; border-right: 1px solid #000; font-weight: bold;">Tên món</th>
+          <th style="width: 10%; text-align: center; padding: 4px 1px; border-right: 1px solid #000; font-weight: bold;">SL</th>
+          <th style="width: 20%; text-align: center; padding: 4px 1px; border-right: 1px solid #000; font-weight: bold;">Đơn giá</th>
+          <th style="width: 20%; text-align: center; padding: 4px 1px; font-weight: bold;">Thành tiền</th>
         </tr>
       </thead>
       <tbody>
@@ -1691,18 +1726,33 @@ function generateReceiptHtml(order) {
       </tbody>
     </table>
 
-    <div class="receipt-divider"></div>
+    <div class="receipt-divider" style="border-bottom: 1px dashed #000; margin: 4px 0 6px 0;"></div>
 
-    <table class="receipt-summary">
-      <tr class="receipt-total">
-        <td>TỔNG CỘNG:</td>
-        <td style="text-align: right;">${formatMoney(order.total || 0)}</td>
+    <table class="receipt-summary" style="width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 2px;">
+      <tr>
+        <td style="padding: 2px 0;">Thành tiền:</td>
+        <td style="padding: 2px 0; text-align: right;">${formatReceiptNum(subtotal)} đ</td>
+      </tr>
+      ${discount > 0 ? `
+      <tr>
+        <td style="padding: 2px 0;">Giảm giá:</td>
+        <td style="padding: 2px 0; text-align: right;">-${formatReceiptNum(discount)} đ</td>
+      </tr>
+      ` : ''}
+      <tr class="receipt-total" style="font-size: 13.5px; font-weight: bold;">
+        <td style="padding: 3px 0;">Tổng tiền:</td>
+        <td style="padding: 3px 0; text-align: right;">${formatReceiptNum(finalTotal)} đ</td>
+      </tr>
+      <tr>
+        <td style="padding: 2px 0;">+ ${paymentMethodLabel}</td>
+        <td style="padding: 2px 0; text-align: right;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
     </table>
 
-    <div class="receipt-footer">
-      <div style="font-weight: bold; margin-top: 6px; font-size: 12px;">*** ${footerText} ***</div>
-      <div style="font-size: 11px; margin-top: 4px;">Cảm ơn quý khách và hẹn gặp lại!</div>
+    <div class="receipt-footer" style="text-align: center; margin-top: 14px; font-size: 11.5px; line-height: 1.45;">
+      <div style="font-weight: bold; font-size: 13px; margin-bottom: 2px;">${storeName}</div>
+      <div style="margin-bottom: 8px;">Địa chỉ: ${storeAddress}</div>
+      <div style="margin-top: 6px;">${footerNotice}</div>
     </div>
   `;
 }
@@ -1769,7 +1819,9 @@ async function connectBluetoothPrinter() {
 async function printEscPosBluetooth(order) {
   if (!bluetoothCharacteristic) throw new Error('Chưa kết nối máy in');
 
-  const storeName = state.settings.store_name || 'BUN MAM MIEN TAY';
+  const storeName = state.settings.store_name || 'Bun mam mien Tay';
+  const storeAddress = state.settings.store_address || '324 Bach Mai';
+  const footerNotice = state.settings.receipt_footer || 'Quy khach vui long mang phieu nay ra quay khi thanh toan';
   const lineWidth = 32;
   const divider = '-'.repeat(lineWidth) + '\n';
 
@@ -1783,34 +1835,57 @@ async function printEscPosBluetooth(order) {
                    (order.table_name && order.table_name.toLowerCase().includes('mang ve'));
   const sourceLabel = isMangVe ? 'MANG VE' : 'TAI CHO';
 
-  let content = '\x1B\x40';
-  content += '\x1B\x61\x01';
-  content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\n';
-  content += 'HOA DON THANH TOAN\n';
-  content += `BAN: ${removeVietnameseAccents(order.table_name || 'BAN 1')}\n`;
-  content += `[ ${sourceLabel} ]\n`;
-  content += '\x1B\x45\x00';
-  content += `Hinh thuc: ${sourceLabel}\n`;
-  content += `Ma HD: ${order.order_code}\n`;
-  content += `Gio: ${formatDateTime(order.created_at || new Date())}\n`;
+  let rawTable = (order.table_name || 'Ban 1').trim();
+  let tableDisplay = rawTable;
+  if (!tableDisplay.toLowerCase().startsWith('ban') && !tableDisplay.toLowerCase().startsWith('mang')) {
+    tableDisplay = 'Ban ' + tableDisplay;
+  }
+
+  const createdAt = order.created_at ? new Date(order.created_at) : new Date();
+  const dateStr = String(createdAt.getDate()).padStart(2, '0') + '/' + 
+                  String(createdAt.getMonth() + 1).padStart(2, '0') + '/' + 
+                  createdAt.getFullYear();
+  const timeStr = String(createdAt.getHours()).padStart(2, '0') + ':' + 
+                  String(createdAt.getMinutes()).padStart(2, '0');
+  const cashierName = order.cashier_name || (state.currentUser ? state.currentUser.name : '.');
+
+  let content = '\x1B\x40'; // Reset
+  content += '\x1B\x61\x01'; // Canh giữa
+  content += '\x1B\x45\x01' + 'HOA DON THANH TOAN\n\n' + '\x1B\x45\x00';
+  content += '\x1B\x61\x00'; // Canh trái
+
+  content += formatLineColumns(`Ban: ${tableDisplay} - ${sourceLabel}`, `Ngay: ${dateStr}`, lineWidth);
+  content += formatLineColumns(`Gio vao: ${timeStr}`, `TN: ${cashierName}`, lineWidth);
   if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
-  content += '\x1B\x61\x00';
   content += divider;
-  content += formatLineColumns('MON / SL', 'TIEN', lineWidth);
+  content += 'STT | TEN MON | SL | GIA | TIEN\n';
   content += divider;
 
   (order.items || []).forEach((it, i) => {
-    content += `${i + 1}. ${removeVietnameseAccents(it.product_name)}\n`;
-    content += formatLineColumns(`   ${it.quantity} phan`, formatMoney(it.total), lineWidth);
+    const qty = Number(it.quantity) || 1;
+    const price = Number(it.price) || 0;
+    const total = Number(it.total !== undefined ? it.total : price * qty);
+    content += `${i + 1}. ${removeVietnameseAccents(it.product_name || it.name)}\n`;
+    content += formatLineColumns(`   ${qty} x ${formatReceiptNum(price)}`, formatReceiptNum(total), lineWidth);
   });
 
   content += divider;
+  const subtotal = Number(order.subtotal !== undefined ? order.subtotal : (order.total || 0));
+  const finalTotal = Number(order.total !== undefined ? order.total : subtotal);
+  content += formatLineColumns('Thanh tien:', formatReceiptNum(subtotal) + ' d', lineWidth);
   content += '\x1B\x45\x01';
-  content += formatLineColumns('TONG CONG:', formatMoney(order.total), lineWidth);
+  content += formatLineColumns('Tong tien:', formatReceiptNum(finalTotal) + ' d', lineWidth);
   content += '\x1B\x45\x00';
-  content += divider;
-  content += '\x1B\x61\x01Cam on quy khach va hen gap lai!\n\n\n\n\x1D\x56\x01';
+
+  const isChuyenKhoan = order.payment_method === 'transfer' || order.payment_method === 'bank' || order.payment_method === 'qr';
+  const payLabel = isChuyenKhoan ? '+ Thanh toan chuyen khoan' : '+ Thanh toan tien mat';
+  content += formatLineColumns(payLabel, formatReceiptNum(finalTotal) + ' d', lineWidth);
+
+  content += '\n\x1B\x61\x01'; // Canh giữa
+  content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\x1B\x45\x00\n';
+  content += `Dia chi: ${removeVietnameseAccents(storeAddress)}\n`;
+  content += `${removeVietnameseAccents(footerNotice)}\n\n\n\n\x1D\x56\x01`; // Cắt giấy
 
   const encoder = new TextEncoder();
   const data = encoder.encode(content);
@@ -1956,7 +2031,7 @@ function printViaIsolatedIframe(receiptHtml) {
         .receipt-container {
           width: 80mm;
           max-width: 80mm;
-          padding: 6mm 4mm;
+          padding: 4mm 3mm;
           background: #ffffff;
           color: #000000;
         }
@@ -1965,56 +2040,56 @@ function printViaIsolatedIframe(receiptHtml) {
           font-weight: 900;
           text-align: center;
           text-transform: uppercase;
-          margin-bottom: 2px;
+          margin-bottom: 8px;
           letter-spacing: 0.5px;
         }
-        .receipt-header {
-          text-align: center;
-          font-size: 11px;
-          margin-bottom: 10px;
-          border-bottom: 1px dashed #000000;
-          padding-bottom: 8px;
+        .receipt-meta {
+          font-size: 11.5px;
+          line-height: 1.45;
+          margin-bottom: 6px;
         }
         .receipt-table {
           width: 100%;
           border-collapse: collapse;
-          margin: 8px 0;
+          margin: 6px 0;
         }
         .receipt-table th {
+          border-top: 1px dashed #000000;
           border-bottom: 1px dashed #000000;
-          text-align: left;
-          padding: 4px 0;
+          padding: 4px 1px;
           font-size: 11px;
+          font-weight: bold;
+        }
+        .receipt-table th:not(:last-child) {
+          border-right: 1px solid #000000;
         }
         .receipt-table td {
-          padding: 3px 0;
-          font-size: 12px;
+          padding: 4px 1px;
+          font-size: 11.5px;
           vertical-align: top;
         }
         .receipt-divider {
           border-bottom: 1px dashed #000000;
-          margin: 6px 0;
+          margin: 4px 0 6px 0;
         }
         .receipt-summary {
           width: 100%;
-          margin-top: 4px;
+          margin-top: 2px;
+          border-collapse: collapse;
         }
         .receipt-summary td {
           padding: 2px 0;
           font-size: 12px;
         }
         .receipt-total {
-          font-size: 15px;
+          font-size: 13.5px;
           font-weight: bold;
-          border-top: 1px dashed #000000;
-          border-bottom: 1px dashed #000000;
-          padding: 6px 0;
         }
         .receipt-footer {
           text-align: center;
-          font-size: 11px;
-          margin-top: 12px;
-          padding-top: 6px;
+          font-size: 11.5px;
+          margin-top: 14px;
+          line-height: 1.45;
         }
       </style>
     </head>
@@ -2091,25 +2166,26 @@ function openReceiptPrintWindow() {
         .receipt-container {
           background: white;
           width: 80mm;
-          padding: 6mm 4mm;
+          padding: 4mm 3mm;
           box-shadow: 0 4px 12px rgba(0,0,0,0.08);
           border: 1px dashed #cbd5e1;
           border-radius: 8px;
         }
-        .receipt-title { font-size: 16px; font-weight: 900; text-align: center; text-transform: uppercase; margin-bottom: 2px; }
-        .receipt-header { text-align: center; font-size: 11px; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 8px; }
-        .receipt-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-        .receipt-table th { border-bottom: 1px dashed #000; text-align: left; padding: 4px 0; font-size: 11px; }
-        .receipt-table td { padding: 3px 0; font-size: 12px; vertical-align: top; }
-        .receipt-divider { border-bottom: 1px dashed #000; margin: 6px 0; }
-        .receipt-summary { width: 100%; margin-top: 4px; }
+        .receipt-title { font-size: 16px; font-weight: 900; text-align: center; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
+        .receipt-meta { font-size: 11.5px; line-height: 1.45; margin-bottom: 6px; }
+        .receipt-table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+        .receipt-table th { border-top: 1px dashed #000; border-bottom: 1px dashed #000; text-align: center; padding: 4px 1px; font-size: 11px; font-weight: bold; }
+        .receipt-table th:not(:last-child) { border-right: 1px solid #000; }
+        .receipt-table td { padding: 4px 1px; font-size: 11.5px; vertical-align: top; }
+        .receipt-divider { border-bottom: 1px dashed #000; margin: 4px 0 6px 0; }
+        .receipt-summary { width: 100%; margin-top: 2px; border-collapse: collapse; }
         .receipt-summary td { padding: 2px 0; font-size: 12px; }
-        .receipt-total { font-size: 15px; font-weight: bold; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 6px 0; }
-        .receipt-footer { text-align: center; font-size: 11px; margin-top: 12px; padding-top: 6px; }
+        .receipt-total { font-size: 13.5px; font-weight: bold; }
+        .receipt-footer { text-align: center; font-size: 11.5px; margin-top: 14px; line-height: 1.45; }
         @media print {
           body { background: white; padding: 0; }
           .btn-print { display: none; }
-          .receipt-container { box-shadow: none; border: none; padding: 6mm 4mm; width: 80mm; }
+          .receipt-container { box-shadow: none; border: none; padding: 4mm 3mm; width: 80mm; }
         }
       </style>
     </head>
@@ -2176,16 +2252,51 @@ function copyReceiptTextToClipboard() {
   if (!orderSource) orderSource = state.currentSource || 'taicho';
   const sourceLabel = (orderSource === 'mangve' || (o.table_name && o.table_name.toLowerCase().includes('mang về'))) ? 'MANG VỀ' : 'TẠI CHỖ';
 
-  const itemsText = (o.items || []).map((it, idx) => `${idx + 1}. ${it.product_name || it.name} x${it.quantity} = ${formatMoney(it.total || it.price * it.quantity)}`).join('\n');
-  const text = `📋 HÓA ĐƠN THANH TOÁN: ${o.table_name || 'Bàn'} [${sourceLabel}]\n` +
-               `Hình thức: ${sourceLabel}\n` +
-               `Mã: ${o.order_code || ''}\n` +
-               `Thời gian: ${formatDateTime(o.created_at || new Date())}\n` +
+  let rawTable = (o.table_name || 'Bàn 1').trim();
+  let tableDisplay = rawTable;
+  if (!tableDisplay.toLowerCase().startsWith('bàn') && !tableDisplay.toLowerCase().startsWith('mang')) {
+    tableDisplay = 'Bàn ' + tableDisplay;
+  }
+
+  const createdAt = o.created_at ? new Date(o.created_at) : new Date();
+  const dateStr = String(createdAt.getDate()).padStart(2, '0') + '/' + 
+                  String(createdAt.getMonth() + 1).padStart(2, '0') + '/' + 
+                  createdAt.getFullYear();
+  const timeStr = String(createdAt.getHours()).padStart(2, '0') + ':' + 
+                  String(createdAt.getMinutes()).padStart(2, '0');
+  const cashierName = o.cashier_name || (state.currentUser ? state.currentUser.name : '.');
+
+  const subtotal = Number(o.subtotal !== undefined ? o.subtotal : (o.total || 0));
+  const finalTotal = Number(o.total !== undefined ? o.total : subtotal);
+  const isChuyenKhoan = o.payment_method === 'transfer' || o.payment_method === 'bank' || o.payment_method === 'qr';
+  const payLabel = isChuyenKhoan ? '+ Thanh toán chuyển khoản' : '+ Thanh toán tiền mặt';
+
+  const storeName = state.settings.store_name || 'Bún mắm miền Tây';
+  const storeAddress = state.settings.store_address || '324 Bạch Mai';
+  const footerNotice = state.settings.receipt_footer || 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán';
+
+  const itemsText = (o.items || []).map((it, idx) => {
+    const qty = Number(it.quantity) || 1;
+    const price = Number(it.price) || 0;
+    const total = Number(it.total !== undefined ? it.total : price * qty);
+    return `${idx + 1} | ${it.product_name || it.name} | ${qty} | ${formatReceiptNum(price)} | ${formatReceiptNum(total)}`;
+  }).join('\n');
+
+  const text = `HÓA ĐƠN THANH TOÁN\n` +
+               `Bàn: ${tableDisplay} - ${sourceLabel}    Ngày: ${dateStr}\n` +
+               `Giờ vào: ${timeStr}    TN: ${cashierName}\n` +
                (o.note ? `Ghi chú: ${o.note}\n` : '') +
-               `-------------------------\n` +
+               `------------------------------------------\n` +
+               `STT | Tên món | SL | Đơn giá | Thành tiền\n` +
+               `------------------------------------------\n` +
                `${itemsText}\n` +
-               `-------------------------\n` +
-               `TỔNG CỘNG: ${formatMoney(o.total || 0)}`;
+               `------------------------------------------\n` +
+               `Thành tiền: ${formatReceiptNum(subtotal)} đ\n` +
+               `Tổng tiền: ${formatReceiptNum(finalTotal)} đ\n` +
+               `${payLabel} ${formatReceiptNum(finalTotal)} đ\n\n` +
+               `${storeName}\n` +
+               `Địa chỉ: ${storeAddress}\n` +
+               `${footerNotice}`;
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
@@ -2259,14 +2370,15 @@ function testPrintSample() {
   const sampleOrder = {
     order_code: 'HD-MAU-01',
     created_at: new Date().toISOString(),
-    table_name: 'Bàn 1 (In Thử Nghiệm)',
+    table_name: 'Bàn 5',
     source: 'taicho',
-    note: 'Ít ớt, bún thêm',
+    cashier_name: '.',
     payment_method: 'cash',
-    total: 95000,
+    subtotal: 55000,
+    discount: 0,
+    total: 55000,
     items: [
-      { product_name: 'Bún mắm chả cá đặc biệt', quantity: 1, price: 65000, total: 65000 },
-      { product_name: 'Trà đá đường sâm dứa', quantity: 2, price: 15000, total: 30000 }
+      { product_name: 'Bún mắm cá tươi', quantity: 1, price: 55000, total: 55000 }
     ]
   };
   printReceipt(sampleOrder);

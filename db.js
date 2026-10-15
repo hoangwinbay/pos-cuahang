@@ -134,27 +134,32 @@ function initDatabase() {
   if (settingCount === 0) {
     const insertSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)');
     const defaultSettings = [
-      ['store_name', 'BÚN MẮM MIỀN TÂY'],
-      ['store_address', '123 Đường Lê Lợi, Phường Bến Thành, Quận 1, TP. HCM'],
+      ['store_name', 'Bún mắm miền Tây'],
+      ['store_address', '324 Bạch Mai'],
       ['store_phone', '0909 888 999'],
       ['store_greeting', 'Cảm ơn quý khách và hẹn gặp lại! Hotline hỗ trợ: 0909 888 999'],
       ['bank_id', 'MB'],
       ['bank_account_no', '0909888999'],
       ['bank_account_name', 'BUN MAM MIEN TAY'],
       ['paper_size', '80mm'],
-      ['zalo_mini_app_id', '3906597427562388428']
+      ['zalo_mini_app_id', '3906597427562388428'],
+      ['receipt_footer', 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán']
     ];
     for (const [k, v] of defaultSettings) {
       insertSetting.run(k, v);
     }
   }
 
-  // Cập nhật tên quán sang BÚN MẮM MIỀN TÂY và lưu ID Zalo Mini App
+  // Cập nhật tên quán và địa chỉ chuẩn
   try {
     db.exec(`
       UPDATE settings 
-      SET value = 'BÚN MẮM MIỀN TÂY' 
-      WHERE key = 'store_name' AND (value = 'CỬA HÀNG TẠP HÓA POS PRO' OR value = 'QUÁN ĂN - CÀ PHÊ' OR value = 'POS ORDER' OR value = '' OR value IS NULL);
+      SET value = 'Bún mắm miền Tây' 
+      WHERE key = 'store_name' AND (value = 'CỬA HÀNG TẠP HÓA POS PRO' OR value = 'QUÁN ĂN - CÀ PHÊ' OR value = 'POS ORDER' OR value = 'BÚN MẮM MIỀN TÂY' OR value = '' OR value IS NULL);
+      UPDATE settings
+      SET value = '324 Bạch Mai'
+      WHERE key = 'store_address' AND (value LIKE '%123 Đường Lê Lợi%' OR value = '' OR value IS NULL);
+      INSERT OR IGNORE INTO settings (key, value) VALUES ('receipt_footer', 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán');
       INSERT OR REPLACE INTO settings (key, value) VALUES ('zalo_mini_app_id', '3906597427562388428');
     `);
   } catch (e) {}
