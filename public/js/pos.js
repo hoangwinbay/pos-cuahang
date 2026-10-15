@@ -1697,15 +1697,15 @@ function generateReceiptHtml(order) {
       HÓA ĐƠN THANH TOÁN
     </div>
 
-    <div class="receipt-meta" style="font-size: 11.5px; line-height: 1.45; margin-bottom: 6px;">
-      <div style="display: flex; justify-content: space-between; align-items: baseline;">
-        <span>Bàn: <strong>${tableDisplay} - ${sourceLabel}</strong></span>
+    <div class="receipt-meta" style="margin-bottom: 6px; line-height: 1.4;">
+      <div style="font-size: 18px; font-weight: 900; margin: 3px 0 5px 0; letter-spacing: 0.3px;">
+        Bàn: ${tableDisplay} - ${sourceLabel}
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px;">
+        <span>Giờ vào: ${timeStr}</span>
         <span>Ngày: ${dateStr}</span>
       </div>
-      <div>
-        <span>Giờ vào: ${timeStr}</span>
-      </div>
-      ${order.note ? `<div style="font-style: italic; margin-top: 2px;">Ghi chú: ${order.note}</div>` : ''}
+      ${order.note ? `<div style="font-style: italic; margin-top: 2px; font-size: 11.5px;">Ghi chú: ${order.note}</div>` : ''}
     </div>
 
     <table class="receipt-table" style="width: 100%; border-collapse: collapse; margin: 6px 0;">
@@ -1847,10 +1847,10 @@ async function printEscPosBluetooth(order) {
   let content = '\x1B\x40'; // Reset
   content += '\x1B\x61\x01'; // Canh giữa
   content += '\x1B\x45\x01' + 'HOA DON THANH TOAN\n\n' + '\x1B\x45\x00';
-  content += '\x1B\x61\x00'; // Canh trái
-
-  content += formatLineColumns(`Ban: ${tableDisplay} - ${sourceLabel}`, `Ngay: ${dateStr}`, lineWidth);
-  content += `Gio vao: ${timeStr}\n`;
+  content += '\x1B\x45\x01'; // In đậm
+  content += `BAN: ${tableDisplay} - ${sourceLabel}\n`;
+  content += '\x1B\x45\x00'; // Bình thường
+  content += formatLineColumns(`Gio vao: ${timeStr}`, `Ngay: ${dateStr}`, lineWidth);
   if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
   content += divider;
@@ -2277,8 +2277,8 @@ function copyReceiptTextToClipboard() {
   }).join('\n');
 
   const text = `HÓA ĐƠN THANH TOÁN\n` +
-               `Bàn: ${tableDisplay} - ${sourceLabel}    Ngày: ${dateStr}\n` +
-               `Giờ vào: ${timeStr}\n` +
+               `BÀN: ${tableDisplay} - ${sourceLabel}\n` +
+               `Giờ vào: ${timeStr}    Ngày: ${dateStr}\n` +
                (o.note ? `Ghi chú: ${o.note}\n` : '') +
                `------------------------------------------\n` +
                `Tên món | SL | Đơn giá | Thành tiền\n` +
