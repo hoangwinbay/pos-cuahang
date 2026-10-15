@@ -162,6 +162,7 @@ body, button, input, select, textarea {
 .receipt-summary td {
   padding: 3px 0;
   font-size: 13.5px;
+  font-weight: bold;
 }
 
 .receipt-total {

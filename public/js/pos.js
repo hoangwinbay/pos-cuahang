@@ -1704,10 +1704,10 @@ function generateReceiptHtml(order) {
         </div>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 13px;">
-        <span>Giờ vào: ${timeStr}</span>
-        <span>Ngày: ${dateStr}</span>
+        <span><strong>Giờ vào:</strong> ${timeStr}</span>
+        <span><strong>Ngày:</strong> ${dateStr}</span>
       </div>
-      ${order.note ? `<div style="margin-top: 4px; font-size: 13px;"><strong>Ghi chú:</strong> <strong>${order.note}</strong></div>` : ''}
+      ${order.note ? `<div style="margin-top: 4px; font-size: 13px;"><strong>Ghi chú:</strong> ${order.note}</div>` : ''}
     </div>
 
     <table class="receipt-table" style="width: 100%; border-collapse: collapse; margin: 6px 0;">
@@ -1726,24 +1726,24 @@ function generateReceiptHtml(order) {
 
     <div class="receipt-divider" style="border-bottom: 1px dashed #000; margin: 5px 0 7px 0;"></div>
 
-    <table class="receipt-summary" style="width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 2px;">
-      <tr>
-        <td style="padding: 2.5px 0;">Thành tiền:</td>
-        <td style="padding: 2.5px 0; text-align: right;">${formatReceiptNum(subtotal)} đ</td>
+    <table class="receipt-summary" style="width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 2px; font-weight: bold;">
+      <tr style="font-weight: bold;">
+        <td style="padding: 2.5px 0; font-weight: bold;">Thành tiền:</td>
+        <td style="padding: 2.5px 0; text-align: right; font-weight: bold;">${formatReceiptNum(subtotal)} đ</td>
       </tr>
       ${discount > 0 ? `
-      <tr>
-        <td style="padding: 2.5px 0;">Giảm giá:</td>
-        <td style="padding: 2.5px 0; text-align: right;">-${formatReceiptNum(discount)} đ</td>
+      <tr style="font-weight: bold;">
+        <td style="padding: 2.5px 0; font-weight: bold;">Giảm giá:</td>
+        <td style="padding: 2.5px 0; text-align: right; font-weight: bold;">-${formatReceiptNum(discount)} đ</td>
       </tr>
       ` : ''}
       <tr class="receipt-total" style="font-size: 16px; font-weight: 900;">
-        <td style="padding: 4px 0;">Tổng tiền:</td>
-        <td style="padding: 4px 0; text-align: right;">${formatReceiptNum(finalTotal)} đ</td>
+        <td style="padding: 4px 0; font-weight: 900;">Tổng tiền:</td>
+        <td style="padding: 4px 0; text-align: right; font-weight: 900;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
-      <tr>
-        <td style="padding: 2.5px 0;">+ ${paymentMethodLabel}</td>
-        <td style="padding: 2.5px 0; text-align: right;">${formatReceiptNum(finalTotal)} đ</td>
+      <tr style="font-weight: bold;">
+        <td style="padding: 2.5px 0; font-weight: bold;">+ ${paymentMethodLabel}</td>
+        <td style="padding: 2.5px 0; text-align: right; font-weight: bold;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
     </table>
 
@@ -1874,14 +1874,14 @@ async function printEscPosBluetooth(order) {
   content += divider;
   const subtotal = Number(order.subtotal !== undefined ? order.subtotal : (order.total || 0));
   const finalTotal = Number(order.total !== undefined ? order.total : subtotal);
+  content += '\x1B\x45\x01'; // In đậm cả vùng thành tiền
   content += formatLineColumns('Thanh tien:', formatReceiptNum(subtotal) + ' d', lineWidth);
-  content += '\x1B\x45\x01';
   content += formatLineColumns('Tong tien:', formatReceiptNum(finalTotal) + ' d', lineWidth);
-  content += '\x1B\x45\x00';
 
   const isChuyenKhoan = order.payment_method === 'transfer' || order.payment_method === 'bank' || order.payment_method === 'qr';
   const payLabel = isChuyenKhoan ? '+ Thanh toan chuyen khoan' : '+ Thanh toan tien mat';
   content += formatLineColumns(payLabel, formatReceiptNum(finalTotal) + ' d', lineWidth);
+  content += '\x1B\x45\x00'; // Hết in đậm
 
   content += '\n\x1B\x61\x01'; // Canh giữa
   content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\x1B\x45\x00\n';
@@ -2081,6 +2081,7 @@ function printViaIsolatedIframe(receiptHtml) {
         .receipt-summary td {
           padding: 3px 0;
           font-size: 13.5px;
+          font-weight: bold;
         }
         .receipt-total {
           font-size: 16px;
@@ -2180,7 +2181,7 @@ function openReceiptPrintWindow() {
         .receipt-table td { padding: 5px 2px; font-size: 13.5px; vertical-align: top; }
         .receipt-divider { border-bottom: 1px dashed #000; margin: 5px 0 7px 0; }
         .receipt-summary { width: 100%; margin-top: 2px; border-collapse: collapse; }
-        .receipt-summary td { padding: 3px 0; font-size: 13.5px; }
+        .receipt-summary td { padding: 3px 0; font-size: 13.5px; font-weight: bold; }
         .receipt-total { font-size: 16px; font-weight: 900; }
         .receipt-footer { text-align: center; font-size: 12.5px; margin-top: 16px; line-height: 1.45; }
         @media print {
