@@ -1698,8 +1698,10 @@ function generateReceiptHtml(order) {
     </div>
 
     <div class="receipt-meta" style="margin-bottom: 6px; line-height: 1.4;">
-      <div style="font-size: 18px; font-weight: 900; margin: 3px 0 5px 0; letter-spacing: 0.3px;">
-        Bàn: ${tableDisplay} - ${sourceLabel}
+      <div style="border: 2px dashed #000; padding: 6px 4px; margin: 5px 0 7px 0; text-align: center; border-radius: 4px;">
+        <div style="font-size: 22px; font-weight: 900; letter-spacing: 0.5px; line-height: 1.25;">
+          Bàn: ${tableDisplay} - ${sourceLabel}
+        </div>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px;">
         <span>Giờ vào: ${timeStr}</span>
@@ -1847,9 +1849,13 @@ async function printEscPosBluetooth(order) {
   let content = '\x1B\x40'; // Reset
   content += '\x1B\x61\x01'; // Canh giữa
   content += '\x1B\x45\x01' + 'HOA DON THANH TOAN\n\n' + '\x1B\x45\x00';
+  content += divider;
+  content += '\x1B\x61\x01'; // Canh giữa
   content += '\x1B\x45\x01'; // In đậm
   content += `BAN: ${tableDisplay} - ${sourceLabel}\n`;
   content += '\x1B\x45\x00'; // Bình thường
+  content += '\x1B\x61\x00'; // Canh trái
+  content += divider;
   content += formatLineColumns(`Gio vao: ${timeStr}`, `Ngay: ${dateStr}`, lineWidth);
   if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
@@ -2277,7 +2283,9 @@ function copyReceiptTextToClipboard() {
   }).join('\n');
 
   const text = `HÓA ĐƠN THANH TOÁN\n` +
-               `BÀN: ${tableDisplay} - ${sourceLabel}\n` +
+               `------------------------------------------\n` +
+               `       [ BÀN: ${tableDisplay} - ${sourceLabel} ]\n` +
+               `------------------------------------------\n` +
                `Giờ vào: ${timeStr}    Ngày: ${dateStr}\n` +
                (o.note ? `Ghi chú: ${o.note}\n` : '') +
                `------------------------------------------\n` +

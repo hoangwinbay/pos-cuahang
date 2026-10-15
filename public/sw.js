@@ -1,5 +1,5 @@
 // Service Worker for POS PWA
-const CACHE_NAME = 'pos-pwa-v4';
+const CACHE_NAME = 'pos-pwa-v5';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
