@@ -1666,16 +1666,14 @@ function generateReceiptHtml(order) {
                   createdAt.getFullYear();
   const timeStr = String(createdAt.getHours()).padStart(2, '0') + ':' + 
                   String(createdAt.getMinutes()).padStart(2, '0');
-  const cashierName = order.cashier_name || (state.currentUser ? state.currentUser.name : '.');
 
-  const itemsHtml = (order.items || []).map((item, idx) => {
+  const itemsHtml = (order.items || []).map((item) => {
     const qty = Number(item.quantity) || 1;
     const price = Number(item.price) || 0;
     const total = Number(item.total !== undefined ? item.total : price * qty);
     const itemName = item.product_name || item.name || '';
     return `
       <tr>
-        <td style="text-align: center; vertical-align: top; padding: 4px 1px;">${idx + 1}</td>
         <td style="text-align: left; vertical-align: top; padding: 4px 2px; word-break: break-word;">${itemName}</td>
         <td style="text-align: center; vertical-align: top; padding: 4px 1px;">${qty}</td>
         <td style="text-align: right; vertical-align: top; padding: 4px 1px; white-space: nowrap;">${formatReceiptNum(price)}</td>
@@ -1704,9 +1702,8 @@ function generateReceiptHtml(order) {
         <span>Bàn: <strong>${tableDisplay} - ${sourceLabel}</strong></span>
         <span>Ngày: ${dateStr}</span>
       </div>
-      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+      <div>
         <span>Giờ vào: ${timeStr}</span>
-        <span>TN: ${cashierName || '.'}</span>
       </div>
       ${order.note ? `<div style="font-style: italic; margin-top: 2px;">Ghi chú: ${order.note}</div>` : ''}
     </div>
@@ -1714,11 +1711,10 @@ function generateReceiptHtml(order) {
     <table class="receipt-table" style="width: 100%; border-collapse: collapse; margin: 6px 0;">
       <thead>
         <tr style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-size: 11px;">
-          <th style="width: 8%; text-align: center; padding: 4px 1px; border-right: 1px solid #000; font-weight: bold;">STT</th>
-          <th style="width: 42%; text-align: center; padding: 4px 2px; border-right: 1px solid #000; font-weight: bold;">Tên món</th>
-          <th style="width: 10%; text-align: center; padding: 4px 1px; border-right: 1px solid #000; font-weight: bold;">SL</th>
-          <th style="width: 20%; text-align: center; padding: 4px 1px; border-right: 1px solid #000; font-weight: bold;">Đơn giá</th>
-          <th style="width: 20%; text-align: center; padding: 4px 1px; font-weight: bold;">Thành tiền</th>
+          <th style="width: 48%; text-align: left; padding: 4px 2px; border-right: 1px solid #000; font-weight: bold;">Tên món</th>
+          <th style="width: 14%; text-align: center; padding: 4px 1px; border-right: 1px solid #000; font-weight: bold;">SL</th>
+          <th style="width: 19%; text-align: right; padding: 4px 1px; border-right: 1px solid #000; font-weight: bold;">Đơn giá</th>
+          <th style="width: 19%; text-align: right; padding: 4px 1px; font-weight: bold;">Thành tiền</th>
         </tr>
       </thead>
       <tbody>
@@ -1847,7 +1843,6 @@ async function printEscPosBluetooth(order) {
                   createdAt.getFullYear();
   const timeStr = String(createdAt.getHours()).padStart(2, '0') + ':' + 
                   String(createdAt.getMinutes()).padStart(2, '0');
-  const cashierName = order.cashier_name || (state.currentUser ? state.currentUser.name : '.');
 
   let content = '\x1B\x40'; // Reset
   content += '\x1B\x61\x01'; // Canh giữa
@@ -1855,18 +1850,18 @@ async function printEscPosBluetooth(order) {
   content += '\x1B\x61\x00'; // Canh trái
 
   content += formatLineColumns(`Ban: ${tableDisplay} - ${sourceLabel}`, `Ngay: ${dateStr}`, lineWidth);
-  content += formatLineColumns(`Gio vao: ${timeStr}`, `TN: ${cashierName}`, lineWidth);
+  content += `Gio vao: ${timeStr}\n`;
   if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
   content += divider;
-  content += 'STT | TEN MON | SL | GIA | TIEN\n';
+  content += 'TEN MON | SL | GIA | TIEN\n';
   content += divider;
 
-  (order.items || []).forEach((it, i) => {
+  (order.items || []).forEach((it) => {
     const qty = Number(it.quantity) || 1;
     const price = Number(it.price) || 0;
     const total = Number(it.total !== undefined ? it.total : price * qty);
-    content += `${i + 1}. ${removeVietnameseAccents(it.product_name || it.name)}\n`;
+    content += `${removeVietnameseAccents(it.product_name || it.name)}\n`;
     content += formatLineColumns(`   ${qty} x ${formatReceiptNum(price)}`, formatReceiptNum(total), lineWidth);
   });
 
@@ -2264,7 +2259,6 @@ function copyReceiptTextToClipboard() {
                   createdAt.getFullYear();
   const timeStr = String(createdAt.getHours()).padStart(2, '0') + ':' + 
                   String(createdAt.getMinutes()).padStart(2, '0');
-  const cashierName = o.cashier_name || (state.currentUser ? state.currentUser.name : '.');
 
   const subtotal = Number(o.subtotal !== undefined ? o.subtotal : (o.total || 0));
   const finalTotal = Number(o.total !== undefined ? o.total : subtotal);
@@ -2275,19 +2269,19 @@ function copyReceiptTextToClipboard() {
   const storeAddress = state.settings.store_address || '324 Bạch Mai';
   const footerNotice = state.settings.receipt_footer || 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán';
 
-  const itemsText = (o.items || []).map((it, idx) => {
+  const itemsText = (o.items || []).map((it) => {
     const qty = Number(it.quantity) || 1;
     const price = Number(it.price) || 0;
     const total = Number(it.total !== undefined ? it.total : price * qty);
-    return `${idx + 1} | ${it.product_name || it.name} | ${qty} | ${formatReceiptNum(price)} | ${formatReceiptNum(total)}`;
+    return `${it.product_name || it.name} | ${qty} | ${formatReceiptNum(price)} | ${formatReceiptNum(total)}`;
   }).join('\n');
 
   const text = `HÓA ĐƠN THANH TOÁN\n` +
                `Bàn: ${tableDisplay} - ${sourceLabel}    Ngày: ${dateStr}\n` +
-               `Giờ vào: ${timeStr}    TN: ${cashierName}\n` +
+               `Giờ vào: ${timeStr}\n` +
                (o.note ? `Ghi chú: ${o.note}\n` : '') +
                `------------------------------------------\n` +
-               `STT | Tên món | SL | Đơn giá | Thành tiền\n` +
+               `Tên món | SL | Đơn giá | Thành tiền\n` +
                `------------------------------------------\n` +
                `${itemsText}\n` +
                `------------------------------------------\n` +
