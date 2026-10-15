@@ -1700,7 +1700,7 @@ function generateReceiptHtml(order) {
     <div class="receipt-meta" style="margin-bottom: 6px; line-height: 1.4;">
       <div style="border: 2px dashed #000; padding: 6px 4px; margin: 5px 0 7px 0; text-align: center; border-radius: 4px;">
         <div style="font-size: 23px; font-weight: 900; letter-spacing: 0.5px; line-height: 1.25;">
-          Bàn: ${tableDisplay} - ${sourceLabel}
+          ${tableDisplay} - ${sourceLabel}
         </div>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 13px;">
@@ -1852,7 +1852,7 @@ async function printEscPosBluetooth(order) {
   content += divider;
   content += '\x1B\x61\x01'; // Canh giữa
   content += '\x1B\x45\x01'; // In đậm
-  content += `BAN: ${tableDisplay} - ${sourceLabel}\n`;
+  content += `${tableDisplay} - ${sourceLabel}\n`;
   content += '\x1B\x45\x00'; // Bình thường
   content += '\x1B\x61\x00'; // Canh trái
   content += divider;
@@ -2284,7 +2284,7 @@ function copyReceiptTextToClipboard() {
 
   const text = `HÓA ĐƠN THANH TOÁN\n` +
                `------------------------------------------\n` +
-               `       [ BÀN: ${tableDisplay} - ${sourceLabel} ]\n` +
+               `       [ ${tableDisplay} - ${sourceLabel} ]\n` +
                `------------------------------------------\n` +
                `Giờ vào: ${timeStr}    Ngày: ${dateStr}\n` +
                (o.note ? `Ghi chú: ${o.note}\n` : '') +
