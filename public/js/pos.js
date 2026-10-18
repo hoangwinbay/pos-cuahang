@@ -1741,9 +1741,9 @@ function generateReceiptHtml(order) {
         <td style="padding: 4px 0; font-weight: 900;">Tổng tiền:</td>
         <td style="padding: 4px 0; text-align: right; font-weight: 900;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
-      <tr style="font-weight: bold;">
-        <td style="padding: 2.5px 0; font-weight: bold;">+ ${paymentMethodLabel}</td>
-        <td style="padding: 2.5px 0; text-align: right; font-weight: bold;">${formatReceiptNum(finalTotal)} đ</td>
+      <tr class="receipt-payment-row" style="font-weight: normal; font-size: 12.5px; color: #666; opacity: 0.85;">
+        <td style="padding: 2px 0; font-weight: normal; font-size: 12.5px; color: #666;">+ ${paymentMethodLabel}</td>
+        <td style="padding: 2px 0; text-align: right; font-weight: normal; font-size: 12.5px; color: #666;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
     </table>
 
@@ -1874,14 +1874,14 @@ async function printEscPosBluetooth(order) {
   content += divider;
   const subtotal = Number(order.subtotal !== undefined ? order.subtotal : (order.total || 0));
   const finalTotal = Number(order.total !== undefined ? order.total : subtotal);
-  content += '\x1B\x45\x01'; // In đậm cả vùng thành tiền
+  content += '\x1B\x45\x01'; // In đậm Thành tiền và Tổng tiền
   content += formatLineColumns('Thanh tien:', formatReceiptNum(subtotal) + ' d', lineWidth);
   content += formatLineColumns('Tong tien:', formatReceiptNum(finalTotal) + ' d', lineWidth);
+  content += '\x1B\x45\x00'; // Hết in đậm trước mục thanh toán để in nét thường/mờ hơn
 
   const isChuyenKhoan = order.payment_method === 'transfer' || order.payment_method === 'bank' || order.payment_method === 'qr';
   const payLabel = isChuyenKhoan ? '+ Thanh toan chuyen khoan' : '+ Thanh toan tien mat';
   content += formatLineColumns(payLabel, formatReceiptNum(finalTotal) + ' d', lineWidth);
-  content += '\x1B\x45\x00'; // Hết in đậm
 
   content += '\n\x1B\x61\x01'; // Canh giữa
   content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\x1B\x45\x00\n';
@@ -2083,6 +2083,13 @@ function printViaIsolatedIframe(receiptHtml) {
           font-size: 13.5px;
           font-weight: bold;
         }
+        .receipt-summary tr.receipt-payment-row td {
+          padding: 2px 0;
+          font-size: 12.5px !important;
+          font-weight: normal !important;
+          color: #666666 !important;
+          opacity: 0.85 !important;
+        }
         .receipt-total {
           font-size: 16px;
           font-weight: 900;
@@ -2182,6 +2189,7 @@ function openReceiptPrintWindow() {
         .receipt-divider { border-bottom: 1px dashed #000; margin: 5px 0 7px 0; }
         .receipt-summary { width: 100%; margin-top: 2px; border-collapse: collapse; }
         .receipt-summary td { padding: 3px 0; font-size: 13.5px; font-weight: bold; }
+        .receipt-summary tr.receipt-payment-row td { padding: 2px 0; font-size: 12.5px !important; font-weight: normal !important; color: #666666 !important; opacity: 0.85 !important; }
         .receipt-total { font-size: 16px; font-weight: 900; }
         .receipt-footer { text-align: center; font-size: 12.5px; margin-top: 16px; line-height: 1.45; }
         @media print {
