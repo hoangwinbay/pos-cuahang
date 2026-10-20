@@ -32,7 +32,8 @@ async function loadOrdersList() {
             ${timeStr}
           </td>
           <td class="px-3 py-2.5 font-bold text-xs text-slate-800">
-            📍 ${tableName}
+            <div>📍 ${tableName}</div>
+            ${o.note ? `<div class="text-[11px] text-amber-700 font-medium italic mt-0.5"><i class="fa-solid fa-pen-to-square text-[10px] mr-1"></i>${o.note}</div>` : ''}
           </td>
           <td class="px-3 py-2.5 text-right font-black text-xs text-slate-900 whitespace-nowrap">
             ${formatMoney(o.total)}

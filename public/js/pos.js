@@ -1120,12 +1120,59 @@ function openCheckoutModal() {
     `).join('');
   }
 
+  // Hiển thị ghi chú đơn hàng nếu có
+  const noteBox = document.getElementById('checkoutModalNoteBox');
+  const noteText = document.getElementById('checkoutModalNoteText');
+  const currentNote = tableOrder?.note || document.getElementById('orderNoteInput')?.value.trim() || '';
+  if (noteBox && noteText) {
+    if (currentNote) {
+      noteText.textContent = currentNote;
+      noteBox.classList.remove('hidden');
+    } else {
+      noteBox.classList.add('hidden');
+    }
+  }
+
   document.getElementById('checkoutModal').classList.remove('hidden');
 }
 
 function closeCheckoutModal() {
   document.getElementById('checkoutModal')?.classList.add('hidden');
 }
+
+// Xóa trắng ghi chú trên modal xác nhận
+function clearKitchenConfirmNote() {
+  const noteInput = document.getElementById('kitchenConfirmNote');
+  const clearBtn = document.getElementById('btnClearKitchenNote');
+  if (noteInput) {
+    noteInput.value = '';
+    noteInput.focus();
+  }
+  if (clearBtn) clearBtn.classList.add('hidden');
+}
+
+// Thêm nhanh tag gợi ý ghi chú trên modal xác nhận
+function appendKitchenNote(tag) {
+  const noteInput = document.getElementById('kitchenConfirmNote');
+  const clearBtn = document.getElementById('btnClearKitchenNote');
+  if (!noteInput) return;
+  const currentVal = noteInput.value.trim();
+  if (!currentVal) {
+    noteInput.value = tag;
+  } else {
+    const parts = currentVal.split(',').map(s => s.trim()).filter(Boolean);
+    if (!parts.includes(tag)) {
+      parts.push(tag);
+      noteInput.value = parts.join(', ');
+    }
+  }
+  if (clearBtn) clearBtn.classList.remove('hidden');
+  noteInput.focus();
+}
+
+// Đăng ký toàn cục cho các hàm tương tác popup
+window.clearKitchenConfirmNote = clearKitchenConfirmNote;
+window.appendKitchenNote = appendKitchenNote;
 
 // Mở popup xác nhận in phiếu báo bếp & đặt bàn
 function printKitchenSlip() {
@@ -1170,6 +1217,25 @@ function printKitchenSlip() {
     `).join('');
   }
 
+  // Khởi tạo và đồng bộ ô ghi chú trên modal xác nhận
+  const kitchenNoteInput = document.getElementById('kitchenConfirmNote');
+  const clearBtn = document.getElementById('btnClearKitchenNote');
+  if (kitchenNoteInput) {
+    const existingNote = tableOrder?.note || document.getElementById('orderNoteInput')?.value.trim() || '';
+    kitchenNoteInput.value = existingNote;
+    if (clearBtn) clearBtn.classList.toggle('hidden', !existingNote);
+
+    kitchenNoteInput.oninput = () => {
+      if (clearBtn) clearBtn.classList.toggle('hidden', !kitchenNoteInput.value.trim());
+    };
+    kitchenNoteInput.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        executePrintKitchenSlip();
+      }
+    };
+  }
+
   document.getElementById('kitchenConfirmModal')?.classList.remove('hidden');
 }
 
@@ -1203,7 +1269,10 @@ function executePrintKitchenSlip() {
   }
 
   const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const note = document.getElementById('orderNoteInput')?.value.trim() || tableOrder.note || '';
+  
+  // Lấy ghi chú từ modal xác nhận (nếu có nhập) hoặc từ giỏ hàng / order cũ
+  const modalNoteInput = document.getElementById('kitchenConfirmNote');
+  const note = modalNoteInput ? modalNoteInput.value.trim() : (document.getElementById('orderNoteInput')?.value.trim() || tableOrder.note || '');
 
   // Đảm bảo bàn đã có thời gian bắt đầu và ghi chú
   if (!tableOrder.startTime) {
@@ -1211,6 +1280,11 @@ function executePrintKitchenSlip() {
   }
   tableOrder.note = note;
   tableOrder.hasPrintedKitchen = true;
+
+  // Đồng bộ lại ô ghi chú trong giỏ hàng nếu có
+  const cartNoteInput = document.getElementById('orderNoteInput');
+  if (cartNoteInput) cartNoteInput.value = note;
+  if (typeof updateOrderNoteDisplay === 'function') updateOrderNoteDisplay(note);
 
   const now = new Date();
   const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
@@ -1741,9 +1815,9 @@ function generateReceiptHtml(order) {
         <td style="padding: 4px 0; font-weight: 900;">Tổng tiền:</td>
         <td style="padding: 4px 0; text-align: right; font-weight: 900;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
-      <tr class="receipt-payment-row" style="font-weight: normal; font-size: 12.5px; color: #666; opacity: 0.85;">
-        <td style="padding: 2px 0; font-weight: normal; font-size: 12.5px; color: #666;">+ ${paymentMethodLabel}</td>
-        <td style="padding: 2px 0; text-align: right; font-weight: normal; font-size: 12.5px; color: #666;">${formatReceiptNum(finalTotal)} đ</td>
+      <tr class="receipt-payment-row" style="font-weight: normal; font-size: 11.5px; color: #888888; opacity: 0.55; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+        <td style="padding: 2px 0; font-weight: normal; font-size: 11.5px; color: #888888; opacity: 0.55;">+ ${paymentMethodLabel}</td>
+        <td style="padding: 2px 0; text-align: right; font-weight: normal; font-size: 11.5px; color: #888888; opacity: 0.55;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
     </table>
 
@@ -2083,12 +2157,15 @@ function printViaIsolatedIframe(receiptHtml) {
           font-size: 13.5px;
           font-weight: bold;
         }
-        .receipt-summary tr.receipt-payment-row td {
+        .receipt-summary tr.receipt-payment-row,
+        .receipt-summary tr.receipt-payment-row * {
           padding: 2px 0;
-          font-size: 12.5px !important;
+          font-size: 11.5px !important;
           font-weight: normal !important;
-          color: #666666 !important;
-          opacity: 0.85 !important;
+          color: #888888 !important;
+          opacity: 0.55 !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
         }
         .receipt-total {
           font-size: 16px;
@@ -2189,7 +2266,7 @@ function openReceiptPrintWindow() {
         .receipt-divider { border-bottom: 1px dashed #000; margin: 5px 0 7px 0; }
         .receipt-summary { width: 100%; margin-top: 2px; border-collapse: collapse; }
         .receipt-summary td { padding: 3px 0; font-size: 13.5px; font-weight: bold; }
-        .receipt-summary tr.receipt-payment-row td { padding: 2px 0; font-size: 12.5px !important; font-weight: normal !important; color: #666666 !important; opacity: 0.85 !important; }
+        .receipt-summary tr.receipt-payment-row, .receipt-summary tr.receipt-payment-row * { padding: 2px 0; font-size: 11.5px !important; font-weight: normal !important; color: #888888 !important; opacity: 0.55 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         .receipt-total { font-size: 16px; font-weight: 900; }
         .receipt-footer { text-align: center; font-size: 12.5px; margin-top: 16px; line-height: 1.45; }
         @media print {

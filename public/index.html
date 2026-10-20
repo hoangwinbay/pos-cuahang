@@ -24,7 +24,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#059669">
-  <link rel="stylesheet" href="css/style.css?v=20261018_fade_cash_payment">
+  <link rel="stylesheet" href="css/style.css?v=20261020_dim_cash_payment">
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden select-none">
 
@@ -579,6 +579,42 @@
             <!-- Injected by pos.js -->
           </div>
         </div>
+
+        <!-- Ghi Chú Đơn Hàng / Báo Bếp -->
+        <div class="pt-1">
+          <label for="kitchenConfirmNote" class="text-[11px] font-bold text-slate-500 uppercase mb-1.5 flex items-center justify-between">
+            <span class="flex items-center space-x-1.5">
+              <i class="fa-solid fa-pen-to-square text-amber-500"></i>
+              <span>Ghi Chú Đơn Hàng</span>
+            </span>
+            <span class="text-slate-400 font-normal text-[10px]">In lên phiếu bếp</span>
+          </label>
+          <div class="relative">
+            <input 
+              type="text" 
+              id="kitchenConfirmNote" 
+              placeholder="VD: Ít cay, không hành, ăn liền, mang về..." 
+              class="w-full pl-3 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-medium placeholder:text-slate-400"
+            />
+            <button 
+              type="button" 
+              onclick="clearKitchenConfirmNote()" 
+              id="btnClearKitchenNote" 
+              class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 text-xs transition-colors" 
+              title="Xóa ghi chú"
+            >
+              <i class="fa-solid fa-circle-xmark"></i>
+            </button>
+          </div>
+          <!-- Gợi ý nhanh các ghi chú thông dụng -->
+          <div class="flex flex-wrap gap-1 mt-1.5">
+            <button type="button" onclick="appendKitchenNote('Ít cay')" class="text-[11px] bg-slate-100 hover:bg-amber-100 hover:text-amber-800 text-slate-600 px-2 py-0.5 rounded-lg border border-slate-200 transition-colors font-medium active:scale-95">+ Ít cay</button>
+            <button type="button" onclick="appendKitchenNote('Không cay')" class="text-[11px] bg-slate-100 hover:bg-amber-100 hover:text-amber-800 text-slate-600 px-2 py-0.5 rounded-lg border border-slate-200 transition-colors font-medium active:scale-95">+ Không cay</button>
+            <button type="button" onclick="appendKitchenNote('Không hành')" class="text-[11px] bg-slate-100 hover:bg-amber-100 hover:text-amber-800 text-slate-600 px-2 py-0.5 rounded-lg border border-slate-200 transition-colors font-medium active:scale-95">+ Không hành</button>
+            <button type="button" onclick="appendKitchenNote('Ăn liền')" class="text-[11px] bg-slate-100 hover:bg-amber-100 hover:text-amber-800 text-slate-600 px-2 py-0.5 rounded-lg border border-slate-200 transition-colors font-medium active:scale-95">+ Ăn liền</button>
+            <button type="button" onclick="appendKitchenNote('Mang về')" class="text-[11px] bg-slate-100 hover:bg-amber-100 hover:text-amber-800 text-slate-600 px-2 py-0.5 rounded-lg border border-slate-200 transition-colors font-medium active:scale-95">+ Mang về</button>
+          </div>
+        </div>
       </div>
 
       <div class="p-3 bg-slate-50 border-t border-slate-200 flex items-center space-x-2 shrink-0">
@@ -722,6 +758,14 @@
           </div>
           <div id="checkoutModalItemsList" class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 max-h-40 overflow-y-auto divide-y divide-slate-100 text-xs">
             <!-- Injected by pos.js -->
+          </div>
+        </div>
+
+        <!-- Ghi chú đơn hàng (nếu có) -->
+        <div id="checkoutModalNoteBox" class="hidden text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-2.5 flex items-start space-x-2">
+          <i class="fa-solid fa-pen-to-square text-amber-600 mt-0.5 shrink-0"></i>
+          <div class="min-w-0 flex-1">
+            <span class="font-bold text-amber-800">Ghi chú:</span> <span id="checkoutModalNoteText" class="break-words"></span>
           </div>
         </div>
 
@@ -1392,11 +1436,11 @@
   </div> <!-- /#app: POS Root Container -->
 
   <!-- JavaScript Modules -->
-  <script src="js/app.js?v=20261018_fade_cash_payment"></script>
-  <script src="js/pos.js?v=20261018_fade_cash_payment"></script>
-  <script src="js/products.js?v=20261018_fade_cash_payment"></script>
-  <script src="js/orders.js?v=20261018_fade_cash_payment"></script>
-  <script src="js/reports.js?v=20261018_fade_cash_payment"></script>
+  <script src="js/app.js?v=20261020_dim_cash_payment"></script>
+  <script src="js/pos.js?v=20261020_dim_cash_payment"></script>
+  <script src="js/products.js?v=20261020_dim_cash_payment"></script>
+  <script src="js/orders.js?v=20261020_dim_cash_payment"></script>
+  <script src="js/reports.js?v=20261020_dim_cash_payment"></script>
 
 </body>
 </html>
