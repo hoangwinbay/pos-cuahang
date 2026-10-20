@@ -168,11 +168,9 @@ body, button, input, select, textarea {
 .receipt-summary tr.receipt-payment-row,
 .receipt-summary tr.receipt-payment-row td {
   font-weight: normal !important;
-  font-size: 11.5px !important;
-  color: #888888 !important;
-  opacity: 0.55 !important;
-  -webkit-print-color-adjust: exact !important;
-  print-color-adjust: exact !important;
+  font-size: 13px !important;
+  color: #000000 !important;
+  opacity: 1 !important;
 }
 
 .receipt-total {
@@ -258,12 +256,10 @@ body, button, input, select, textarea {
 
   #printable-receipt tr.receipt-payment-row,
   #printable-receipt tr.receipt-payment-row * {
-    color: #888888 !important;
+    color: #000000 !important;
     font-weight: normal !important;
-    font-size: 11.5px !important;
-    opacity: 0.55 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+    font-size: 13px !important;
+    opacity: 1 !important;
   }
 }
 

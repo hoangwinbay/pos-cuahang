@@ -1751,7 +1751,7 @@ function generateReceiptHtml(order) {
         <td style="text-align: left; vertical-align: top; padding: 5px 2px; word-break: break-word; font-size: 13.5px;">${itemName}</td>
         <td style="text-align: center; vertical-align: top; padding: 5px 1px; font-size: 13.5px;">${qty}</td>
         <td style="text-align: right; vertical-align: top; padding: 5px 1px; white-space: nowrap; font-size: 13.5px;">${formatReceiptNum(price)}</td>
-        <td style="text-align: right; vertical-align: top; padding: 5px 1px; white-space: nowrap; font-size: 13.5px; font-weight: bold;">${formatReceiptNum(total)}</td>
+        <td style="text-align: right; vertical-align: top; padding: 5px 1px; white-space: nowrap; font-size: 13.5px;">${formatReceiptNum(total)}</td>
       </tr>
     `;
   }).join('');
@@ -1815,9 +1815,9 @@ function generateReceiptHtml(order) {
         <td style="padding: 4px 0; font-weight: 900;">Tổng tiền:</td>
         <td style="padding: 4px 0; text-align: right; font-weight: 900;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
-      <tr class="receipt-payment-row" style="font-weight: normal; font-size: 11.5px; color: #888888; opacity: 0.55; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-        <td style="padding: 2px 0; font-weight: normal; font-size: 11.5px; color: #888888; opacity: 0.55;">+ ${paymentMethodLabel}</td>
-        <td style="padding: 2px 0; text-align: right; font-weight: normal; font-size: 11.5px; color: #888888; opacity: 0.55;">${formatReceiptNum(finalTotal)} đ</td>
+      <tr class="receipt-payment-row" style="font-weight: normal; font-size: 13px; color: #000000;">
+        <td style="padding: 2px 0; font-weight: normal; font-size: 13px; color: #000000;">+ ${paymentMethodLabel}</td>
+        <td style="padding: 2px 0; text-align: right; font-weight: normal; font-size: 13px; color: #000000;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
     </table>
 
@@ -2160,12 +2160,10 @@ function printViaIsolatedIframe(receiptHtml) {
         .receipt-summary tr.receipt-payment-row,
         .receipt-summary tr.receipt-payment-row * {
           padding: 2px 0;
-          font-size: 11.5px !important;
+          font-size: 13px !important;
           font-weight: normal !important;
-          color: #888888 !important;
-          opacity: 0.55 !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
+          color: #000000 !important;
+          opacity: 1 !important;
         }
         .receipt-total {
           font-size: 16px;
@@ -2266,7 +2264,7 @@ function openReceiptPrintWindow() {
         .receipt-divider { border-bottom: 1px dashed #000; margin: 5px 0 7px 0; }
         .receipt-summary { width: 100%; margin-top: 2px; border-collapse: collapse; }
         .receipt-summary td { padding: 3px 0; font-size: 13.5px; font-weight: bold; }
-        .receipt-summary tr.receipt-payment-row, .receipt-summary tr.receipt-payment-row * { padding: 2px 0; font-size: 11.5px !important; font-weight: normal !important; color: #888888 !important; opacity: 0.55 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .receipt-summary tr.receipt-payment-row, .receipt-summary tr.receipt-payment-row * { padding: 2px 0; font-size: 13px !important; font-weight: normal !important; color: #000000 !important; opacity: 1 !important; }
         .receipt-total { font-size: 16px; font-weight: 900; }
         .receipt-footer { text-align: center; font-size: 12.5px; margin-top: 16px; line-height: 1.45; }
         @media print {
