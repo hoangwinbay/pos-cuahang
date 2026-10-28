@@ -187,7 +187,9 @@ function connectTableEventSource() {
 
   try {
     const base = typeof getApiBaseUrl === 'function' ? getApiBaseUrl() : '';
-    const sseUrl = base ? `${base}/api/tables/events` : '/api/tables/events';
+    const token = (state && state.token) || (typeof localStorage !== 'undefined' ? localStorage.getItem('pos_token') : '') || '';
+    const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+    const sseUrl = (base ? `${base}/api/tables/events` : '/api/tables/events') + qs;
     tableEventSource = new EventSource(sseUrl);
 
     tableEventSource.onopen = () => {

@@ -478,23 +478,23 @@ async function initAuth() {
       state.currentUser = res.user;
       localStorage.setItem('pos_token', res.token);
     } else {
-      // 3. THIẾT BỊ KHÁC KHI QUÉT (Điện thoại, Zalo, iPad): Mặc định là Nhân Viên (Staff)
-      const res = await api('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ role: 'staff' })
-      });
-      state.token = res.token || 'staff_token';
-      state.currentUser = res.user || { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' };
-      localStorage.setItem('pos_token', state.token);
+      // 3. THIẾT BỊ KHÁC KHI QUÉT (Điện thoại, iPad): Mở modal đăng nhập để xác thực
+      state.token = null;
+      state.currentUser = null;
+      localStorage.removeItem('pos_token');
+      openLoginModal();
+      if (typeof selectLoginRole === 'function') {
+        selectLoginRole('staff');
+      }
     }
   } catch (err) {
     console.warn('Init auth fallback:', err.message);
-    if (isHost && !explicitLogout) {
-      state.currentUser = { id: 1, username: 'admin', name: 'Chủ Quán', role: 'admin' };
-      state.token = 'local_token_admin';
-    } else {
-      state.currentUser = { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' };
-      state.token = 'local_token_staff';
+    state.token = null;
+    state.currentUser = null;
+    localStorage.removeItem('pos_token');
+    openLoginModal();
+    if (typeof selectLoginRole === 'function') {
+      selectLoginRole(isHost ? 'admin' : 'staff');
     }
   }
 
@@ -578,6 +578,32 @@ function applyUserRolePermissions() {
 // -------------------------------------------------------------
 // GIAO DIỆN & THAO TÁC ĐĂNG NHẬP (TÊN ĐĂNG NHẬP & MẬT KHẨU)
 // -------------------------------------------------------------
+function selectLoginRole(role) {
+  const userInput = document.getElementById('loginUsernameInput');
+  const passInput = document.getElementById('loginPasswordInput');
+  const tabStaff = document.getElementById('loginTabStaff');
+  const tabAdmin = document.getElementById('loginTabAdmin');
+
+  if (role === 'staff' || role === 'nhanvien') {
+    if (userInput) userInput.value = 'nhanvien';
+    if (tabStaff) {
+      tabStaff.className = 'py-2 rounded-lg bg-white shadow-xs text-emerald-700 font-bold transition-all';
+    }
+    if (tabAdmin) {
+      tabAdmin.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
+    }
+  } else {
+    if (userInput) userInput.value = 'admin';
+    if (tabAdmin) {
+      tabAdmin.className = 'py-2 rounded-lg bg-white shadow-xs text-emerald-700 font-bold transition-all';
+    }
+    if (tabStaff) {
+      tabStaff.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
+    }
+  }
+  if (passInput) passInput.focus();
+}
+
 function toggleLoginPasswordVisibility() {
   const input = document.getElementById('loginPasswordInput');
   const icon = document.getElementById('loginPassToggleIcon');
@@ -665,25 +691,10 @@ async function submitLoginWithUserPass() {
   }
 }
 
-async function switchToStaffMode() {
-  try {
-    const res = await api('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ role: 'staff' })
-    });
-    state.token = res.token || 'staff_token';
-    state.currentUser = res.user || { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' };
-    localStorage.setItem('pos_token', state.token);
-    localStorage.removeItem('pos_explicit_logout');
-    closeLoginModal();
-    applyUserRolePermissions();
-    showToast('Đang dùng chế độ: Nhân Viên (Gọi món & In bếp)', 'info');
-  } catch (e) {
-    state.currentUser = { id: 2, username: 'nhanvien', name: 'Nhân Viên', role: 'staff' };
-    closeLoginModal();
-    applyUserRolePermissions();
-    showToast('Đang dùng chế độ: Nhân Viên', 'info');
-  }
+function switchToStaffMode() {
+  openLoginModal();
+  selectLoginRole('staff');
+  showToast('Vui lòng nhập mật khẩu hoặc mã PIN nhân viên', 'info');
 }
 
 function handleLogout() {
@@ -1346,6 +1357,7 @@ function escapeHtml(str) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
   })[m]);
 }
+window.escapeHtml = escapeHtml;
 
 // =============================================================
 // MODAL CẤU HÌNH MÁY CHỦ POS (CHO ZALO MINI APP HOẶC THIẾT BỊ PHỤ)

@@ -18,6 +18,8 @@ async function loadOrdersList() {
 
     if (empty) empty.classList.add('hidden');
 
+    const esc = typeof escapeHtml === 'function' ? escapeHtml : (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+
     tbody.innerHTML = orders.map(o => {
       const isVietQr = o.payment_method === 'vietqr';
       const timeStr = formatDateTime(o.created_at);
@@ -26,21 +28,21 @@ async function loadOrdersList() {
       return `
         <tr class="hover:bg-slate-50 transition-colors">
           <td class="px-3 py-2.5 font-mono font-bold text-xs text-emerald-700">
-            ${o.order_code}
+            ${esc(o.order_code)}
           </td>
           <td class="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap">
             ${timeStr}
           </td>
           <td class="px-3 py-2.5 font-bold text-xs text-slate-800">
-            <div>📍 ${tableName}</div>
-            ${o.note ? `<div class="text-[11px] text-amber-700 font-medium italic mt-0.5"><i class="fa-solid fa-pen-to-square text-[10px] mr-1"></i>${o.note}</div>` : ''}
+            <div>📍 ${esc(tableName)}</div>
+            ${o.note ? `<div class="text-[11px] text-amber-700 font-medium italic mt-0.5"><i class="fa-solid fa-pen-to-square text-[10px] mr-1"></i>${esc(o.note)}</div>` : ''}
           </td>
           <td class="px-3 py-2.5 text-right font-black text-xs text-slate-900 whitespace-nowrap">
             ${formatMoney(o.total)}
           </td>
           <td class="px-3 py-2.5 text-center">
             <button 
-              onclick="reprintOrderReceipt(${o.id})" 
+              onclick="reprintOrderReceipt(${Number(o.id)})" 
               class="px-2.5 py-1 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg text-xs font-semibold transition-colors inline-flex items-center space-x-1"
               title="In lại phiếu đối chiếu"
             >

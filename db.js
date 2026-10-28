@@ -1,5 +1,6 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
+const { hashSecret } = require('./auth-utils.js');
 
 const dbPath = path.join(__dirname, 'pos.db');
 const db = new DatabaseSync(dbPath);
@@ -125,8 +126,32 @@ function initDatabase() {
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (userCount === 0) {
     const insertUser = db.prepare('INSERT INTO users (username, password, name, role, pin, active) VALUES (?, ?, ?, ?, ?, ?)');
-    insertUser.run('admin', '123', 'Chủ Cửa Hàng', 'admin', '9999', 1);
-    insertUser.run('nhanvien', '123', 'Nhân Viên Thu Ngân', 'staff', '1234', 1);
+    insertUser.run('admin', hashSecret('123'), 'Chủ Cửa Hàng', 'admin', hashSecret('9999'), 1);
+    insertUser.run('nhanvien', hashSecret('123'), 'Nhân Viên Thu Ngân', 'staff', hashSecret('1234'), 1);
+  } else {
+    // Transparent migration: Hash any existing plaintext passwords and PINs
+    try {
+      const existingUsers = db.prepare('SELECT id, password, pin FROM users').all();
+      const updateStmt = db.prepare('UPDATE users SET password = ?, pin = ? WHERE id = ?');
+      for (const u of existingUsers) {
+        let changed = false;
+        let newPass = u.password;
+        let newPin = u.pin;
+        if (newPass && !newPass.startsWith('scrypt:')) {
+          newPass = hashSecret(newPass);
+          changed = true;
+        }
+        if (newPin && !newPin.startsWith('scrypt:')) {
+          newPin = hashSecret(newPin);
+          changed = true;
+        }
+        if (changed) {
+          updateStmt.run(newPass, newPin, u.id);
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi nâng cấp hash mật khẩu:', e);
+    }
   }
 
   // Seed default settings if empty

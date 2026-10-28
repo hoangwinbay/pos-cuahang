@@ -1,13 +1,38 @@
+// Load environment variables from .env if present (built-in in Node >= 20.6)
+try {
+  if (typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile();
+  }
+} catch (e) {}
+
 const express = require('express');
 const cors = require('cors');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const db = require('./db.js');
+const { hashSecret, verifySecret } = require('./auth-utils.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const AUTH_SECRET = 'pos_secret_key_' + (process.env.AUTH_SECRET || 'antigravity_pos_2026');
+
+// Khóa bí mật JWT/HMAC an toàn
+let AUTH_SECRET = process.env.AUTH_SECRET;
+if (!AUTH_SECRET || AUTH_SECRET === 'antigravity_pos_2026') {
+  console.warn('⚠️ CẢNH BÁO: AUTH_SECRET chưa được cấu hình an toàn trong file .env. Đang tạo khóa ngẫu nhiên tạm thời.');
+  AUTH_SECRET = crypto.randomBytes(32).toString('hex');
+}
+
+// -------------------------------------------------------------
+// BẢO MẬT: HTTP SECURITY HEADERS & CORS
+// -------------------------------------------------------------
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -30,15 +55,46 @@ app.use((req, res, next) => {
 });
 
 // -------------------------------------------------------------
-// AUTH TOKEN HELPERS (HMAC-SHA256 Token)
+// BẢO MẬT: RATE LIMITING CHO ĐĂNG NHẬP (Chống Brute-force PIN / Pass)
 // -------------------------------------------------------------
-function generateToken(user) {
+const loginAttempts = new Map();
+const MAX_LOGIN_ATTEMPTS = 15;
+const LOGIN_WINDOW_MS = 60 * 1000; // 1 phút
+
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  const record = loginAttempts.get(ip) || { count: 0, resetAt: now + LOGIN_WINDOW_MS };
+  if (now > record.resetAt) {
+    record.count = 1;
+    record.resetAt = now + LOGIN_WINDOW_MS;
+    loginAttempts.set(ip, record);
+    return true;
+  }
+  record.count += 1;
+  loginAttempts.set(ip, record);
+  return record.count <= MAX_LOGIN_ATTEMPTS;
+}
+
+// Dọn dẹp IP hết hạn định kỳ
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, rec] of loginAttempts.entries()) {
+    if (now > rec.resetAt) loginAttempts.delete(ip);
+  }
+}, 120000);
+
+// -------------------------------------------------------------
+// AUTH TOKEN HELPERS (HMAC-SHA256 Token có hạn dùng 7 ngày)
+// -------------------------------------------------------------
+function generateToken(user, expiresInDays = 7) {
+  const now = Date.now();
   const payload = {
     userId: user.id,
     username: user.username,
     name: user.name,
     role: user.role,
-    iat: Date.now()
+    iat: now,
+    exp: now + expiresInDays * 24 * 60 * 60 * 1000
   };
   const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const signature = crypto.createHmac('sha256', AUTH_SECRET).update(b64).digest('base64url');
@@ -46,15 +102,31 @@ function generateToken(user) {
 }
 
 function verifyToken(token) {
-  if (!token) return null;
+  if (!token || typeof token !== 'string') return null;
   const parts = token.split('.');
   if (parts.length !== 2) return null;
   const [b64, signature] = parts;
   const expectedSig = crypto.createHmac('sha256', AUTH_SECRET).update(b64).digest('base64url');
-  if (signature !== expectedSig) return null;
+  
+  // Timing safe comparison cho chữ ký
+  try {
+    const sigBuf = Buffer.from(signature, 'base64url');
+    const expBuf = Buffer.from(expectedSig, 'base64url');
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return null;
+    }
+  } catch (e) {
+    return null;
+  }
+
   try {
     const jsonStr = Buffer.from(b64, 'base64url').toString('utf8');
-    return JSON.parse(jsonStr);
+    const payload = JSON.parse(jsonStr);
+    // Kiểm tra thời hạn hết hạn token
+    if (payload.exp && Date.now() > payload.exp) {
+      return null; // Token đã hết hạn
+    }
+    return payload;
   } catch (e) {
     return null;
   }
@@ -68,11 +140,13 @@ app.use((req, res, next) => {
     token = authHeader.substring(7);
   } else if (authHeader) {
     token = authHeader;
+  } else if (req.query && req.query.token) {
+    token = req.query.token;
   }
 
   if (token) {
     const decoded = verifyToken(token);
-    if (decoded) {
+    if (decoded && decoded.userId) {
       // Fetch fresh user from DB
       const user = db.prepare('SELECT id, username, name, role, active FROM users WHERE id = ?').get(decoded.userId);
       if (user && user.active) {
@@ -82,6 +156,14 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Middleware: Yêu cầu đăng nhập (Admin hoặc Nhân viên)
+function requireAuth(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Vui lòng đăng nhập để thực hiện thao tác này!' });
+  }
+  next();
+}
 
 // Require Admin (Chủ cửa hàng) Middleware
 function requireAdmin(req, res, next) {
@@ -144,33 +226,38 @@ app.get('/api/health', (req, res) => {
 // -------------------------------------------------------------
 app.post('/api/auth/login', (req, res) => {
   try {
-    const { username, password, pin, role } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || '').split(',')[0].trim();
+    if (!checkLoginRateLimit(clientIp)) {
+      return res.status(429).json({ error: 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 1 phút!' });
+    }
 
+    const { username, password, pin, role } = req.body;
     let user = null;
+
     if (username && password) {
       // 1. Đăng nhập bằng Tên đăng nhập & Mật khẩu
       const cleanUser = String(username).trim().toLowerCase();
       const cleanPass = String(password).trim();
-      user = db.prepare('SELECT * FROM users WHERE LOWER(username) = ? AND active = 1').get(cleanUser);
-      if (user && user.password !== cleanPass && user.pin !== cleanPass) {
-        user = null;
+      const candidate = db.prepare('SELECT * FROM users WHERE LOWER(username) = ? AND active = 1').get(cleanUser);
+      if (candidate && (verifySecret(cleanPass, candidate.password) || (candidate.pin && verifySecret(cleanPass, candidate.pin)))) {
+        user = candidate;
       }
     } else if (pin) {
       // 2. Đăng nhập bằng mã PIN
       const pinStr = String(pin).trim();
-      user = db.prepare('SELECT * FROM users WHERE pin = ? AND active = 1').get(pinStr);
-      if (!user && role) {
-        user = db.prepare('SELECT * FROM users WHERE (role = ? OR username = ?) AND (password = ? OR pin = ?) AND active = 1').get(role, role, pinStr, pinStr);
-      } else if (!user) {
-        user = db.prepare('SELECT * FROM users WHERE (password = ? OR pin = ?) AND active = 1').get(pinStr, pinStr);
+      const candidates = db.prepare('SELECT * FROM users WHERE active = 1').all();
+      for (const c of candidates) {
+        if (verifySecret(pinStr, c.pin) || verifySecret(pinStr, c.password)) {
+          if (!role || c.role === role || c.username === role) {
+            user = c;
+            break;
+          }
+        }
       }
-    } else if (role === 'staff' || role === 'nhanvien') {
-      // 3. Thiết bị quét mặc định vào quyền Nhân Viên (không cần mật khẩu)
-      user = db.prepare('SELECT * FROM users WHERE role = "staff" AND active = 1').get();
     }
 
     if (!user) {
-      return res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không chính xác' });
+      return res.status(401).json({ error: 'Tên đăng nhập, mật khẩu hoặc mã PIN không chính xác' });
     }
 
     const token = generateToken(user);
@@ -180,8 +267,7 @@ app.post('/api/auth/login', (req, res) => {
         id: user.id,
         username: user.username,
         name: user.name,
-        role: user.role,
-        pin: user.pin
+        role: user.role
       }
     });
   } catch (err) {
@@ -212,7 +298,7 @@ app.post('/api/auth/change-pin', (req, res) => {
 
     // Xác thực mã PIN cũ
     if (oldPin) {
-      const match = (user.pin === String(oldPin).trim() || user.password === String(oldPin).trim());
+      const match = verifySecret(oldPin, user.pin) || verifySecret(oldPin, user.password);
       if (!match) {
         return res.status(401).json({ error: 'Mã PIN hiện tại không chính xác!' });
       }
@@ -221,11 +307,12 @@ app.post('/api/auth/change-pin', (req, res) => {
     }
 
     const cleanNewPin = String(newPin).trim();
-    db.prepare('UPDATE users SET pin = ?, password = ? WHERE id = ?').run(cleanNewPin, cleanNewPin, user.id);
+    const hashed = hashSecret(cleanNewPin);
+    db.prepare('UPDATE users SET pin = ?, password = ? WHERE id = ?').run(hashed, hashed, user.id);
 
     res.json({
       success: true,
-      message: `Đã đổi mã PIN ${targetRole === 'admin' ? 'Chủ Quán' : 'Nhân Viên'} thành công!`,
+      message: `Đã đổi mật khẩu / mã PIN ${targetRole === 'admin' ? 'Chủ Quán' : 'Nhân Viên'} thành công!`,
       role: targetRole
     });
   } catch (err) {
@@ -233,10 +320,10 @@ app.post('/api/auth/change-pin', (req, res) => {
   }
 });
 
-// List all users (Admin only)
+// List all users (Admin only) - Không lộ hash mật khẩu và PIN
 app.get('/api/users', requireAdmin, (req, res) => {
   try {
-    const users = db.prepare('SELECT id, username, name, role, pin, active, created_at FROM users ORDER BY id ASC').all();
+    const users = db.prepare('SELECT id, username, name, role, active, created_at FROM users ORDER BY id ASC').all();
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -256,16 +343,19 @@ app.post('/api/users', requireAdmin, (req, res) => {
       return res.status(400).json({ error: 'Tên đăng nhập này đã tồn tại' });
     }
 
+    const hashedPass = hashSecret(password);
+    const hashedPin = hashSecret(pin ? String(pin).trim() : '1234');
+
     const stmt = db.prepare('INSERT INTO users (username, password, name, role, pin, active) VALUES (?, ?, ?, ?, ?, 1)');
     const result = stmt.run(
       username.trim().toLowerCase(),
-      password,
+      hashedPass,
       name.trim(),
       role === 'admin' ? 'admin' : 'staff',
-      pin ? String(pin).trim() : '1234'
+      hashedPin
     );
 
-    const created = db.prepare('SELECT id, username, name, role, pin, active FROM users WHERE id = ?').get(result.lastInsertRowid);
+    const created = db.prepare('SELECT id, username, name, role, active, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -281,17 +371,17 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
     if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
 
-    const newPass = password ? password : user.password;
+    const newPass = password ? hashSecret(password) : user.password;
     const newName = name ? name.trim() : user.name;
     const newRole = role ? (role === 'admin' ? 'admin' : 'staff') : user.role;
-    const newPin = pin !== undefined ? String(pin).trim() : user.pin;
+    const newPin = pin !== undefined ? hashSecret(String(pin).trim()) : user.pin;
     const newActive = active !== undefined ? (active ? 1 : 0) : user.active;
 
     db.prepare(`
       UPDATE users SET password = ?, name = ?, role = ?, pin = ?, active = ? WHERE id = ?
     `).run(newPass, newName, newRole, newPin, newActive, userId);
 
-    const updated = db.prepare('SELECT id, username, name, role, pin, active FROM users WHERE id = ?').get(userId);
+    const updated = db.prepare('SELECT id, username, name, role, active, created_at FROM users WHERE id = ?').get(userId);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -368,11 +458,12 @@ app.get('/api/products', (req, res) => {
 
     const products = db.prepare(query).all(...params);
 
-    // If staff user: MASK cost_price so staff cannot see store's wholesale margin!
-    const isStaff = req.user && req.user.role === 'staff';
+    // BẢO MẬT: Chỉ Chủ Cửa Hàng (Admin) mới thấy giá vốn (cost_price)!
+    // Khách vãng lai hoặc nhân viên đều nhận về cost_price = 0
+    const isAdmin = req.user && req.user.role === 'admin';
     const sanitized = products.map(p => ({
       ...p,
-      cost_price: isStaff ? 0 : p.cost_price
+      cost_price: isAdmin ? p.cost_price : 0
     }));
 
     res.json(sanitized);
@@ -394,8 +485,9 @@ app.get('/api/products/:id', (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
     }
 
-    const isStaff = req.user && req.user.role === 'staff';
-    if (isStaff) product.cost_price = 0;
+    // Chỉ Admin mới xem được cost_price
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isAdmin) product.cost_price = 0;
 
     res.json(product);
   } catch (err) {
@@ -546,7 +638,7 @@ app.delete('/api/categories/:id', requireAdmin, (req, res) => {
 // -------------------------------------------------------------
 // ORDERS & CHECKOUT API
 // -------------------------------------------------------------
-app.get('/api/orders', (req, res) => {
+app.get('/api/orders', requireAuth, (req, res) => {
   try {
     const { start_date, end_date, search, limit = 50 } = req.query;
     let query = `
@@ -580,7 +672,7 @@ app.get('/api/orders', (req, res) => {
   }
 });
 
-app.get('/api/orders/:id', (req, res) => {
+app.get('/api/orders/:id', requireAuth, (req, res) => {
   try {
     const order = db.prepare('SELECT * FROM orders WHERE id = ? OR order_code = ?').get(req.params.id, req.params.id);
     if (!order) return res.status(404).json({ error: 'Không tìm thấy hóa đơn' });
@@ -593,7 +685,7 @@ app.get('/api/orders/:id', (req, res) => {
 });
 
 // Create Order (Both Admin & Staff can checkout)
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', requireAuth, (req, res) => {
   try {
     const { items, discount = 0, discount_type = 'amount', cash_given = 0, payment_method = 'vietqr', customer_name, customer_phone, note, table_name } = req.body;
 
@@ -603,6 +695,12 @@ app.post('/api/orders', (req, res) => {
 
     const cashierId = req.user ? req.user.id : null;
     const cashierName = req.user ? req.user.name : 'Nhân viên';
+
+    // Xử lý làm sạch đầu vào chống XSS / injection
+    const cleanCustomerName = customer_name ? String(customer_name).slice(0, 100).trim() : 'Khách';
+    const cleanCustomerPhone = customer_phone ? String(customer_phone).replace(/[^\d+\s-]/g, '').slice(0, 20).trim() : '';
+    const cleanNote = note ? String(note).slice(0, 500).trim() : '';
+    const cleanTableName = table_name ? String(table_name).slice(0, 50).trim() : 'Mang về';
 
     db.exec('BEGIN TRANSACTION;');
 
@@ -659,12 +757,12 @@ app.post('/api/orders', (req, res) => {
         cash,
         changeReturned,
         payment_method,
-        customer_name || 'Khách',
-        customer_phone || '',
-        note || '',
+        cleanCustomerName,
+        cleanCustomerPhone,
+        cleanNote,
         cashierId,
         cashierName,
-        table_name || 'Mang về'
+        cleanTableName
       );
 
       const orderId = orderResult.lastInsertRowid;
@@ -1105,8 +1203,8 @@ function getAllTableDefinitions() {
   return [];
 }
 
-// GET /api/server-info: Thông tin IP nội bộ và đường dẫn Tunnel cho di động kết nối
-app.get('/api/server-info', (req, res) => {
+// GET /api/server-info: Thông tin IP nội bộ và đường dẫn Tunnel cho di động kết nối (Yêu cầu đăng nhập)
+app.get('/api/server-info', requireAuth, (req, res) => {
   let localIp = '192.168.10.58';
   try {
     const nets = os.networkInterfaces();
@@ -1141,7 +1239,7 @@ app.get('/api/server-info', (req, res) => {
 });
 
 // 1. GET /api/tables/sync: Lấy dữ liệu tất cả bàn và trạng thái đơn bàn
-app.get('/api/tables/sync', (req, res) => {
+app.get('/api/tables/sync', requireAuth, (req, res) => {
   try {
     res.json({
       tables: getAllTableDefinitions(),
@@ -1186,20 +1284,20 @@ app.get('/api/tables/events', (req, res) => {
 // API QUẢN LÝ THIẾT BỊ ĐANG KẾT NỐI (CONNECTED DEVICES)
 // -------------------------------------------------------------
 // GET /api/devices: Danh sách thiết bị kết nối
-app.get('/api/devices', (req, res) => {
+app.get('/api/devices', requireAuth, (req, res) => {
   trackDeviceActivity(req);
   res.json(getDevicesList());
 });
 
 // POST /api/devices/heartbeat: Cập nhật nhịp tim & thông tin thiết bị
-app.post('/api/devices/heartbeat', (req, res) => {
+app.post('/api/devices/heartbeat', requireAuth, (req, res) => {
   const dev = trackDeviceActivity(req, req.body || {});
   const list = getDevicesList();
   res.json({ success: true, device: dev, totalOnline: list.totalOnline });
 });
 
 // PUT /api/devices/rename: Đổi tên định danh thiết bị
-app.put('/api/devices/rename', (req, res) => {
+app.put('/api/devices/rename', requireAuth, (req, res) => {
   const { deviceId, newName } = req.body || {};
   if (!deviceId || !newName) return res.status(400).json({ error: 'Thiếu dữ liệu' });
   const trimmed = newName.trim();
@@ -1230,8 +1328,8 @@ app.put('/api/devices/rename', (req, res) => {
   res.json({ success: true, device: dev });
 });
 
-// DELETE /api/devices/:id: Xóa thiết bị khỏi danh sách
-app.delete('/api/devices/:id', (req, res) => {
+// DELETE /api/devices/:id: Xóa thiết bị khỏi danh sách (Admin only)
+app.delete('/api/devices/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
   connectedDevices.delete(id);
   try {
@@ -1241,7 +1339,7 @@ app.delete('/api/devices/:id', (req, res) => {
 });
 
 // 3. POST /api/tables/order: Cập nhật hoặc lưu đơn của bàn (Hỗ trợ phát hiện xung đột khi mạng lag)
-app.post('/api/tables/order', (req, res) => {
+app.post('/api/tables/order', requireAuth, (req, res) => {
   try {
     const { table_name, order_data, check_conflict, merge } = req.body;
     if (!table_name) return res.status(400).json({ error: 'Thiếu tên bàn!' });
@@ -1320,7 +1418,7 @@ app.post('/api/tables/order', (req, res) => {
 });
 
 // 4. DELETE /api/tables/order/:tableName: Hủy hoặc làm trống bàn (Đồng bộ tức thì)
-app.delete('/api/tables/order/:tableName', (req, res) => {
+app.delete('/api/tables/order/:tableName', requireAuth, (req, res) => {
   try {
     const tableName = decodeURIComponent(req.params.tableName);
     const cleanTableName = tableName.replace(/\s*\([^)]*\)\s*$/, '').trim();
@@ -1339,8 +1437,8 @@ app.delete('/api/tables/order/:tableName', (req, res) => {
   }
 });
 
-// 5. POST /api/tables/custom: Thêm bàn mới
-app.post('/api/tables/custom', (req, res) => {
+// 5. POST /api/tables/custom: Thêm bàn mới (Admin only)
+app.post('/api/tables/custom', requireAdmin, (req, res) => {
   try {
     const { table_name } = req.body;
     if (!table_name || !table_name.trim()) return res.status(400).json({ error: 'Tên bàn không hợp lệ!' });
@@ -1361,8 +1459,8 @@ app.post('/api/tables/custom', (req, res) => {
   }
 });
 
-// 5b. DELETE /api/tables/:tableName: Xóa bàn khỏi hệ thống
-app.delete('/api/tables/:tableName', (req, res) => {
+// 5b. DELETE /api/tables/:tableName: Xóa bàn khỏi hệ thống (Admin only)
+app.delete('/api/tables/:tableName', requireAdmin, (req, res) => {
   try {
     const tableName = decodeURIComponent(req.params.tableName).trim();
     if (!tableName) return res.status(400).json({ error: 'Thiếu tên bàn!' });
@@ -1388,7 +1486,7 @@ app.delete('/api/tables/:tableName', (req, res) => {
 });
 
 // 6. POST /api/print-job: Nhận lệnh in từ thiết bị di động (Web Browser) và phát tới máy in tại quầy
-app.post('/api/print-job', (req, res) => {
+app.post('/api/print-job', requireAuth, (req, res) => {
   try {
     const { order, sender_device_id } = req.body;
     if (!order) return res.status(400).json({ error: 'Thiếu thông tin đơn hàng để in!' });
