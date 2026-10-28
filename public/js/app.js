@@ -508,6 +508,7 @@ function applyUserRolePermissions() {
   const drawerUserRole = document.getElementById('drawerUserRole');
   const drawerBtnReports = document.getElementById('drawerBtnReports');
   const drawerBtnMenu = document.getElementById('drawerBtnMenu');
+  const drawerBtnUsers = document.getElementById('drawerBtnUsers');
   const drawerBtnLogout = document.getElementById('drawerBtnLogout');
   const drawerBtnLogoutText = document.getElementById('drawerBtnLogoutText');
   const drawerBtnLogoutIcon = document.getElementById('drawerBtnLogoutIcon');
@@ -518,6 +519,7 @@ function applyUserRolePermissions() {
     if (drawerUserRole) drawerUserRole.textContent = 'Chưa đăng nhập';
     if (drawerBtnReports) drawerBtnReports.style.display = 'none';
     if (drawerBtnMenu) drawerBtnMenu.style.display = 'none';
+    if (drawerBtnUsers) drawerBtnUsers.style.display = 'none';
 
     if (drawerBtnLogout) {
       drawerBtnLogout.className = 'w-full p-3 rounded-xl hover:bg-emerald-50 text-emerald-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-emerald-100 bg-emerald-50/30';
@@ -542,9 +544,10 @@ function applyUserRolePermissions() {
     drawerUserRole.textContent = isAdmin ? 'Admin' : 'Nhân Viên';
   }
 
-  // Chỉ Admin mới thấy Thống Kê & Quản lý thực đơn
+  // Chỉ Admin mới thấy Thống Kê, Quản lý thực đơn & Quản lý thành viên
   if (drawerBtnReports) drawerBtnReports.style.display = isAdmin ? 'flex' : 'none';
   if (drawerBtnMenu) drawerBtnMenu.style.display = isAdmin ? 'flex' : 'none';
+  if (drawerBtnUsers) drawerBtnUsers.style.display = isAdmin ? 'flex' : 'none';
 
   // Nút hành động ở menu bên trái (Drawer)
   if (drawerBtnLogout) {
@@ -1517,6 +1520,438 @@ function saveServerConfig() {
   }
 }
 
+// =============================================================
+// ĐĂNG NHẬP GOOGLE CHO CHỦ QUÁN (GOOGLE IDENTITY SERVICES)
+// =============================================================
+let googleAuthConfig = { client_id: '', has_client_id: false };
+
+async function initGoogleAuth() {
+  try {
+    const res = await fetch('/api/auth/google-config');
+    if (res.ok) {
+      googleAuthConfig = await res.json();
+    }
+  } catch (e) {}
+
+  const btnText = document.getElementById('btnGoogleSignInText');
+  if (btnText && googleAuthConfig.has_client_id) {
+    btnText.textContent = 'Đăng nhập Google';
+  }
+
+  // Khởi tạo Google Identity Services nếu có client_id và SDK đã sẵn sàng
+  if (googleAuthConfig.has_client_id && window.google && window.google.accounts && window.google.accounts.id) {
+    try {
+      window.google.accounts.id.initialize({
+        client_id: googleAuthConfig.client_id,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true
+      });
+
+      const gsiContainer = document.getElementById('googleGsiContainer');
+      const customBtn = document.getElementById('btnGoogleSignIn');
+      if (gsiContainer && customBtn) {
+        customBtn.classList.add('hidden');
+        gsiContainer.classList.remove('hidden');
+        window.google.accounts.id.renderButton(gsiContainer, {
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with',
+          shape: 'pill',
+          width: 280,
+          locale: 'vi'
+        });
+      }
+    } catch (err) {
+      console.warn('Lỗi khởi tạo Google GIS:', err);
+    }
+  }
+}
+
+async function handleGoogleSignInClick() {
+  if (!googleAuthConfig.has_client_id) {
+    // Chưa cấu hình Google Client ID -> Mở modal hướng dẫn cấu hình
+    openGoogleConfigModal();
+    return;
+  }
+
+  if (window.google && window.google.accounts && window.google.accounts.id) {
+    try {
+      window.google.accounts.id.prompt();
+    } catch (e) {
+      openGoogleConfigModal();
+    }
+  } else {
+    showToast('Đang kết nối dịch vụ Google, vui lòng thử lại sau vài giây!', 'info');
+  }
+}
+
+async function handleGoogleCredentialResponse(response) {
+  if (!response || !response.credential) {
+    showToast('Không nhận được mã xác thực từ Google!', 'error');
+    return;
+  }
+
+  try {
+    showToast('Đang xác thực tài khoản Google...', 'info');
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: response.credential })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Đăng nhập Google thất bại');
+    }
+
+    state.token = data.token;
+    state.currentUser = data.user;
+    localStorage.setItem('pos_token', data.token);
+    localStorage.removeItem('pos_explicit_logout');
+
+    closeLoginModal();
+    applyUserRolePermissions();
+    showToast(`Đăng nhập Google thành công: ${data.user.name || 'Chủ Cửa Hàng'}!`, 'success');
+  } catch (err) {
+    showToast(err.message || 'Lỗi đăng nhập Google', 'error');
+  }
+}
+
+function openGoogleConfigModal() {
+  const modal = document.getElementById('modalGoogleConfig');
+  const inputClientId = document.getElementById('inputGoogleClientId');
+  const inputAdminEmail = document.getElementById('inputAdminGoogleEmail');
+
+  if (inputClientId) inputClientId.value = googleAuthConfig.client_id || '';
+  if (inputAdminEmail) inputAdminEmail.value = googleAuthConfig.admin_google_email || '';
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeGoogleConfigModal() {
+  const modal = document.getElementById('modalGoogleConfig');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function saveGoogleConfig() {
+  const inputClientId = document.getElementById('inputGoogleClientId');
+  const inputAdminEmail = document.getElementById('inputAdminGoogleEmail');
+  const clientId = inputClientId ? inputClientId.value.trim() : '';
+  const adminEmail = inputAdminEmail ? inputAdminEmail.value.trim().toLowerCase() : '';
+
+  try {
+    await api('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        google_client_id: clientId,
+        admin_google_email: adminEmail
+      })
+    });
+
+    showToast('Lưu cấu hình Google thành công!', 'success');
+    closeGoogleConfigModal();
+    googleAuthConfig.client_id = clientId;
+    googleAuthConfig.has_client_id = Boolean(clientId);
+    googleAuthConfig.admin_google_email = adminEmail;
+    initGoogleAuth();
+  } catch (err) {
+    showToast('Không thể lưu cấu hình: ' + err.message, 'error');
+  }
+}
+
+// =============================================================
+// QUẢN LÝ NHÂN VIÊN & THÀNH VIÊN (CHỦ QUÁN TẠO / SỬA / XÓA)
+// =============================================================
+let cachedUsersList = [];
+
+async function openUsersModal() {
+  if (!state.currentUser || state.currentUser.role !== 'admin') {
+    showToast('Chỉ tài khoản Chủ Quán mới có quyền quản lý thành viên!', 'error');
+    return;
+  }
+
+  const modal = document.getElementById('modalUsersList');
+  if (modal) modal.classList.remove('hidden');
+  await loadUsersList();
+}
+
+function closeUsersModal() {
+  const modal = document.getElementById('modalUsersList');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function loadUsersList() {
+  const container = document.getElementById('usersListContainer');
+  const countLabel = document.getElementById('usersCountLabel');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="py-8 text-center text-slate-400 text-xs">
+      <i class="fa-solid fa-spinner fa-spin text-lg mb-2 text-emerald-600"></i>
+      <p>Đang tải danh sách thành viên...</p>
+    </div>
+  `;
+
+  try {
+    const users = await api('/api/users');
+    cachedUsersList = Array.isArray(users) ? users : [];
+    renderUsersList(cachedUsersList);
+    if (countLabel) countLabel.textContent = `Tổng cộng: ${cachedUsersList.length} thành viên`;
+  } catch (err) {
+    container.innerHTML = `
+      <div class="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl text-center">
+        <i class="fa-solid fa-circle-exclamation mr-1"></i>
+        <span>Lỗi tải danh sách: ${escapeHtml(err.message)}</span>
+      </div>
+    `;
+  }
+}
+
+function renderUsersList(users) {
+  const container = document.getElementById('usersListContainer');
+  if (!container) return;
+
+  if (!users || users.length === 0) {
+    container.innerHTML = `
+      <div class="py-12 text-center text-slate-400 text-xs space-y-2">
+        <i class="fa-solid fa-user-slash text-2xl text-slate-300"></i>
+        <p>Chưa có thành viên nào hoặc không tìm thấy kết quả phù hợp</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = users.map(u => {
+    const isAdmin = u.role === 'admin';
+    const isActive = Boolean(u.active);
+    const isSelf = state.currentUser && state.currentUser.id === u.id;
+
+    return `
+      <div class="p-3 sm:p-3.5 bg-white border ${isActive ? 'border-slate-200 hover:border-emerald-300' : 'border-rose-200 bg-rose-50/20'} rounded-2xl flex items-center justify-between space-x-3 transition-all shadow-2xs">
+        <div class="flex items-center space-x-3 truncate">
+          <div class="w-10 h-10 rounded-xl ${isAdmin ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'} border flex items-center justify-center shrink-0">
+            ${u.avatar ? `<img src="${escapeHtml(u.avatar)}" class="w-full h-full rounded-xl object-cover">` : `<i class="fa-solid ${isAdmin ? 'fa-user-shield' : 'fa-user'} text-base"></i>`}
+          </div>
+          <div class="truncate">
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-slate-800 text-xs sm:text-sm truncate">${escapeHtml(u.name)}</span>
+              ${isAdmin ? `<span class="text-[9px] bg-indigo-100 text-indigo-700 font-black px-1.5 py-0.5 rounded-full shrink-0">CHỦ QUÁN</span>` : `<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded-full shrink-0">NHÂN VIÊN</span>`}
+              ${isSelf ? `<span class="text-[9px] bg-amber-100 text-amber-800 font-black px-1.5 py-0.5 rounded-full shrink-0">BẠN</span>` : ''}
+              ${!isActive ? `<span class="text-[9px] bg-rose-100 text-rose-700 font-bold px-1.5 py-0.5 rounded-full shrink-0">ĐÃ KHÓA</span>` : ''}
+            </div>
+            <div class="text-[11px] text-slate-400 font-medium flex items-center space-x-2 mt-0.5">
+              <span class="font-mono text-slate-600">@${escapeHtml(u.username)}</span>
+              ${u.email ? `<span>•</span><span class="text-slate-500 truncate"><i class="fa-brands fa-google text-[10px] text-blue-500 mr-0.5"></i>${escapeHtml(u.email)}</span>` : ''}
+              <span>•</span>
+              <span class="text-slate-500">${u.has_pin ? '<i class="fa-solid fa-key text-[9px] text-amber-500 mr-0.5"></i>Có PIN' : 'Chưa có PIN'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
+          <button 
+            onclick="openEditUserModal(${u.id})" 
+            class="p-2 sm:px-2.5 sm:py-1.5 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-xl text-xs font-semibold transition-colors flex items-center space-x-1"
+            title="Sửa thông tin hoặc đổi mật khẩu/PIN"
+          >
+            <i class="fa-solid fa-pen-to-square text-xs"></i>
+            <span class="hidden sm:inline">Sửa</span>
+          </button>
+          
+          ${!isSelf ? `
+            <button 
+              onclick="toggleUserActiveState(${u.id}, ${isActive ? 1 : 0})" 
+              class="p-2 sm:px-2.5 sm:py-1.5 ${isActive ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'} rounded-xl text-xs font-semibold transition-colors"
+              title="${isActive ? 'Khóa tài khoản này' : 'Mở khóa tài khoản này'}"
+            >
+              <i class="fa-solid ${isActive ? 'fa-lock' : 'fa-lock-open'} text-xs"></i>
+            </button>
+            <button 
+              onclick="deleteUserAccount(${u.id}, '${escapeHtml(u.name)}')" 
+              class="p-2 sm:px-2.5 sm:py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-semibold transition-colors"
+              title="Xóa tài khoản này"
+            >
+              <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterUsersList() {
+  const query = (document.getElementById('searchUsersInput')?.value || '').trim().toLowerCase();
+  if (!query) {
+    renderUsersList(cachedUsersList);
+    return;
+  }
+  const filtered = cachedUsersList.filter(u => 
+    (u.name && u.name.toLowerCase().includes(query)) ||
+    (u.username && u.username.toLowerCase().includes(query)) ||
+    (u.email && u.email.toLowerCase().includes(query))
+  );
+  renderUsersList(filtered);
+}
+
+function openCreateUserModal() {
+  const modal = document.getElementById('modalUserForm');
+  const title = document.getElementById('modalUserFormTitle');
+  const errBox = document.getElementById('userFormErrorMsg');
+  const passReqTag = document.getElementById('formUserPassRequiredTag');
+  const passNote = document.getElementById('formUserPassNote');
+
+  document.getElementById('formUserId').value = '';
+  document.getElementById('formUserName').value = '';
+  document.getElementById('formUserUsername').value = '';
+  document.getElementById('formUserUsername').readOnly = false;
+  document.getElementById('formUserPassword').value = '';
+  document.getElementById('formUserPin').value = '1234';
+  document.getElementById('formUserEmail').value = '';
+  document.getElementById('formUserActive').checked = true;
+
+  const staffRadio = document.querySelector('input[name="formUserRole"][value="staff"]');
+  if (staffRadio) staffRadio.checked = true;
+
+  if (title) title.textContent = 'Thêm Thành Viên Mới';
+  if (passReqTag) passReqTag.classList.remove('hidden');
+  if (passNote) passNote.classList.add('hidden');
+  if (errBox) errBox.classList.add('hidden');
+  if (modal) modal.classList.remove('hidden');
+  document.getElementById('formUserName')?.focus();
+}
+
+function openEditUserModal(userId) {
+  const user = cachedUsersList.find(u => u.id === userId);
+  if (!user) return;
+
+  const modal = document.getElementById('modalUserForm');
+  const title = document.getElementById('modalUserFormTitle');
+  const errBox = document.getElementById('userFormErrorMsg');
+  const passReqTag = document.getElementById('formUserPassRequiredTag');
+  const passNote = document.getElementById('formUserPassNote');
+
+  document.getElementById('formUserId').value = user.id;
+  document.getElementById('formUserName').value = user.name || '';
+  document.getElementById('formUserUsername').value = user.username || '';
+  document.getElementById('formUserUsername').readOnly = (user.username === 'admin');
+  document.getElementById('formUserPassword').value = '';
+  document.getElementById('formUserPin').value = '';
+  document.getElementById('formUserEmail').value = user.email || '';
+  document.getElementById('formUserActive').checked = Boolean(user.active);
+
+  const roleRadio = document.querySelector(`input[name="formUserRole"][value="${user.role}"]`);
+  if (roleRadio) roleRadio.checked = true;
+
+  if (title) title.textContent = `Cập Nhật: ${user.name}`;
+  if (passReqTag) passReqTag.classList.add('hidden');
+  if (passNote) passNote.classList.remove('hidden');
+  if (errBox) errBox.classList.add('hidden');
+  if (modal) modal.classList.remove('hidden');
+  document.getElementById('formUserName')?.focus();
+}
+
+function closeUserFormModal() {
+  const modal = document.getElementById('modalUserForm');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function saveUserFormData() {
+  const id = document.getElementById('formUserId')?.value;
+  const name = document.getElementById('formUserName')?.value.trim();
+  const username = document.getElementById('formUserUsername')?.value.trim().toLowerCase();
+  const password = document.getElementById('formUserPassword')?.value.trim();
+  const pin = document.getElementById('formUserPin')?.value.trim();
+  const email = document.getElementById('formUserEmail')?.value.trim().toLowerCase();
+  const role = document.querySelector('input[name="formUserRole"]:checked')?.value || 'staff';
+  const active = document.getElementById('formUserActive')?.checked ? 1 : 0;
+  const errBox = document.getElementById('userFormErrorMsg');
+  const errText = document.getElementById('userFormErrorText');
+  const submitBtn = document.getElementById('btnSaveUserForm');
+
+  if (!name) {
+    if (errBox && errText) { errText.textContent = 'Vui lòng nhập họ và tên!'; errBox.classList.remove('hidden'); }
+    document.getElementById('formUserName')?.focus();
+    return;
+  }
+  if (!username) {
+    if (errBox && errText) { errText.textContent = 'Vui lòng nhập tên đăng nhập!'; errBox.classList.remove('hidden'); }
+    document.getElementById('formUserUsername')?.focus();
+    return;
+  }
+  if (!id && !password) {
+    if (errBox && errText) { errText.textContent = 'Vui lòng nhập mật khẩu cho thành viên mới!'; errBox.classList.remove('hidden'); }
+    document.getElementById('formUserPassword')?.focus();
+    return;
+  }
+
+  if (errBox) errBox.classList.add('hidden');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('opacity-70'); }
+
+  try {
+    const payload = { name, username, role, active };
+    if (password) payload.password = password;
+    if (pin) payload.pin = pin;
+    if (email !== undefined) payload.email = email;
+
+    if (id) {
+      // Update
+      await api(`/api/users/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      showToast(`Đã cập nhật thông tin thành viên "${name}" thành công!`, 'success');
+    } else {
+      // Create
+      await api('/api/users', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      showToast(`Đã tạo tài khoản cho thành viên "${name}" thành công!`, 'success');
+    }
+
+    closeUserFormModal();
+    await loadUsersList();
+  } catch (err) {
+    if (errBox && errText) {
+      errText.textContent = err.message || 'Lỗi lưu thông tin thành viên';
+      errBox.classList.remove('hidden');
+    } else {
+      showToast(err.message || 'Lỗi lưu thông tin', 'error');
+    }
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.classList.remove('opacity-70'); }
+  }
+}
+
+async function toggleUserActiveState(userId, currentActive) {
+  const newActive = currentActive ? 0 : 1;
+  try {
+    await api(`/api/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ active: newActive })
+    });
+    showToast(newActive ? 'Đã mở khóa tài khoản!' : 'Đã khóa tài khoản thành viên!', 'info');
+    await loadUsersList();
+  } catch (err) {
+    showToast(err.message || 'Lỗi thay đổi trạng thái', 'error');
+  }
+}
+
+async function deleteUserAccount(userId, userName) {
+  if (!confirm(`Bạn có chắc chắn muốn xóa tài khoản của thành viên "${userName}" không? Thao tác này không thể hoàn tác!`)) {
+    return;
+  }
+
+  try {
+    await api(`/api/users/${userId}`, { method: 'DELETE' });
+    showToast(`Đã xóa thành viên "${userName}" thành công!`, 'success');
+    await loadUsersList();
+  } catch (err) {
+    showToast(err.message || 'Lỗi xóa tài khoản', 'error');
+  }
+}
+
 // App Initialization
 async function startApp() {
   if ('serviceWorker' in navigator) {
@@ -1536,6 +1971,7 @@ async function startApp() {
 
   await initAuth();
   await loadSettings();
+  initGoogleAuth();
 
   if (typeof initPos === 'function') {
     await initPos();

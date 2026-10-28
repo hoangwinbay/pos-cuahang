@@ -122,6 +122,17 @@ function initDatabase() {
     db.exec('ALTER TABLE orders ADD COLUMN table_name TEXT DEFAULT "";');
   } catch (e) {}
 
+  // Ensure email, google_id and avatar exist in users table
+  try {
+    db.exec('ALTER TABLE users ADD COLUMN email TEXT;');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE users ADD COLUMN google_id TEXT;');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE users ADD COLUMN avatar TEXT;');
+  } catch (e) {}
+
   // Seed default users if empty
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (userCount === 0) {

@@ -282,6 +282,102 @@ app.get('/api/auth/me', (req, res) => {
   res.json({ user: req.user });
 });
 
+// Cấu hình Google Client ID (công khai cho frontend khởi tạo Google Sign-In)
+app.get('/api/auth/google-config', (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID || db.prepare('SELECT value FROM settings WHERE key = ?').get('google_client_id')?.value || '';
+  const adminEmail = db.prepare('SELECT value FROM settings WHERE key = ?').get('admin_google_email')?.value || '';
+  res.json({
+    client_id: clientId,
+    has_client_id: Boolean(clientId),
+    admin_google_email: adminEmail ? `${adminEmail.slice(0, 3)}***@${adminEmail.split('@')[1] || ''}` : ''
+  });
+});
+
+// Đăng nhập bằng Google cho Chủ Cửa Hàng
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const clientIp = (req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || '').split(',')[0].trim();
+    if (!checkLoginRateLimit(clientIp)) {
+      return res.status(429).json({ error: 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 1 phút!' });
+    }
+
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ error: 'Thiếu Google credential token' });
+    }
+
+    // Xác thực token qua Google TokenInfo API (Native Node.js fetch)
+    const gRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+    if (!gRes.ok) {
+      return res.status(401).json({ error: 'Xác thực tài khoản Google không hợp lệ hoặc đã hết hạn' });
+    }
+
+    const gData = await gRes.json();
+    if (!gData.email) {
+      return res.status(400).json({ error: 'Không thể lấy địa chỉ email từ tài khoản Google' });
+    }
+
+    const googleEmail = String(gData.email).toLowerCase().trim();
+    const googleSub = gData.sub;
+    const googleName = gData.name || 'Chủ Cửa Hàng';
+    const googlePic = gData.picture || '';
+
+    // 1. Kiểm tra tài khoản đã liên kết google_id hoặc email
+    let user = db.prepare('SELECT * FROM users WHERE google_id = ? OR LOWER(email) = ?').get(googleSub, googleEmail);
+
+    if (user) {
+      if (!user.active) {
+        return res.status(403).json({ error: 'Tài khoản này đã bị khóa. Vui lòng liên hệ quản trị viên!' });
+      }
+      db.prepare('UPDATE users SET google_id = ?, avatar = ?, email = ? WHERE id = ?').run(googleSub, googlePic, googleEmail, user.id);
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+    } else {
+      // 2. Nếu chưa liên kết: Kiểm tra cấu hình admin_google_email
+      const adminGoogleEmailSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('admin_google_email')?.value;
+      const adminUser = db.prepare('SELECT * FROM users WHERE role = "admin" ORDER BY id ASC LIMIT 1').get();
+
+      if (adminGoogleEmailSetting) {
+        if (adminGoogleEmailSetting.toLowerCase().trim() === googleEmail) {
+          user = adminUser;
+          if (user) {
+            db.prepare('UPDATE users SET google_id = ?, email = ?, avatar = ? WHERE id = ?').run(googleSub, googleEmail, googlePic, user.id);
+            user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+          }
+        } else {
+          return res.status(403).json({ error: `Email Google (${googleEmail}) không phải là tài khoản Chủ Quán được cấp quyền!` });
+        }
+      } else {
+        // Lần đầu tiên đăng nhập Google: Tự động liên kết với tài khoản Chủ Quán (Admin)
+        user = adminUser;
+        if (user) {
+          db.prepare('UPDATE users SET google_id = ?, email = ?, avatar = ? WHERE id = ?').run(googleSub, googleEmail, googlePic, user.id);
+          db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("admin_google_email", ?)').run(googleEmail);
+          user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+        }
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy tài khoản quản trị để đăng nhập Google' });
+    }
+
+    const token = generateToken(user);
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        email: user.email,
+        avatar: user.avatar
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi đăng nhập Google: ' + err.message });
+  }
+});
+
 // Đổi mã PIN / Mật khẩu tài khoản (Chủ quán & Nhân viên)
 app.post('/api/auth/change-pin', (req, res) => {
   try {
@@ -320,68 +416,114 @@ app.post('/api/auth/change-pin', (req, res) => {
   }
 });
 
-// List all users (Admin only) - Không lộ hash mật khẩu và PIN
+// List all users (Admin only) - Đầy đủ thông tin thành viên
 app.get('/api/users', requireAdmin, (req, res) => {
   try {
-    const users = db.prepare('SELECT id, username, name, role, active, created_at FROM users ORDER BY id ASC').all();
+    const users = db.prepare(`
+      SELECT id, username, name, role, email, avatar, active, created_at,
+             (CASE WHEN pin IS NOT NULL AND pin != '' THEN 1 ELSE 0 END) as has_pin
+      FROM users
+      ORDER BY role ASC, id ASC
+    `).all();
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Create new user (Admin only)
+// Create new user (Admin only) - Chủ quán tạo tài khoản cho thành viên
 app.post('/api/users', requireAdmin, (req, res) => {
   try {
-    const { username, password, name, role, pin } = req.body;
+    const { username, password, name, role, pin, email } = req.body;
     if (!username || !password || !name) {
-      return res.status(400).json({ error: 'Tên đăng nhập, mật khẩu và họ tên là bắt buộc' });
+      return res.status(400).json({ error: 'Tên đăng nhập, mật khẩu và họ tên là bắt buộc!' });
     }
 
-    const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username.trim().toLowerCase());
+    const cleanUser = username.trim().toLowerCase();
+    const exists = db.prepare('SELECT id FROM users WHERE LOWER(username) = ?').get(cleanUser);
     if (exists) {
-      return res.status(400).json({ error: 'Tên đăng nhập này đã tồn tại' });
+      return res.status(400).json({ error: 'Tên đăng nhập này đã tồn tại, vui lòng chọn tên khác!' });
+    }
+
+    const cleanEmail = email ? email.trim().toLowerCase() : null;
+    if (cleanEmail) {
+      const emailExists = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(cleanEmail);
+      if (emailExists) {
+        return res.status(400).json({ error: 'Email này đã được sử dụng cho một tài khoản khác!' });
+      }
     }
 
     const hashedPass = hashSecret(password);
     const hashedPin = hashSecret(pin ? String(pin).trim() : '1234');
 
-    const stmt = db.prepare('INSERT INTO users (username, password, name, role, pin, active) VALUES (?, ?, ?, ?, ?, 1)');
+    const stmt = db.prepare(`
+      INSERT INTO users (username, password, name, role, pin, email, active)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `);
     const result = stmt.run(
-      username.trim().toLowerCase(),
+      cleanUser,
       hashedPass,
       name.trim(),
       role === 'admin' ? 'admin' : 'staff',
-      hashedPin
+      hashedPin,
+      cleanEmail
     );
 
-    const created = db.prepare('SELECT id, username, name, role, active, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    const created = db.prepare('SELECT id, username, name, role, email, active, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Update user (Admin only)
+// Update user (Admin only) - Cập nhật thông tin thành viên
 app.put('/api/users/:id', requireAdmin, (req, res) => {
   try {
-    const { password, name, role, pin, active } = req.body;
+    const { username, password, name, role, pin, active, email } = req.body;
     const userId = req.params.id;
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
     if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
 
+    // Không cho phép tự vô hiệu hóa tài khoản của chính mình
+    if (req.user.id == userId && active === 0) {
+      return res.status(400).json({ error: 'Bạn không thể tự khóa tài khoản của chính mình!' });
+    }
+
+    // Không cho phép tự giáng quyền admin của chính mình nếu là admin duy nhất
+    if (req.user.id == userId && role && role !== 'admin') {
+      const adminCount = db.prepare('SELECT COUNT(*) as count FROM users WHERE role = "admin" AND active = 1').get()?.count || 0;
+      if (adminCount <= 1) {
+        return res.status(400).json({ error: 'Hệ thống cần ít nhất một tài khoản Chủ Quán (Admin) đang hoạt động!' });
+      }
+    }
+
     const newPass = password ? hashSecret(password) : user.password;
-    const newName = name ? name.trim() : user.name;
-    const newRole = role ? (role === 'admin' ? 'admin' : 'staff') : user.role;
-    const newPin = pin !== undefined ? hashSecret(String(pin).trim()) : user.pin;
+    const newName = name !== undefined ? name.trim() : user.name;
+    const newRole = role !== undefined ? (role === 'admin' ? 'admin' : 'staff') : user.role;
+    const newPin = (pin !== undefined && String(pin).trim() !== '') ? hashSecret(String(pin).trim()) : user.pin;
     const newActive = active !== undefined ? (active ? 1 : 0) : user.active;
+    const newEmail = email !== undefined ? (email ? email.trim().toLowerCase() : null) : user.email;
+    const newUsername = username !== undefined ? username.trim().toLowerCase() : user.username;
+
+    // Check duplicate username if changed
+    if (newUsername !== user.username) {
+      const exists = db.prepare('SELECT id FROM users WHERE LOWER(username) = ? AND id != ?').get(newUsername, userId);
+      if (exists) return res.status(400).json({ error: 'Tên đăng nhập này đã có người sử dụng!' });
+    }
+
+    // Check duplicate email if changed
+    if (newEmail && newEmail !== user.email) {
+      const exists = db.prepare('SELECT id FROM users WHERE LOWER(email) = ? AND id != ?').get(newEmail, userId);
+      if (exists) return res.status(400).json({ error: 'Email này đã có người sử dụng!' });
+    }
 
     db.prepare(`
-      UPDATE users SET password = ?, name = ?, role = ?, pin = ?, active = ? WHERE id = ?
-    `).run(newPass, newName, newRole, newPin, newActive, userId);
+      UPDATE users SET username = ?, password = ?, name = ?, role = ?, pin = ?, active = ?, email = ?
+      WHERE id = ?
+    `).run(newUsername, newPass, newName, newRole, newPin, newActive, newEmail, userId);
 
-    const updated = db.prepare('SELECT id, username, name, role, active, created_at FROM users WHERE id = ?').get(userId);
+    const updated = db.prepare('SELECT id, username, name, role, email, avatar, active, created_at FROM users WHERE id = ?').get(userId);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });

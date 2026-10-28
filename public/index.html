@@ -25,6 +25,8 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#059669">
   <link rel="stylesheet" href="css/style.css?v=20261020_regular_font">
+  <!-- Google Identity Services (Google Sign-In) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden select-none">
 
@@ -212,6 +214,12 @@
       <button onclick="navigateTo('menu')" id="drawerBtnMenu" class="w-full p-3 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left">
         <i class="fa-solid fa-sliders text-emerald-600 text-base w-6 text-center"></i>
         <span>Quản lý</span>
+      </button>
+
+      <!-- 2b. Quản lý Thành Viên (Chỉ Admin) -->
+      <button onclick="openUsersModal(); toggleSideDrawer(false);" id="drawerBtnUsers" class="w-full p-3 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left">
+        <i class="fa-solid fa-users-gear text-emerald-600 text-base w-6 text-center"></i>
+        <span>Quản lý thành viên</span>
       </button>
 
       <!-- 3. Thiết bị -->
@@ -1071,6 +1079,30 @@
         </button>
       </div>
 
+      <!-- Đăng nhập bằng Google cho Chủ Quán -->
+      <div id="googleLoginSection" class="pt-1 space-y-2">
+        <div class="relative flex items-center justify-center">
+          <div class="border-t border-slate-200 w-full"></div>
+          <div class="bg-white px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hoặc</div>
+        </div>
+        
+        <button 
+          type="button" 
+          id="btnGoogleSignIn" 
+          onclick="handleGoogleSignInClick()" 
+          class="w-full py-2.5 px-4 bg-white hover:bg-slate-50 border border-slate-300 active:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs sm:text-sm shadow-2xs transition-all flex items-center justify-center space-x-2"
+        >
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span id="btnGoogleSignInText">Đăng nhập Google (Chủ Quán)</span>
+        </button>
+        <div id="googleGsiContainer" class="flex justify-center"></div>
+      </div>
+
       <!-- Footer: Đổi mật khẩu -->
       <div class="pt-2 border-t border-slate-100 flex items-center justify-center text-xs">
         <button 
@@ -1436,6 +1468,267 @@
         <p class="leading-relaxed">
           Trên <b>Safari (iPhone)</b>: Bấm nút Chia sẻ <i class="fa-solid fa-arrow-up-from-bracket"></i> > chọn <b>"Thêm vào Màn hình chính" (Add to Home Screen)</b> để dùng toàn màn hình mượt mà không vướng thanh địa chỉ.
         </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- MODAL: QUẢN LÝ NHÂN VIÊN & THÀNH VIÊN (CHỦ QUÁN) -->
+  <!-- ============================================================= -->
+  <div id="modalUsersList" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden modal-enter flex flex-col">
+      
+      <!-- Header -->
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-base font-bold">
+            <i class="fa-solid fa-users-gear"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-800 text-sm sm:text-base">Quản Lý Thành Viên</h3>
+            <p class="text-[11px] text-slate-500">Tạo tài khoản và phân quyền cho từng nhân viên quán</p>
+          </div>
+        </div>
+        <button onclick="closeUsersModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200 transition-colors">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Toolbar: Tìm kiếm & Thêm mới -->
+      <div class="p-3 sm:p-4 border-b border-slate-100 flex items-center justify-between gap-2 bg-white">
+        <div class="relative flex-1">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+          <input 
+            type="text" 
+            id="searchUsersInput" 
+            oninput="filterUsersList()" 
+            placeholder="Tìm theo tên hoặc tên đăng nhập..." 
+            class="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20"
+          >
+        </div>
+        <button 
+          onclick="openCreateUserModal()" 
+          class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shrink-0 shadow-sm transition-all"
+        >
+          <i class="fa-solid fa-user-plus text-xs"></i>
+          <span>Thêm Thành Viên</span>
+        </button>
+      </div>
+
+      <!-- Danh sách thành viên -->
+      <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5" id="usersListContainer">
+        <!-- Injected by users list renderer -->
+      </div>
+
+      <!-- Footer -->
+      <div class="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <span id="usersCountLabel">Tổng cộng: 0 thành viên</span>
+        <button onclick="closeUsersModal()" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-colors">
+          Đóng
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- MODAL: FORM TẠO / SỬA THÀNH VIÊN -->
+  <!-- ============================================================= -->
+  <div id="modalUserForm" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-55 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden modal-enter p-5 space-y-3.5 max-h-[95vh] overflow-y-auto">
+      
+      <!-- Header -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        <h3 id="modalUserFormTitle" class="font-bold text-slate-800 text-base">Thêm Thành Viên Mới</h3>
+        <button onclick="closeUserFormModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Hidden ID for edit -->
+      <input type="hidden" id="formUserId" value="">
+
+      <!-- Form fields -->
+      <div class="space-y-3">
+        <!-- Họ và tên -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Họ và tên <span class="text-rose-500">*</span></label>
+          <input 
+            type="text" 
+            id="formUserName" 
+            placeholder="Ví dụ: Nguyễn Văn A" 
+            class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 font-medium"
+          >
+        </div>
+
+        <!-- Tên đăng nhập -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Tên đăng nhập <span class="text-rose-500">*</span> (viết liền không dấu)</label>
+          <input 
+            type="text" 
+            id="formUserUsername" 
+            placeholder="Ví dụ: nhanvien1" 
+            class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 font-medium"
+          >
+        </div>
+
+        <!-- Vai trò -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Vai trò & Quyền hạn</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="border-2 rounded-xl p-2.5 flex items-center space-x-2 cursor-pointer transition-all border-slate-200 has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50/50">
+              <input type="radio" name="formUserRole" value="staff" checked class="text-emerald-600 focus:ring-emerald-500">
+              <div>
+                <div class="text-xs font-bold text-slate-800">Nhân Viên</div>
+                <div class="text-[10px] text-slate-500">Gọi món, xem bàn, in bill</div>
+              </div>
+            </label>
+            <label class="border-2 rounded-xl p-2.5 flex items-center space-x-2 cursor-pointer transition-all border-slate-200 has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50/50">
+              <input type="radio" name="formUserRole" value="admin" class="text-emerald-600 focus:ring-emerald-500">
+              <div>
+                <div class="text-xs font-bold text-slate-800">Chủ Quán</div>
+                <div class="text-[10px] text-slate-500">Toàn quyền hệ thống</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Mật khẩu -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">
+            Mật khẩu <span id="formUserPassRequiredTag" class="text-rose-500">*</span>
+            <span id="formUserPassNote" class="text-[10px] text-slate-400 font-normal hidden">(Để trống nếu không muốn đổi mật khẩu)</span>
+          </label>
+          <input 
+            type="password" 
+            id="formUserPassword" 
+            placeholder="Nhập mật khẩu" 
+            class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 font-medium"
+          >
+        </div>
+
+        <!-- Mã PIN -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Mã PIN đăng nhập nhanh (3 - 6 chữ số)</label>
+          <input 
+            type="text" 
+            id="formUserPin" 
+            placeholder="Ví dụ: 1234" 
+            maxlength="6"
+            class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 font-mono font-bold text-slate-700"
+          >
+        </div>
+
+        <!-- Email (Tùy chọn) -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Email Google (Tùy chọn, để đăng nhập bằng Google)</label>
+          <input 
+            type="email" 
+            id="formUserEmail" 
+            placeholder="Ví dụ: nhanvien@gmail.com" 
+            class="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 font-medium"
+          >
+        </div>
+
+        <!-- Trạng thái -->
+        <div class="flex items-center space-x-2 pt-1">
+          <input type="checkbox" id="formUserActive" checked class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500">
+          <label for="formUserActive" class="text-xs font-semibold text-slate-700 cursor-pointer">Kích hoạt tài khoản (Được phép đăng nhập)</label>
+        </div>
+      </div>
+
+      <!-- Thông báo lỗi form -->
+      <div id="userFormErrorMsg" class="hidden text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-xl p-2.5 font-medium flex items-center space-x-1.5">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span id="userFormErrorText"></span>
+      </div>
+
+      <!-- Nút lưu -->
+      <div class="pt-2 flex items-center space-x-2">
+        <button 
+          type="button" 
+          onclick="closeUserFormModal()" 
+          class="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs sm:text-sm transition-colors"
+        >
+          Hủy
+        </button>
+        <button 
+          type="button" 
+          onclick="saveUserFormData()" 
+          id="btnSaveUserForm" 
+          class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center space-x-1.5"
+        >
+          <i class="fa-solid fa-floppy-disk"></i>
+          <span>Lưu Thành Viên</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================= -->
+  <!-- MODAL: CẤU HÌNH GOOGLE CLIENT ID -->
+  <!-- ============================================================= -->
+  <div id="modalGoogleConfig" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-60 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden modal-enter p-5 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        <div class="flex items-center space-x-2">
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <h3 class="font-bold text-slate-800 text-sm sm:text-base">Cấu Hình Đăng Nhập Google</h3>
+        </div>
+        <button onclick="closeGoogleConfigModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-600 leading-relaxed">
+        Để kích hoạt đăng nhập Google cho Chủ Quán, bạn chỉ cần nhập <b>Google Client ID</b> vào ô bên dưới:
+      </p>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Google Client ID</label>
+        <input 
+          type="text" 
+          id="inputGoogleClientId" 
+          placeholder="Ví dụ: 123456789-xxxx.apps.googleusercontent.com" 
+          class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600 font-mono"
+        >
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Email Google Chủ Quán (Ủy quyền)</label>
+        <input 
+          type="email" 
+          id="inputAdminGoogleEmail" 
+          placeholder="Ví dụ: chuquan@gmail.com (để trống: tự động liên kết lần đầu)" 
+          class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600"
+        >
+      </div>
+
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-800 space-y-1">
+        <div class="font-bold flex items-center">
+          <i class="fa-solid fa-circle-info mr-1 text-amber-600"></i>
+          Cách lấy Google Client ID:
+        </div>
+        <ol class="list-decimal pl-4 space-y-0.5 leading-relaxed text-slate-600">
+          <li>Truy cập <a href="https://console.cloud.google.com" target="_blank" class="text-emerald-700 font-bold underline">Google Cloud Console</a>.</li>
+          <li>Vào <b>APIs & Services</b> > <b>Credentials</b> > Tạo <b>OAuth 2.0 Client ID</b> (Loại Web application).</li>
+          <li>Thêm đường dẫn POS vào mục <i>Authorized JavaScript origins</i>.</li>
+        </ol>
+      </div>
+
+      <div class="pt-1 flex items-center space-x-2">
+        <button onclick="closeGoogleConfigModal()" class="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors">
+          Đóng
+        </button>
+        <button onclick="saveGoogleConfig()" class="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all">
+          Lưu Cấu Hình
+        </button>
       </div>
     </div>
   </div>
