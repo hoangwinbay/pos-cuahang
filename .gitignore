@@ -1,4 +1,5 @@
 node_modules/
+pos.db
 pos.db-shm
 pos.db-wal
 .env
