@@ -1520,144 +1520,6 @@ function saveServerConfig() {
   }
 }
 
-// =============================================================
-// ĐĂNG NHẬP GOOGLE CHO CHỦ QUÁN (GOOGLE IDENTITY SERVICES)
-// =============================================================
-let googleAuthConfig = { client_id: '', has_client_id: false };
-
-async function initGoogleAuth() {
-  try {
-    const res = await fetch('/api/auth/google-config');
-    if (res.ok) {
-      googleAuthConfig = await res.json();
-    }
-  } catch (e) {}
-
-  const btnText = document.getElementById('btnGoogleSignInText');
-  if (btnText && googleAuthConfig.has_client_id) {
-    btnText.textContent = 'Đăng nhập Google';
-  }
-
-  // Khởi tạo Google Identity Services nếu có client_id và SDK đã sẵn sàng
-  if (googleAuthConfig.has_client_id && window.google && window.google.accounts && window.google.accounts.id) {
-    try {
-      window.google.accounts.id.initialize({
-        client_id: googleAuthConfig.client_id,
-        callback: handleGoogleCredentialResponse,
-        auto_select: false,
-        cancel_on_tap_outside: true
-      });
-
-      const gsiContainer = document.getElementById('googleGsiContainer');
-      const customBtn = document.getElementById('btnGoogleSignIn');
-      if (gsiContainer && customBtn) {
-        customBtn.classList.add('hidden');
-        gsiContainer.classList.remove('hidden');
-        window.google.accounts.id.renderButton(gsiContainer, {
-          theme: 'outline',
-          size: 'large',
-          text: 'signin_with',
-          shape: 'pill',
-          width: 280,
-          locale: 'vi'
-        });
-      }
-    } catch (err) {
-      console.warn('Lỗi khởi tạo Google GIS:', err);
-    }
-  }
-}
-
-async function handleGoogleSignInClick() {
-  if (!googleAuthConfig.has_client_id) {
-    // Chưa cấu hình Google Client ID -> Mở modal hướng dẫn cấu hình
-    openGoogleConfigModal();
-    return;
-  }
-
-  if (window.google && window.google.accounts && window.google.accounts.id) {
-    try {
-      window.google.accounts.id.prompt();
-    } catch (e) {
-      openGoogleConfigModal();
-    }
-  } else {
-    showToast('Đang kết nối dịch vụ Google, vui lòng thử lại sau vài giây!', 'info');
-  }
-}
-
-async function handleGoogleCredentialResponse(response) {
-  if (!response || !response.credential) {
-    showToast('Không nhận được mã xác thực từ Google!', 'error');
-    return;
-  }
-
-  try {
-    showToast('Đang xác thực tài khoản Google...', 'info');
-    const res = await fetch('/api/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential: response.credential })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.error || 'Đăng nhập Google thất bại');
-    }
-
-    state.token = data.token;
-    state.currentUser = data.user;
-    localStorage.setItem('pos_token', data.token);
-    localStorage.removeItem('pos_explicit_logout');
-
-    closeLoginModal();
-    applyUserRolePermissions();
-    showToast(`Đăng nhập Google thành công: ${data.user.name || 'Chủ Cửa Hàng'}!`, 'success');
-  } catch (err) {
-    showToast(err.message || 'Lỗi đăng nhập Google', 'error');
-  }
-}
-
-function openGoogleConfigModal() {
-  const modal = document.getElementById('modalGoogleConfig');
-  const inputClientId = document.getElementById('inputGoogleClientId');
-  const inputAdminEmail = document.getElementById('inputAdminGoogleEmail');
-
-  if (inputClientId) inputClientId.value = googleAuthConfig.client_id || '';
-  if (inputAdminEmail) inputAdminEmail.value = googleAuthConfig.admin_google_email || '';
-  if (modal) modal.classList.remove('hidden');
-}
-
-function closeGoogleConfigModal() {
-  const modal = document.getElementById('modalGoogleConfig');
-  if (modal) modal.classList.add('hidden');
-}
-
-async function saveGoogleConfig() {
-  const inputClientId = document.getElementById('inputGoogleClientId');
-  const inputAdminEmail = document.getElementById('inputAdminGoogleEmail');
-  const clientId = inputClientId ? inputClientId.value.trim() : '';
-  const adminEmail = inputAdminEmail ? inputAdminEmail.value.trim().toLowerCase() : '';
-
-  try {
-    await api('/api/settings', {
-      method: 'PUT',
-      body: JSON.stringify({
-        google_client_id: clientId,
-        admin_google_email: adminEmail
-      })
-    });
-
-    showToast('Lưu cấu hình Google thành công!', 'success');
-    closeGoogleConfigModal();
-    googleAuthConfig.client_id = clientId;
-    googleAuthConfig.has_client_id = Boolean(clientId);
-    googleAuthConfig.admin_google_email = adminEmail;
-    initGoogleAuth();
-  } catch (err) {
-    showToast('Không thể lưu cấu hình: ' + err.message, 'error');
-  }
-}
 
 // =============================================================
 // QUẢN LÝ NHÂN VIÊN & THÀNH VIÊN (CHỦ QUÁN TẠO / SỬA / XÓA)
@@ -1741,7 +1603,7 @@ function renderUsersList(users) {
             </div>
             <div class="text-[11px] text-slate-400 font-medium flex items-center space-x-2 mt-0.5">
               <span class="font-mono text-slate-600">@${escapeHtml(u.username)}</span>
-              ${u.email ? `<span>•</span><span class="text-slate-500 truncate"><i class="fa-brands fa-google text-[10px] text-blue-500 mr-0.5"></i>${escapeHtml(u.email)}</span>` : ''}
+              ${u.email ? `<span>•</span><span class="text-slate-500 truncate"><i class="fa-regular fa-envelope text-[10px] text-slate-400 mr-0.5"></i>${escapeHtml(u.email)}</span>` : ''}
               <span>•</span>
               <span class="text-slate-500">${u.has_pin ? '<i class="fa-solid fa-key text-[9px] text-amber-500 mr-0.5"></i>Có PIN' : 'Chưa có PIN'}</span>
             </div>
@@ -1971,7 +1833,6 @@ async function startApp() {
 
   await initAuth();
   await loadSettings();
-  initGoogleAuth();
 
   if (typeof initPos === 'function') {
     await initPos();

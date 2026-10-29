@@ -25,8 +25,6 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#059669">
   <link rel="stylesheet" href="css/style.css?v=20261020_regular_font">
-  <!-- Google Identity Services (Google Sign-In) -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden select-none">
 
@@ -1079,30 +1077,6 @@
         </button>
       </div>
 
-      <!-- Đăng nhập bằng Google cho Chủ Quán -->
-      <div id="googleLoginSection" class="pt-1 space-y-2">
-        <div class="relative flex items-center justify-center">
-          <div class="border-t border-slate-200 w-full"></div>
-          <div class="bg-white px-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hoặc</div>
-        </div>
-        
-        <button 
-          type="button" 
-          id="btnGoogleSignIn" 
-          onclick="handleGoogleSignInClick()" 
-          class="w-full py-2.5 px-4 bg-white hover:bg-slate-50 border border-slate-300 active:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs sm:text-sm shadow-2xs transition-all flex items-center justify-center space-x-2"
-        >
-          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-          </svg>
-          <span id="btnGoogleSignInText">Đăng nhập Google (Chủ Quán)</span>
-        </button>
-        <div id="googleGsiContainer" class="flex justify-center"></div>
-      </div>
-
       <!-- Footer: Đổi mật khẩu -->
       <div class="pt-2 border-t border-slate-100 flex items-center justify-center text-xs">
         <button 
@@ -1621,7 +1595,7 @@
 
         <!-- Email (Tùy chọn) -->
         <div>
-          <label class="block text-xs font-semibold text-slate-700 mb-1">Email Google (Tùy chọn, để đăng nhập bằng Google)</label>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Email liên hệ (Tùy chọn)</label>
           <input 
             type="email" 
             id="formUserEmail" 
@@ -1663,73 +1637,6 @@
         </button>
       </div>
 
-    </div>
-  </div>
-
-  <!-- ============================================================= -->
-  <!-- MODAL: CẤU HÌNH GOOGLE CLIENT ID -->
-  <!-- ============================================================= -->
-  <div id="modalGoogleConfig" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-60 flex items-center justify-center p-3 sm:p-4 hidden">
-    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden modal-enter p-5 space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
-        <div class="flex items-center space-x-2">
-          <svg class="w-5 h-5" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-          </svg>
-          <h3 class="font-bold text-slate-800 text-sm sm:text-base">Cấu Hình Đăng Nhập Google</h3>
-        </div>
-        <button onclick="closeGoogleConfigModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors">
-          <i class="fa-solid fa-xmark text-lg"></i>
-        </button>
-      </div>
-
-      <p class="text-xs text-slate-600 leading-relaxed">
-        Để kích hoạt đăng nhập Google cho Chủ Quán, bạn chỉ cần nhập <b>Google Client ID</b> vào ô bên dưới:
-      </p>
-
-      <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1">Google Client ID</label>
-        <input 
-          type="text" 
-          id="inputGoogleClientId" 
-          placeholder="Ví dụ: 123456789-xxxx.apps.googleusercontent.com" 
-          class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600 font-mono"
-        >
-      </div>
-
-      <div>
-        <label class="block text-xs font-semibold text-slate-700 mb-1">Email Google Chủ Quán (Ủy quyền)</label>
-        <input 
-          type="email" 
-          id="inputAdminGoogleEmail" 
-          placeholder="Ví dụ: chuquan@gmail.com (để trống: tự động liên kết lần đầu)" 
-          class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-emerald-600"
-        >
-      </div>
-
-      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-800 space-y-1">
-        <div class="font-bold flex items-center">
-          <i class="fa-solid fa-circle-info mr-1 text-amber-600"></i>
-          Cách lấy Google Client ID:
-        </div>
-        <ol class="list-decimal pl-4 space-y-0.5 leading-relaxed text-slate-600">
-          <li>Truy cập <a href="https://console.cloud.google.com" target="_blank" class="text-emerald-700 font-bold underline">Google Cloud Console</a>.</li>
-          <li>Vào <b>APIs & Services</b> > <b>Credentials</b> > Tạo <b>OAuth 2.0 Client ID</b> (Loại Web application).</li>
-          <li>Thêm đường dẫn POS vào mục <i>Authorized JavaScript origins</i>.</li>
-        </ol>
-      </div>
-
-      <div class="pt-1 flex items-center space-x-2">
-        <button onclick="closeGoogleConfigModal()" class="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors">
-          Đóng
-        </button>
-        <button onclick="saveGoogleConfig()" class="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all">
-          Lưu Cấu Hình
-        </button>
-      </div>
     </div>
   </div>
 

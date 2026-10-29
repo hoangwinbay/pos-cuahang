@@ -282,102 +282,6 @@ app.get('/api/auth/me', (req, res) => {
   res.json({ user: req.user });
 });
 
-// Cấu hình Google Client ID (công khai cho frontend khởi tạo Google Sign-In)
-app.get('/api/auth/google-config', (req, res) => {
-  const clientId = process.env.GOOGLE_CLIENT_ID || db.prepare('SELECT value FROM settings WHERE key = ?').get('google_client_id')?.value || '';
-  const adminEmail = db.prepare('SELECT value FROM settings WHERE key = ?').get('admin_google_email')?.value || '';
-  res.json({
-    client_id: clientId,
-    has_client_id: Boolean(clientId),
-    admin_google_email: adminEmail ? `${adminEmail.slice(0, 3)}***@${adminEmail.split('@')[1] || ''}` : ''
-  });
-});
-
-// Đăng nhập bằng Google cho Chủ Cửa Hàng
-app.post('/api/auth/google', async (req, res) => {
-  try {
-    const clientIp = (req.headers['x-forwarded-for'] || req.ip || req.socket.remoteAddress || '').split(',')[0].trim();
-    if (!checkLoginRateLimit(clientIp)) {
-      return res.status(429).json({ error: 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 1 phút!' });
-    }
-
-    const { credential } = req.body;
-    if (!credential) {
-      return res.status(400).json({ error: 'Thiếu Google credential token' });
-    }
-
-    // Xác thực token qua Google TokenInfo API (Native Node.js fetch)
-    const gRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
-    if (!gRes.ok) {
-      return res.status(401).json({ error: 'Xác thực tài khoản Google không hợp lệ hoặc đã hết hạn' });
-    }
-
-    const gData = await gRes.json();
-    if (!gData.email) {
-      return res.status(400).json({ error: 'Không thể lấy địa chỉ email từ tài khoản Google' });
-    }
-
-    const googleEmail = String(gData.email).toLowerCase().trim();
-    const googleSub = gData.sub;
-    const googleName = gData.name || 'Chủ Cửa Hàng';
-    const googlePic = gData.picture || '';
-
-    // 1. Kiểm tra tài khoản đã liên kết google_id hoặc email
-    let user = db.prepare('SELECT * FROM users WHERE google_id = ? OR LOWER(email) = ?').get(googleSub, googleEmail);
-
-    if (user) {
-      if (!user.active) {
-        return res.status(403).json({ error: 'Tài khoản này đã bị khóa. Vui lòng liên hệ quản trị viên!' });
-      }
-      db.prepare('UPDATE users SET google_id = ?, avatar = ?, email = ? WHERE id = ?').run(googleSub, googlePic, googleEmail, user.id);
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
-    } else {
-      // 2. Nếu chưa liên kết: Kiểm tra cấu hình admin_google_email
-      const adminGoogleEmailSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('admin_google_email')?.value;
-      const adminUser = db.prepare('SELECT * FROM users WHERE role = "admin" ORDER BY id ASC LIMIT 1').get();
-
-      if (adminGoogleEmailSetting) {
-        if (adminGoogleEmailSetting.toLowerCase().trim() === googleEmail) {
-          user = adminUser;
-          if (user) {
-            db.prepare('UPDATE users SET google_id = ?, email = ?, avatar = ? WHERE id = ?').run(googleSub, googleEmail, googlePic, user.id);
-            user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
-          }
-        } else {
-          return res.status(403).json({ error: `Email Google (${googleEmail}) không phải là tài khoản Chủ Quán được cấp quyền!` });
-        }
-      } else {
-        // Lần đầu tiên đăng nhập Google: Tự động liên kết với tài khoản Chủ Quán (Admin)
-        user = adminUser;
-        if (user) {
-          db.prepare('UPDATE users SET google_id = ?, email = ?, avatar = ? WHERE id = ?').run(googleSub, googleEmail, googlePic, user.id);
-          db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("admin_google_email", ?)').run(googleEmail);
-          user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
-        }
-      }
-    }
-
-    if (!user) {
-      return res.status(404).json({ error: 'Không tìm thấy tài khoản quản trị để đăng nhập Google' });
-    }
-
-    const token = generateToken(user);
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        email: user.email,
-        avatar: user.avatar
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Lỗi đăng nhập Google: ' + err.message });
-  }
-});
-
 // Đổi mã PIN / Mật khẩu tài khoản (Chủ quán & Nhân viên)
 app.post('/api/auth/change-pin', (req, res) => {
   try {
@@ -1641,6 +1545,11 @@ app.post('/api/print-job', requireAuth, (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// 404 handler for undefined API routes
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API endpoint không tồn tại' });
 });
 
 // Catch-all route to serve index.html
