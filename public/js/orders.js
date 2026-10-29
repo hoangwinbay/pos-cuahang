@@ -64,7 +64,7 @@ async function reprintOrderReceipt(orderId) {
     showToast('Đang tải thông tin đơn hàng...');
     const order = await api(`/api/orders/${orderId}`);
     if (typeof printReceipt === 'function') {
-      printReceipt(order);
+      printReceipt(order, true);
     }
   } catch (err) {
     showToast('Không thể in phiếu: ' + err.message, 'error');

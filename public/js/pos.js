@@ -1318,10 +1318,8 @@ function executePrintKitchenSlip() {
   closeKitchenConfirmModal();
   closeTableCartDrawer();
 
-  // 2. KÍCH HOẠT IN NẾU CÓ BẬT CHẾ ĐỘ TỰ ĐỘNG IN (HOẶC ĐÃ KẾT NỐI BLUETOOTH)
-  if (isAutoPrintEnabled() || bluetoothCharacteristic) {
-    printReceipt(orderForPrint);
-  }
+  // 2. KÍCH HOẠT IN PHIẾU BÁO BẾP
+  printReceipt(orderForPrint, true);
 
   // Chỉ phát lệnh in từ xa lên quầy nếu người dùng BẬT tự động in (đã có máy in bill)
   const isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -1643,6 +1641,29 @@ async function completeCheckoutOrder() {
       body: JSON.stringify(payload)
     });
 
+    // In hóa đơn thanh toán cho khách nếu bật tự động in
+    const orderForPrint = {
+      order_code: newOrder?.order?.order_code || tableOrder?.orderCode || `BILL-${Date.now().toString().slice(-4)}`,
+      created_at: new Date().toISOString(),
+      table_name: currentTable,
+      source: source,
+      cashier_name: state.currentUser ? state.currentUser.name : 'Chủ Quán',
+      note: note,
+      payment_method: 'cash',
+      subtotal: totalAmount,
+      discount: 0,
+      total: totalAmount,
+      items: (tableOrder.items || []).map(item => ({
+        product_name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.price * item.quantity
+      }))
+    };
+    if (isAutoPrintEnabled() || bluetoothCharacteristic) {
+      printReceipt(orderForPrint, false);
+    }
+
     // XÓA ĐƠN CỦA BÀN VÀ TRẢ BÀN VỀ TRẠNG THÁI TRỐNG TRÊN CẢ CLIENT VÀ SERVER
     delete state.tableOrders[currentTable];
     localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
@@ -1696,7 +1717,7 @@ function printCheckoutReceipt() {
     }))
   };
 
-  printReceipt(orderForPrint);
+  printReceipt(orderForPrint, true);
 }
 
 // Compatibility stubs
@@ -1980,32 +2001,33 @@ async function printEscPosBluetooth(order) {
 
 let lastPrintedOrder = null;
 
-function printReceipt(order) {
-  // Nếu tự động in đang tắt và không có máy in Bluetooth -> Không gọi window.print() để tuyệt đối không mở File Explorer
-  if (!isAutoPrintEnabled() && !bluetoothCharacteristic) {
-    console.log('Chế độ tự động in đang tắt, bỏ qua lệnh in để không mở File Explorer');
+function printReceipt(order, isManual = false) {
+  // Nếu là lệnh in tự động và chế độ tự động in đang tắt -> Bỏ qua
+  // Nhưng nếu người dùng chủ động bấm In (isManual = true: In bill, In lại, In thử) -> Luôn thực thi lệnh in!
+  if (!isManual && !isAutoPrintEnabled() && !bluetoothCharacteristic) {
+    console.log('Chế độ tự động in đang tắt, bỏ qua lệnh in tự động');
     return;
   }
 
-  if (Date.now() - (window._lastPrintTimestamp || 0) < 2000) {
-    console.log('Chặn in trùng lặp trong 2s');
+  if (Date.now() - (window._lastPrintTimestamp || 0) < 1500) {
+    console.log('Chặn in trùng lặp trong 1.5s');
     return;
   }
   window._lastPrintTimestamp = Date.now();
   lastPrintedOrder = order;
 
   if (bluetoothCharacteristic) {
-    showToast('Đang in phiếu qua Bluetooth...');
+    showToast('Đang in phiếu qua Bluetooth...', 'info');
     printEscPosBluetooth(order).then(() => {
-      showToast('Đã in phiếu thành công!');
+      showToast('Đã in phiếu thành công!', 'success');
     }).catch(err => {
       console.warn('Bluetooth print failed, falling back to window.print', err);
-      if (isAutoPrintEnabled()) executeWindowPrint(order);
+      executeWindowPrint(order, isManual);
     });
     return;
   }
 
-  executeWindowPrint(order);
+  executeWindowPrint(order, isManual);
 }
 
 function playOrderNotificationSound() {
@@ -2028,12 +2050,13 @@ function playOrderNotificationSound() {
   } catch (e) {}
 }
 
-function executeWindowPrint(order) {
-  // Chỉ gọi window.print nếu người dùng BẬT tự động in hoặc có máy in Bluetooth
-  if (!isAutoPrintEnabled() && !bluetoothCharacteristic) {
-    console.log('Chế độ in đang tắt, bỏ qua executeWindowPrint để không mở File Explorer');
+function executeWindowPrint(order, isManual = false) {
+  // Chỉ gọi window.print nếu người dùng BẬT tự động in, có máy in Bluetooth, hoặc chủ động bấm nút In
+  if (!isManual && !isAutoPrintEnabled() && !bluetoothCharacteristic) {
+    console.log('Chế độ in đang tắt, bỏ qua executeWindowPrint');
     return;
   }
+  showToast('Đang gửi hóa đơn tới máy in...', 'info');
   const receiptHtml = generateReceiptHtml(order);
 
   // 1. Cập nhật DOM chính #printable-receipt để in
@@ -2051,13 +2074,13 @@ function executeWindowPrint(order) {
     window.print();
   } catch (err) {
     console.warn('Lỗi gọi window.print:', err);
-    printViaIsolatedIframe(receiptHtml);
+    printViaIsolatedIframe(receiptHtml, isManual);
   }
 }
 
-function printViaIsolatedIframe(receiptHtml) {
-  if (!isAutoPrintEnabled() && !bluetoothCharacteristic) {
-    console.log('Chế độ in đang tắt, bỏ qua printViaIsolatedIframe để không mở File Explorer');
+function printViaIsolatedIframe(receiptHtml, isManual = false) {
+  if (!isManual && !isAutoPrintEnabled() && !bluetoothCharacteristic) {
+    console.log('Chế độ in đang tắt, bỏ qua printViaIsolatedIframe');
     return;
   }
   let iframe = document.getElementById('pos-print-isolated-iframe');
@@ -2415,7 +2438,12 @@ function fallbackCopyText(text) {
 }
 
 function isAutoPrintEnabled() {
-  return localStorage.getItem('pos_auto_print_enabled') === 'true';
+  const val = localStorage.getItem('pos_auto_print_enabled');
+  if (val === null) {
+    // Mặc định BẬT để sẵn sàng in khi cắm máy in
+    return true;
+  }
+  return val === 'true';
 }
 
 function toggleAutoPrintSetting(enabled) {
@@ -2469,5 +2497,5 @@ function testPrintSample() {
       { product_name: 'Bún mắm cá tươi', quantity: 1, price: 55000, total: 55000 }
     ]
   };
-  printReceipt(sampleOrder);
+  printReceipt(sampleOrder, true);
 }
