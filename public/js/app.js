@@ -458,12 +458,27 @@ async function initAuth() {
   const explicitLogout = localStorage.getItem('pos_explicit_logout') === '1';
   const isHost = isHostServerMachine();
 
+  const urlParams = new URLSearchParams(window.location.search);
+  const isStaffJoin = urlParams.get('staff_join') === '1' || urlParams.get('action') === 'staff_join' || urlParams.get('join') === 'staff';
+
+  // 0. Nếu truy cập từ link / quét mã QR nhân viên
+  if (isStaffJoin) {
+    state.token = null;
+    state.currentUser = null;
+    localStorage.removeItem('pos_token');
+    openStaffJoinModal();
+    applyUserRolePermissions();
+    return;
+  }
+
   try {
     if (state.token && !explicitLogout) {
       // 1. Nếu đã có token và chưa đăng xuất, kiểm tra phiên đăng nhập
       const data = await api('/api/auth/me');
       if (data && data.user) {
         state.currentUser = data.user;
+        applyUserRolePermissions();
+        return;
       } else {
         throw new Error('Invalid session');
       }
@@ -478,13 +493,18 @@ async function initAuth() {
       state.currentUser = res.user;
       localStorage.setItem('pos_token', res.token);
     } else {
-      // 3. THIẾT BỊ KHÁC KHI QUÉT (Điện thoại, iPad): Mở modal đăng nhập để xác thực
+      // 3. THIẾT BỊ KHÁC:
       state.token = null;
       state.currentUser = null;
       localStorage.removeItem('pos_token');
-      openLoginModal();
-      if (typeof selectLoginRole === 'function') {
-        selectLoginRole('staff');
+
+      // Nếu là điện thoại đã từng nhập tên nhân viên trước đây:
+      const savedStaffName = localStorage.getItem('pos_staff_name');
+      const savedStaffPhone = localStorage.getItem('pos_staff_phone');
+      if (savedStaffName && savedStaffPhone && !isHost) {
+        openStaffJoinModal();
+      } else {
+        openLoginModal();
       }
     }
   } catch (err) {
@@ -492,9 +512,10 @@ async function initAuth() {
     state.token = null;
     state.currentUser = null;
     localStorage.removeItem('pos_token');
-    openLoginModal();
-    if (typeof selectLoginRole === 'function') {
-      selectLoginRole(isHost ? 'admin' : 'staff');
+    if (!isHost && (localStorage.getItem('pos_staff_name') || isStaffJoin)) {
+      openStaffJoinModal();
+    } else {
+      openLoginModal();
     }
   }
 
@@ -524,7 +545,7 @@ function applyUserRolePermissions() {
     if (drawerBtnLogout) {
       drawerBtnLogout.className = 'w-full p-3 rounded-xl hover:bg-emerald-50 text-emerald-700 font-bold text-xs sm:text-sm flex items-center space-x-3 transition-colors text-left border border-emerald-100 bg-emerald-50/30';
       if (drawerBtnLogoutIcon) drawerBtnLogoutIcon.className = 'fa-solid fa-arrow-right-to-bracket text-emerald-600 text-base w-6 text-center';
-      if (drawerBtnLogoutText) drawerBtnLogoutText.textContent = 'Đăng Nhập';
+      if (drawerBtnLogoutText) drawerBtnLogoutText.textContent = 'Đăng Nhập Chủ Quán';
       drawerBtnLogout.onclick = () => { toggleSideDrawer(false); openLoginModal(); };
     }
     return;
@@ -538,10 +559,10 @@ function applyUserRolePermissions() {
       : '<i class="fa-solid fa-user text-blue-600"></i>';
   }
   if (nameDisplay) {
-    nameDisplay.textContent = isAdmin ? 'Admin' : 'Nhân Viên';
+    nameDisplay.textContent = isAdmin ? (user.name || 'Admin') : (user.name || 'Nhân Viên');
   }
   if (drawerUserRole) {
-    drawerUserRole.textContent = isAdmin ? 'Admin' : 'Nhân Viên';
+    drawerUserRole.textContent = isAdmin ? 'Chủ Quán (Admin)' : `Nhân Viên: ${user.name || ''}`;
   }
 
   // Chỉ Admin mới thấy Thống Kê, Quản lý thực đơn & Quản lý thành viên
@@ -557,18 +578,14 @@ function applyUserRolePermissions() {
     if (drawerBtnLogoutIcon) {
       drawerBtnLogoutIcon.className = isAdmin 
         ? 'fa-solid fa-arrow-right-from-bracket text-rose-600 text-base w-6 text-center'
-        : 'fa-solid fa-user-shield text-blue-600 text-base w-6 text-center';
+        : 'fa-solid fa-arrow-right-from-bracket text-blue-600 text-base w-6 text-center';
     }
     if (drawerBtnLogoutText) {
-      drawerBtnLogoutText.textContent = isAdmin ? 'Đăng Xuất' : 'Đăng Nhập';
+      drawerBtnLogoutText.textContent = isAdmin ? 'Đăng Xuất' : 'Đổi Ca / Đăng Xuất';
     }
     drawerBtnLogout.onclick = () => {
       toggleSideDrawer(false);
-      if (isAdmin) {
-        handleLogout();
-      } else {
-        openLoginModal();
-      }
+      handleLogout();
     };
   }
 
@@ -579,32 +596,15 @@ function applyUserRolePermissions() {
 }
 
 // -------------------------------------------------------------
-// GIAO DIỆN & THAO TÁC ĐĂNG NHẬP (TÊN ĐĂNG NHẬP & MẬT KHẨU)
+// GIAO DIỆN & THAO TÁC ĐĂNG NHẬP CHỦ QUÁN
 // -------------------------------------------------------------
 function selectLoginRole(role) {
-  const userInput = document.getElementById('loginUsernameInput');
-  const passInput = document.getElementById('loginPasswordInput');
-  const tabStaff = document.getElementById('loginTabStaff');
-  const tabAdmin = document.getElementById('loginTabAdmin');
-
   if (role === 'staff' || role === 'nhanvien') {
-    if (userInput) userInput.value = 'nhanvien';
-    if (tabStaff) {
-      tabStaff.className = 'py-2 rounded-lg bg-white shadow-xs text-emerald-700 font-bold transition-all';
-    }
-    if (tabAdmin) {
-      tabAdmin.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
-    }
+    closeLoginModal();
+    openStaffJoinModal();
   } else {
-    if (userInput) userInput.value = 'admin';
-    if (tabAdmin) {
-      tabAdmin.className = 'py-2 rounded-lg bg-white shadow-xs text-emerald-700 font-bold transition-all';
-    }
-    if (tabStaff) {
-      tabStaff.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
-    }
+    openLoginModal();
   }
-  if (passInput) passInput.focus();
 }
 
 function toggleLoginPasswordVisibility() {
@@ -639,7 +639,7 @@ async function submitLoginWithUserPass() {
 
   if (!username) {
     if (errBox && errText) {
-      errText.textContent = 'Vui lòng nhập tên đăng nhập!';
+      errText.textContent = 'Vui lòng nhập tên đăng nhập Chủ Quán!';
       errBox.classList.remove('hidden');
     }
     if (userInput) userInput.focus();
@@ -648,7 +648,7 @@ async function submitLoginWithUserPass() {
 
   if (!password) {
     if (errBox && errText) {
-      errText.textContent = 'Vui lòng nhập mật khẩu!';
+      errText.textContent = 'Vui lòng nhập mật khẩu Chủ Quán!';
       errBox.classList.remove('hidden');
     }
     if (passInput) passInput.focus();
@@ -675,7 +675,7 @@ async function submitLoginWithUserPass() {
 
       closeLoginModal();
       applyUserRolePermissions();
-      showToast(`Đăng nhập thành công: ${res.user.role === 'admin' ? 'Admin' : res.user.name}`, 'success');
+      showToast(`Đăng nhập thành công: Chủ Quán (${res.user.name})`, 'success');
     } else {
       throw new Error(res?.error || 'Tên đăng nhập hoặc mật khẩu không chính xác!');
     }
@@ -695,22 +695,27 @@ async function submitLoginWithUserPass() {
 }
 
 function switchToStaffMode() {
-  openLoginModal();
-  selectLoginRole('staff');
-  showToast('Vui lòng nhập mật khẩu hoặc mã PIN nhân viên', 'info');
+  closeLoginModal();
+  openStaffJoinModal();
 }
 
 function handleLogout() {
+  const wasStaff = state.currentUser && state.currentUser.role === 'staff';
   state.token = null;
   state.currentUser = null;
   localStorage.removeItem('pos_token');
   localStorage.setItem('pos_explicit_logout', '1');
   applyUserRolePermissions();
   showToast('Đã đăng xuất tài khoản!', 'info');
-  openLoginModal();
+  if (wasStaff) {
+    openStaffJoinModal();
+  } else {
+    openLoginModal();
+  }
 }
 
 function openLoginModal() {
+  closeStaffJoinModal();
   const modal = document.getElementById('loginModal');
   const userInput = document.getElementById('loginUsernameInput');
   const passInput = document.getElementById('loginPasswordInput');
@@ -718,9 +723,10 @@ function openLoginModal() {
 
   if (errBox) errBox.classList.add('hidden');
   if (passInput) passInput.value = '';
-  if (userInput && !userInput.value) userInput.value = 'admin';
+  if (userInput) userInput.value = 'admin';
 
   if (modal) modal.classList.remove('hidden');
+  if (passInput) setTimeout(() => passInput.focus(), 150);
 }
 
 function closeLoginModal() {
@@ -1166,6 +1172,7 @@ async function sendDeviceHeartbeat() {
     const devName = getDeviceName();
     const platform = getDevicePlatform();
     const devType = getDeviceType();
+    const phone = (state.currentUser && state.currentUser.phone) || localStorage.getItem('pos_staff_phone') || '';
 
     const res = await api('/api/devices/heartbeat', {
       method: 'POST',
@@ -1175,7 +1182,8 @@ async function sendDeviceHeartbeat() {
         platform: platform,
         deviceType: devType,
         role: state.currentUser ? state.currentUser.role : 'staff',
-        userName: state.currentUser ? state.currentUser.name : 'Nhân Viên'
+        userName: state.currentUser ? state.currentUser.name : 'Nhân Viên',
+        phone: phone
       })
     });
 
@@ -1300,6 +1308,13 @@ async function loadConnectedDevices(silent = false) {
                 <span class="font-bold text-slate-800 text-xs sm:text-sm truncate">${escapeHtml(dev.name)}</span>
                 ${isSelf ? '<span class="text-[9px] bg-emerald-600 text-white font-black px-1.5 py-0.2 rounded-full shrink-0">MÁY NÀY</span>' : ''}
               </div>
+              ${dev.userName && dev.userName !== 'Chủ Quán' ? `
+                <div class="text-[11px] text-emerald-700 font-semibold flex items-center space-x-1 mt-0.5">
+                  <i class="fa-solid fa-user text-[10px] text-emerald-600"></i>
+                  <span>NV: ${escapeHtml(dev.userName)}</span>
+                  ${dev.phone ? `<span class="text-slate-500 font-mono text-[10px] font-normal">(${escapeHtml(dev.phone)})</span>` : ''}
+                </div>
+              ` : ''}
               <div class="text-[11px] text-slate-400 font-medium flex items-center space-x-2 mt-0.5">
                 <span>${escapeHtml(dev.platform)}</span>
                 <span>•</span>
@@ -1420,48 +1435,235 @@ function closeServerConfigModal() {
 }
 
 // =============================================================
-// MODAL MỞ POS TRÊN ĐIỆN THOẠI (FULL WEB BROWSER)
+// TẠO MÃ QR THÊM NHÂN VIÊN GỌI MÓN (ADMIN QUẢN LÝ THIẾT BỊ)
 // =============================================================
-let currentMobileWebUrl = '';
+let staffQrServerData = {
+  wifiUrl: '',
+  cloudUrl: ''
+};
+let currentStaffQrNet = 'wifi';
 
-async function openMobileConnectModal() {
-  const modal = document.getElementById('modalMobileConnect') || document.getElementById('modalZaloApp');
+async function openStaffQrModal() {
+  const modal = document.getElementById('modalStaffQr');
   if (!modal) return;
 
-  const urlInput = document.getElementById('mobileModalUrlInput') || document.getElementById('zaloModalUrlInput');
-  const directLink = document.getElementById('mobileModalDirectLink') || document.getElementById('zaloModalDirectLink');
-  const qrImg = document.getElementById('mobileModalQrImg') || document.getElementById('zaloModalQrImg');
+  let baseWifi = window.location.origin;
+  let baseCloud = window.location.origin;
 
-  let targetUrl = window.location.origin;
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    try {
-      const res = await fetch('/api/server-info');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.tunnel_url) {
-          targetUrl = data.tunnel_url;
-        } else if (data.local_ip) {
-          targetUrl = `http://${data.local_ip}:3000`;
-        } else if (data.cloud_url) {
-          targetUrl = data.cloud_url;
-        }
+  try {
+    const info = await api('/api/server-info');
+    if (info) {
+      if (info.wifi_url) baseWifi = info.wifi_url;
+      if (info.tunnel_url) {
+        baseCloud = info.tunnel_url;
+      } else if (info.cloud_url) {
+        baseCloud = info.cloud_url;
+      } else {
+        baseCloud = baseWifi;
       }
+    }
+  } catch (e) {
+    if (window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1')) {
+      baseCloud = window.location.origin;
+    }
+  }
+
+  // Nếu đang mở trên localhost/127.0.0.1 thì cố gắng lấy IP LAN nội bộ
+  if (baseWifi.includes('localhost') || baseWifi.includes('127.0.0.1')) {
+    try {
+      const info = await api('/api/server-info');
+      if (info?.wifi_url) baseWifi = info.wifi_url;
     } catch (e) {}
   }
 
-  currentMobileWebUrl = targetUrl;
-  if (urlInput) urlInput.value = targetUrl;
+  staffQrServerData.wifiUrl = `${baseWifi.replace(/\/$/, '')}/?staff_join=1`;
+  staffQrServerData.cloudUrl = `${baseCloud.replace(/\/$/, '')}/?staff_join=1`;
+
+  // Mặc định chọn mạng phù hợp
+  if (window.location.hostname.includes('onrender.com') || window.location.hostname.includes('cloudflare')) {
+    currentStaffQrNet = 'cloud';
+  } else {
+    currentStaffQrNet = 'wifi';
+  }
+
+  updateStaffQrView();
+  modal.classList.remove('hidden');
+}
+
+function closeStaffQrModal() {
+  const modal = document.getElementById('modalStaffQr');
+  if (modal) modal.classList.add('hidden');
+}
+
+function switchStaffQrNetwork(net) {
+  currentStaffQrNet = net;
+  updateStaffQrView();
+}
+
+function updateStaffQrView() {
+  const tabWifi = document.getElementById('tabStaffQrWifi');
+  const tabCloud = document.getElementById('tabStaffQrCloud');
+  const qrImg = document.getElementById('staffQrImg');
+  const inputUrl = document.getElementById('staffQrUrlInput');
+  const directLink = document.getElementById('staffQrDirectLink');
+
+  const isWifi = currentStaffQrNet === 'wifi';
+  const targetUrl = isWifi ? staffQrServerData.wifiUrl : staffQrServerData.cloudUrl;
+
+  if (tabWifi && tabCloud) {
+    if (isWifi) {
+      tabWifi.className = 'py-2 rounded-lg bg-white shadow-xs text-emerald-700 font-bold transition-all';
+      tabCloud.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
+    } else {
+      tabCloud.className = 'py-2 rounded-lg bg-white shadow-xs text-emerald-700 font-bold transition-all';
+      tabWifi.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
+    }
+  }
+
+  if (inputUrl) inputUrl.value = targetUrl;
   if (directLink) directLink.href = targetUrl;
   if (qrImg) {
     qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(targetUrl)}`;
   }
+}
 
-  modal.classList.remove('hidden');
+// =============================================================
+// MODAL NHÂN VIÊN NHẬP TÊN & SỐ ĐIỆN THOẠI (SAU KHI QUÉT QR)
+// =============================================================
+function openStaffJoinModal() {
+  const modal = document.getElementById('modalStaffJoin');
+  const nameInput = document.getElementById('staffJoinNameInput');
+  const phoneInput = document.getElementById('staffJoinPhoneInput');
+  const errBox = document.getElementById('staffJoinErrorMsg');
+
+  closeLoginModal();
+
+  if (errBox) errBox.classList.add('hidden');
+
+  const savedName = localStorage.getItem('pos_staff_name') || '';
+  const savedPhone = localStorage.getItem('pos_staff_phone') || '';
+  if (nameInput && !nameInput.value) nameInput.value = savedName;
+  if (phoneInput && !phoneInput.value) phoneInput.value = savedPhone;
+
+  if (modal) modal.classList.remove('hidden');
+
+  setTimeout(() => {
+    if (nameInput && !nameInput.value) {
+      nameInput.focus();
+    } else if (phoneInput && !phoneInput.value) {
+      phoneInput.focus();
+    }
+  }, 200);
+}
+
+function closeStaffJoinModal() {
+  const modal = document.getElementById('modalStaffJoin');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function submitStaffJoin() {
+  const nameInput = document.getElementById('staffJoinNameInput');
+  const phoneInput = document.getElementById('staffJoinPhoneInput');
+  const errBox = document.getElementById('staffJoinErrorMsg');
+  const errText = document.getElementById('staffJoinErrorText');
+  const btn = document.getElementById('btnSubmitStaffJoin');
+
+  const name = nameInput ? nameInput.value.trim() : '';
+  const phone = phoneInput ? phoneInput.value.trim() : '';
+
+  if (!name) {
+    if (errBox && errText) {
+      errText.textContent = 'Vui lòng nhập họ và tên của bạn!';
+      errBox.classList.remove('hidden');
+    }
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  if (!cleanPhone || cleanPhone.length < 8) {
+    if (errBox && errText) {
+      errText.textContent = 'Số điện thoại không hợp lệ (tối thiểu 8 chữ số)!';
+      errBox.classList.remove('hidden');
+    }
+    if (phoneInput) phoneInput.focus();
+    return;
+  }
+
+  if (errBox) errBox.classList.add('hidden');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('opacity-70');
+  }
+
+  try {
+    const res = await api('/api/auth/staff-join', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: name,
+        phone: phone,
+        deviceId: getDeviceId(),
+        deviceName: getDeviceName(),
+        platform: getDevicePlatform(),
+        deviceType: getDeviceType()
+      })
+    });
+
+    if (res && res.token && res.user) {
+      state.token = res.token;
+      state.currentUser = res.user;
+      localStorage.setItem('pos_token', res.token);
+      localStorage.setItem('pos_staff_name', res.user.name);
+      localStorage.setItem('pos_staff_phone', res.user.phone || phone);
+      localStorage.removeItem('pos_explicit_logout');
+
+      // Xóa query param ?staff_join=1 khỏi thanh địa chỉ browser cho sạch đẹp
+      try {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch (e) {}
+
+      closeStaffJoinModal();
+      applyUserRolePermissions();
+
+      // Vào giao diện đặt món luôn
+      if (typeof showTableFloor === 'function') {
+        showTableFloor();
+      } else {
+        navigateTo('tables');
+      }
+
+      sendDeviceHeartbeat();
+      showToast(`Xin chào ${res.user.name}! Bắt đầu nhận gọi món`, 'success');
+    } else {
+      throw new Error(res?.error || 'Không thể đăng ký thông tin nhân viên');
+    }
+  } catch (err) {
+    if (errBox && errText) {
+      errText.textContent = err.message || 'Lỗi kết nối, vui lòng thử lại!';
+      errBox.classList.remove('hidden');
+    } else {
+      showToast(err.message || 'Lỗi nhập thông tin nhân viên', 'error');
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('opacity-70');
+    }
+  }
+}
+
+// =============================================================
+// MODAL MỞ POS TRÊN ĐIỆN THOẠI (BACKWARD COMPATIBILITY)
+// =============================================================
+let currentMobileWebUrl = '';
+
+async function openMobileConnectModal() {
+  openStaffQrModal();
 }
 
 function closeMobileConnectModal() {
-  const modal = document.getElementById('modalMobileConnect') || document.getElementById('modalZaloApp');
-  if (modal) modal.classList.add('hidden');
+  closeStaffQrModal();
 }
 
 const openZaloModal = openMobileConnectModal;

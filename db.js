@@ -96,7 +96,8 @@ function initDatabase() {
       role TEXT,
       user_name TEXT,
       last_seen INTEGER,
-      custom_name INTEGER DEFAULT 0
+      custom_name INTEGER DEFAULT 0,
+      phone TEXT
     );
   `);
 
@@ -122,7 +123,7 @@ function initDatabase() {
     db.exec('ALTER TABLE orders ADD COLUMN table_name TEXT DEFAULT "";');
   } catch (e) {}
 
-  // Ensure email, google_id and avatar exist in users table
+  // Ensure email, google_id, avatar and phone exist in users table
   try {
     db.exec('ALTER TABLE users ADD COLUMN email TEXT;');
   } catch (e) {}
@@ -131,6 +132,14 @@ function initDatabase() {
   } catch (e) {}
   try {
     db.exec('ALTER TABLE users ADD COLUMN avatar TEXT;');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE users ADD COLUMN phone TEXT;');
+  } catch (e) {}
+
+  // Ensure phone exists in devices table
+  try {
+    db.exec('ALTER TABLE devices ADD COLUMN phone TEXT;');
   } catch (e) {}
 
   // Seed default users if empty

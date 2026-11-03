@@ -260,6 +260,10 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ error: 'Tên đăng nhập, mật khẩu hoặc mã PIN không chính xác' });
     }
 
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Giao diện đăng nhập này chỉ dành riêng cho Chủ Quán! Nhân viên vui lòng quét mã QR từ máy Chủ Quán để vào đặt món.' });
+    }
+
     const token = generateToken(user);
     res.json({
       token,
@@ -269,6 +273,90 @@ app.post('/api/auth/login', (req, res) => {
         name: user.name,
         role: user.role
       }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/auth/staff-join: Nhân viên quét mã QR trên điện thoại nhập tên & số điện thoại
+app.post('/api/auth/staff-join', (req, res) => {
+  try {
+    const { name, phone, deviceId, deviceName, platform, deviceType } = req.body || {};
+
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Vui lòng nhập họ và tên nhân viên!' });
+    }
+    if (!phone || !String(phone).trim()) {
+      return res.status(400).json({ error: 'Vui lòng nhập số điện thoại!' });
+    }
+
+    const cleanName = String(name).trim();
+    const cleanPhone = String(phone).trim().replace(/\s+/g, '');
+
+    if (cleanPhone.length < 8) {
+      return res.status(400).json({ error: 'Số điện thoại không hợp lệ (tối thiểu 8 chữ số)!' });
+    }
+
+    // 1. Tìm hoặc tạo tài khoản nhân viên trong bảng users
+    let user = db.prepare("SELECT * FROM users WHERE (phone = ? OR username = ?) AND role = 'staff'").get(cleanPhone, 'nv_' + cleanPhone);
+
+    if (user) {
+      db.prepare('UPDATE users SET name = ?, phone = ?, active = 1 WHERE id = ?').run(cleanName, cleanPhone, user.id);
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+    } else {
+      const username = 'nv_' + cleanPhone.replace(/[^0-9]/g, '');
+      const defaultPass = hashSecret('123456');
+      const defaultPin = hashSecret('1234');
+      const stmt = db.prepare(`
+        INSERT INTO users (username, password, name, role, pin, phone, active)
+        VALUES (?, ?, ?, 'staff', ?, ?, 1)
+      `);
+      const insertResult = stmt.run(username, defaultPass, cleanName, defaultPin, cleanPhone);
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(insertResult.lastInsertRowid);
+    }
+
+    // 2. Ghi nhận/cập nhật thiết bị của nhân viên
+    const devId = deviceId || ('device_' + (req.ip || 'unknown').replace(/[^a-zA-Z0-9]/g, '_'));
+    const cleanPlatform = platform || 'Mobile (Web)';
+    const staffDeviceName = deviceName && deviceName !== 'Thiết Bị' && !deviceName.startsWith('Điện Thoại')
+      ? deviceName 
+      : `${cleanName} (${cleanPlatform.includes('iOS') ? 'iPhone' : cleanPlatform.includes('Android') ? 'Android' : 'Điện thoại'})`;
+
+    const dev = trackDeviceActivity(req, {
+      deviceId: devId,
+      deviceName: staffDeviceName,
+      platform: cleanPlatform,
+      deviceType: deviceType || 'mobile',
+      role: 'staff',
+      userName: cleanName,
+      phone: cleanPhone
+    });
+
+    // 3. Tạo Token phiên làm việc cho nhân viên
+    const token = generateToken(user);
+
+    // 4. Báo qua SSE để cập nhật danh sách thiết bị
+    if (typeof broadcastTableChange === 'function') {
+      broadcastTableChange({
+        type: 'device_joined',
+        userName: cleanName,
+        phone: cleanPhone,
+        deviceId: devId
+      });
+    }
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        phone: user.phone
+      },
+      device: dev
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1089,6 +1177,7 @@ try {
       ip: row.ip || '127.0.0.1',
       role: row.role || 'staff',
       userName: row.user_name || 'Nhân Viên',
+      phone: row.phone || '',
       lastSeen: row.last_seen || 0,
       customName: row.custom_name === 1,
       isOnline: false
@@ -1135,6 +1224,7 @@ function trackDeviceActivity(req, customData = {}) {
   const clientProvidedName = customData.deviceName || req.query.deviceName || req.body?.deviceName;
   const defaultFallbackName = deviceType === 'desktop' ? 'Máy tính Quầy Thu Ngân' : `Điện Thoại (${platform})`;
   const assignedName = clientProvidedName || (existing ? existing.name : defaultFallbackName);
+  const cleanPhone = customData.phone || req.query.phone || req.body?.phone || existing.phone || '';
 
   const updated = {
     ...existing,
@@ -1145,6 +1235,7 @@ function trackDeviceActivity(req, customData = {}) {
     ip: clientIp || '127.0.0.1',
     role: customData.role || req.query.role || req.body?.role || existing.role || (req.user ? req.user.role : 'Nhân viên'),
     userName: customData.userName || req.query.userName || req.body?.userName || existing.userName || (req.user ? req.user.name : 'Nhân Viên'),
+    phone: cleanPhone,
     lastSeen: now,
     lastSeenStr: new Date().toISOString(),
     isOnline: true
@@ -1155,15 +1246,18 @@ function trackDeviceActivity(req, customData = {}) {
   // Lưu hoặc cập nhật vào database SQLite
   try {
     db.prepare(`
-      INSERT INTO devices (id, name, platform, device_type, ip, role, user_name, last_seen, custom_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+      INSERT INTO devices (id, name, platform, device_type, ip, role, user_name, phone, last_seen, custom_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
       ON CONFLICT(id) DO UPDATE SET
         platform = excluded.platform,
         device_type = excluded.device_type,
         ip = excluded.ip,
+        user_name = excluded.user_name,
+        phone = excluded.phone,
+        role = excluded.role,
         last_seen = excluded.last_seen,
         name = excluded.name
-    `).run(deviceId, assignedName, platform, deviceType, clientIp || '127.0.0.1', updated.role, updated.userName, now);
+    `).run(deviceId, assignedName, platform, deviceType, clientIp || '127.0.0.1', updated.role, updated.userName, cleanPhone, now);
   } catch (e) {}
 
   return updated;
@@ -1365,10 +1459,10 @@ app.put('/api/devices/rename', requireAuth, (req, res) => {
   // Lưu vào SQLite để không bị mất khi khởi động lại server
   try {
     db.prepare(`
-      INSERT INTO devices (id, name, platform, device_type, ip, role, user_name, last_seen, custom_name)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO devices (id, name, platform, device_type, ip, role, user_name, phone, last_seen, custom_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       ON CONFLICT(id) DO UPDATE SET name = excluded.name, custom_name = 1
-    `).run(deviceId, trimmed, dev.platform || '', dev.deviceType || '', dev.ip || '', dev.role || '', dev.userName || '', dev.lastSeen || Date.now());
+    `).run(deviceId, trimmed, dev.platform || '', dev.deviceType || '', dev.ip || '', dev.role || '', dev.userName || '', dev.phone || '', dev.lastSeen || Date.now());
   } catch (e) {}
 
   res.json({ success: true, device: dev });
