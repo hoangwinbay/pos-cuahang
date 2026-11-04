@@ -2216,48 +2216,129 @@ function generateEscPosBase64(order) {
   return uint8ArrayToBase64(bytes);
 }
 
-function printViaRawBt(order) {
+function loadHtml2CanvasScript() {
+  return new Promise((resolve, reject) => {
+    if (typeof html2canvas !== 'undefined') return resolve();
+    const s = document.createElement('script');
+    s.src = 'js/html2canvas.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => {
+      const cdn = document.createElement('script');
+      cdn.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      cdn.onload = () => resolve();
+      cdn.onerror = (e) => reject(new Error('Không thể tải thư viện kết xuất ảnh html2canvas'));
+      document.head.appendChild(cdn);
+    };
+    document.head.appendChild(s);
+  });
+}
+
+function dispatchRawBtIntent(targetUrl, fallbackUrl) {
   try {
-    // Nếu chọn form HTML cũ (hoặc có dấu) -> gửi trực tiếp file HTML gốc vào RawBT
-    const useHtmlForm = localStorage.getItem('pos_print_accents') === '1';
-    let targetUrl;
-
-    if (useHtmlForm) {
-      showToast('Đang gửi Form HTML gốc qua RawBT...', 'info');
-      const htmlDoc = generateReceiptHtmlFullDoc(order);
-      const b64 = htmlToBase64(htmlDoc);
-      targetUrl = 'rawbt:data:text/html;base64,' + b64;
+    const a = document.createElement('a');
+    a.href = targetUrl;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      try { if (a.parentNode) a.parentNode.removeChild(a); } catch (e) {}
+    }, 2000);
+  } catch (err) {
+    console.warn('dispatchRawBtIntent anchor click error:', err);
+    if (fallbackUrl) {
+      window.location.href = fallbackUrl;
     } else {
-      showToast('Đang gửi lệnh in trực tiếp tới RawBT...', 'info');
-      const base64Data = generateEscPosBase64(order);
-      if (!base64Data) {
-        throw new Error('Khong the tao du lieu ESC/POS');
-      }
+      window.location.href = targetUrl;
+    }
+  }
+}
 
-      // Intent URL cho Android Chrome (tu dong mo RawBT ngam khong hoi)
+async function printViaRawBt(order) {
+  try {
+    // Nếu người dùng chủ động chọn chế độ văn bản ESC/POS siêu tốc
+    const useBitmapForm = localStorage.getItem('pos_print_accents') !== '0';
+
+    if (!useBitmapForm) {
+      showToast('Đang gửi lệnh ESC/POS tới RawBT...', 'info');
+      const base64Data = generateEscPosBase64(order);
+      if (!base64Data) throw new Error('Không thể tạo dữ liệu ESC/POS');
+
       const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
-      targetUrl = isChrome
+      const targetUrl = isChrome
         ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
         : 'rawbt:base64,' + base64Data;
+      dispatchRawBtIntent(targetUrl, 'rawbt:base64,' + base64Data);
+      return true;
     }
 
+    // MẶC ĐỊNH: Form hóa đơn chuẩn y hệt trên Chrome Laptop (Kết xuất Canvas PNG sắc nét rồi gửi RawBT in trực tiếp)
+    showToast('Đang kết xuất hóa đơn gửi RawBT...', 'info');
+
+    // 1. Đảm bảo html2canvas đã tải
+    if (typeof html2canvas === 'undefined') {
+      await loadHtml2CanvasScript();
+    }
+
+    // 2. Chuẩn bị khổ in
+    const paperWidth = localStorage.getItem('pos_paper_width') || '80mm';
+    const is58mm = paperWidth === '58mm';
+    const renderWidthPx = is58mm ? 280 : 360;
+    const canvasScale = is58mm ? 1.37 : 1.6; // Đạt đúng 576 dots chuẩn đầu in 80mm hoặc 384 dots cho 58mm
+
+    // 3. Tạo khung chứa DOM hóa đơn (y hệt mẫu hóa đơn trên laptop)
+    const hiddenBox = document.createElement('div');
+    hiddenBox.id = 'rawbt-render-container';
+    hiddenBox.style.cssText = `
+      position: fixed;
+      left: -9999px;
+      top: 0;
+      width: ${renderWidthPx}px;
+      max-width: ${renderWidthPx}px;
+      padding: 10px 8px 18px 8px;
+      background: #ffffff !important;
+      color: #000000 !important;
+      font-family: 'Courier New', Courier, monospace, sans-serif !important;
+      font-size: 13px !important;
+      line-height: 1.35 !important;
+      box-sizing: border-box !important;
+      z-index: -9999;
+      pointer-events: none;
+    `;
+    hiddenBox.innerHTML = generateReceiptHtml(order);
+    document.body.appendChild(hiddenBox);
+
+    // Chờ 60ms để DOM ổn định bố cục font
+    await new Promise(r => setTimeout(r, 60));
+
+    // 4. Kết xuất thành Canvas ảnh chất lượng cao
+    const canvas = await html2canvas(hiddenBox, {
+      scale: canvasScale,
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true,
+      windowWidth: renderWidthPx
+    });
+
+    // Dọn dẹp DOM tạm
     try {
-      window.location.href = targetUrl;
-    } catch (e) {
-      const a = document.createElement('a');
-      a.href = targetUrl;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        try { if (a.parentNode) a.parentNode.removeChild(a); } catch (err) {}
-      }, 1500);
-    }
+      if (hiddenBox.parentNode) hiddenBox.parentNode.removeChild(hiddenBox);
+    } catch (e) {}
 
+    // 5. Chuyển sang Data URL PNG
+    const dataUrl = canvas.toDataURL('image/png');
+
+    // 6. Gửi tới RawBT Print Service
+    const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
+    const targetUrl = isChrome
+      ? `intent:${dataUrl}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end;`
+      : `rawbt:${dataUrl}`;
+
+    dispatchRawBtIntent(targetUrl, 'rawbt:' + dataUrl);
+    showToast('Đã gửi hóa đơn ảnh sắc nét tới máy in RawBT!', 'success');
     return true;
   } catch (err) {
-    console.error('Loi khi in qua RawBT:', err);
-    showToast('Loi gui toi RawBT: ' + (err.message || err), 'error');
+    console.error('Lỗi khi in ảnh qua RawBT:', err);
+    showToast('Lỗi in RawBT: ' + (err.message || err), 'error');
     executeWindowPrint(order, true);
     return false;
   }
@@ -2920,9 +3001,9 @@ function setPaperWidth(val) {
 function setPrintAccents(val) {
   localStorage.setItem('pos_print_accents', val);
   if (val === '1') {
-    showToast('Đã chọn Form HTML cũ (Có dấu & viền khung)', 'success');
+    showToast('Đã chọn Form gốc như Laptop (Ảnh sắc nét, có viền & dấu)', 'success');
   } else {
-    showToast('Đã chọn Form ESC/POS 4 cột (Siêu tốc)', 'info');
+    showToast('Đã chọn Form ESC/POS Text (Văn bản)', 'info');
   }
 }
 

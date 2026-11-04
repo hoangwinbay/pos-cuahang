@@ -48,6 +48,12 @@ window.__POS_HTML_TEMPLATE__ = ${JSON.stringify(innerHtml)};
       c.src = 'https://cdn.jsdelivr.net/npm/chart.js';
       document.head.appendChild(c);
     }
+    // 4. html2canvas
+    if (!window.html2canvas && !document.querySelector('script[src*="html2canvas"]')) {
+      const h2c = document.createElement('script');
+      h2c.src = 'js/html2canvas.min.js';
+      document.head.appendChild(h2c);
+    }
   }
 
   function mountPosApp() {
