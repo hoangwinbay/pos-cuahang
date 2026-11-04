@@ -1997,10 +1997,35 @@ async function connectBluetoothPrinter() {
   }
 }
 
+function wrapTextLines(text, maxChars = 38) {
+  if (!text) return [];
+  const words = text.split(/\s+/);
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if (!w) continue;
+    if ((cur ? cur + ' ' + w : w).length <= maxChars) {
+      cur = cur ? cur + ' ' + w : w;
+    } else {
+      if (cur) lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
 function generateEscPosPayload(order) {
-  const storeName = state.settings.store_name || 'Bun mam mien Tay';
-  const storeAddress = state.settings.store_address || '324 Bach Mai';
-  const footerNotice = state.settings.receipt_footer || 'Quy khach vui long mang phieu nay ra quay khi thanh toan';
+  const withAccents = localStorage.getItem('pos_print_accents') === '1';
+  const sanitize = withAccents ? (s) => (s || '') : removeVietnameseAccents;
+
+  const rawStoreName = state.settings.store_name || 'Bún mắm miền Tây';
+  const rawStoreAddress = state.settings.store_address || '324 Bạch Mai';
+  const rawFooterNotice = state.settings.receipt_footer || 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán';
+
+  const storeName = sanitize(rawStoreName);
+  const storeAddress = sanitize(rawStoreAddress);
+  const footerNotice = sanitize(rawFooterNotice);
 
   const paperWidth = localStorage.getItem('pos_paper_width') || '80mm';
   const lineWidth = paperWidth === '58mm' ? 32 : 42;
@@ -2014,13 +2039,15 @@ function generateEscPosPayload(order) {
   const isMangVe = (orderSource === 'mangve') || 
                    (order.order_type && order.order_type.toLowerCase().includes('mang')) ||
                    (order.table_name && order.table_name.toLowerCase().includes('mang ve'));
-  const sourceLabel = isMangVe ? 'MANG VE' : 'TAI CHO';
+  const sourceLabel = isMangVe ? (withAccents ? 'MANG VỀ' : 'MANG VE') : (withAccents ? 'TẠI CHỖ' : 'TAI CHO');
 
-  let rawTable = (order.table_name || 'Ban 1').trim();
-  let tableDisplay = rawTable;
-  if (!tableDisplay.toLowerCase().startsWith('ban') && !tableDisplay.toLowerCase().startsWith('mang')) {
-    tableDisplay = 'Ban ' + tableDisplay;
+  // Chuẩn hóa tên bàn triệt để: Tránh lỗi trùng "Ban" và lỗi rỗng dấu như "Ban B  n 2"
+  let cleanTable = removeVietnameseAccents(order.table_name || 'Ban 1').trim();
+  let tableUpper = cleanTable.toUpperCase();
+  if (!tableUpper.startsWith('BAN') && !tableUpper.startsWith('MANG')) {
+    tableUpper = 'BAN ' + tableUpper;
   }
+  const tableDisplay = withAccents ? (order.table_name || tableUpper) : tableUpper;
 
   const createdAt = order.created_at ? new Date(order.created_at) : new Date();
   const dateStr = String(createdAt.getDate()).padStart(2, '0') + '/' + 
@@ -2031,7 +2058,7 @@ function generateEscPosPayload(order) {
 
   let content = '\x1B\x40'; // Reset / Khoi tao may in
   content += '\x1B\x61\x01'; // Canh giua
-  content += '\x1B\x45\x01' + 'HOA DON THANH TOAN\n\n' + '\x1B\x45\x00';
+  content += '\x1B\x45\x01' + (withAccents ? 'HÓA ĐƠN THANH TOÁN\n\n' : 'HOA DON THANH TOAN\n\n') + '\x1B\x45\x00';
   content += divider;
   content += '\x1B\x61\x01'; // Canh giua
   content += '\x1B\x45\x01'; // In dam
@@ -2042,7 +2069,13 @@ function generateEscPosPayload(order) {
   content += divider;
   content += '\x1B\x61\x00'; // Canh trai
   content += formatLineColumns(`Gio vao: ${timeStr}`, `Ngay: ${dateStr}`, lineWidth);
-  if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
+  
+  if (order.note) {
+    const noteLines = wrapTextLines(sanitize(`Ghi chú: ${order.note}`), lineWidth);
+    noteLines.forEach((nl) => {
+      content += nl + '\n';
+    });
+  }
 
   content += divider;
   content += formatLineColumns('TEN MON', 'TIEN', lineWidth);
@@ -2052,7 +2085,11 @@ function generateEscPosPayload(order) {
     const qty = Number(it.quantity) || 1;
     const price = Number(it.price) || 0;
     const total = Number(it.total !== undefined ? it.total : price * qty);
-    content += `${removeVietnameseAccents(it.product_name || it.name || 'Mon')}\n`;
+    const itemName = sanitize(it.product_name || it.name || 'Mon');
+    const nameLines = wrapTextLines(itemName, lineWidth);
+    nameLines.forEach((nl) => {
+      content += nl + '\n';
+    });
     content += formatLineColumns(`   ${qty} x ${formatReceiptNum(price)}`, formatReceiptNum(total) + ' d', lineWidth);
   });
 
@@ -2061,23 +2098,37 @@ function generateEscPosPayload(order) {
   const discount = Number(order.discount || 0);
   const finalTotal = Number(order.total !== undefined ? order.total : (subtotal - discount));
 
-  content += formatLineColumns('Thanh tien:', formatReceiptNum(subtotal) + ' d', lineWidth);
+  content += formatLineColumns(withAccents ? 'Thành tiền:' : 'Thanh tien:', formatReceiptNum(subtotal) + ' d', lineWidth);
   if (discount > 0) {
-    content += formatLineColumns('Giam gia:', '-' + formatReceiptNum(discount) + ' d', lineWidth);
+    content += formatLineColumns(withAccents ? 'Giảm giá:' : 'Giam gia:', '-' + formatReceiptNum(discount) + ' d', lineWidth);
   }
   content += '\x1B\x45\x01'; // In dam Tong tien
-  content += formatLineColumns('Tong tien:', formatReceiptNum(finalTotal) + ' d', lineWidth);
+  content += formatLineColumns(withAccents ? 'Tổng tiền:' : 'Tong tien:', formatReceiptNum(finalTotal) + ' d', lineWidth);
   content += '\x1B\x45\x00';
 
   const isChuyenKhoan = order.payment_method === 'transfer' || order.payment_method === 'bank' || order.payment_method === 'qr' || order.payment_method === 'chuyenkhoan';
-  const payLabel = isChuyenKhoan ? '+ Thanh toan chuyen khoan' : '+ Thanh toan tien mat';
+  const payLabel = isChuyenKhoan 
+    ? (withAccents ? '+ Thanh toán chuyển khoản' : '+ Thanh toan chuyen khoan')
+    : (withAccents ? '+ Thanh toán tiền mặt' : '+ Thanh toan tien mat');
   content += formatLineColumns(payLabel, formatReceiptNum(finalTotal) + ' d', lineWidth);
 
   content += divider;
   content += '\x1B\x61\x01'; // Canh giua
-  content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\x1B\x45\x00\n';
-  content += `Dia chi: ${removeVietnameseAccents(storeAddress)}\n`;
-  content += `${removeVietnameseAccents(footerNotice)}\n\n\n\n\x1D\x56\x01`; // Cuon giay 4 dong va cat giay
+  content += '\x1B\x45\x01' + storeName + '\x1B\x45\x00\n';
+  
+  // Tự động ngắt dòng địa chỉ nếu dài
+  const addrLines = wrapTextLines(`Dia chi: ${storeAddress}`, Math.max(26, lineWidth - 4));
+  addrLines.forEach((al) => {
+    content += al + '\n';
+  });
+
+  // Tự động ngắt dòng lời cảm ơn/thông báo chân trang
+  const footerLines = wrapTextLines(footerNotice, Math.max(26, lineWidth - 4));
+  footerLines.forEach((fl) => {
+    content += fl + '\n';
+  });
+
+  content += '\n\n\n\n\x1D\x56\x01'; // Cuon giay 4 dong va cat giay
 
   return content;
 }
@@ -2626,14 +2677,14 @@ function toggleRawBtMode(checked) {
 }
 
 function showRawBtGuide() {
-  const guide = 'HƯỚNG DẪN CẤU HÌNH RAWBT ĐỂ IN NGẦM 1 CHẠM:\n\n' +
+  const guide = 'HƯỚNG DẪN CẤU HÌNH RAWBT ĐỂ IN 1 CHẠM & KHÔNG LỖI CHỮ:\n\n' +
     '1. Mở app "RawBT Print Service" trên máy POS Android.\n' +
     '2. Bấm biểu tượng Cài đặt (bánh răng) ở góc ứng dụng.\n' +
-    '3. Chọn mục "Chung" (General):\n' +
+    '3. Mục "Chung" (General):\n' +
     '   -> BẬT "In tự động" (Autoprint / Silent print).\n' +
-    '4. Chọn mục "Cài đặt máy in" (Printer connection):\n' +
+    '4. Mục "Cài đặt máy in" (Printer connection):\n' +
     '   -> Chọn kết nối: "USB" (chọn máy in SRP02 cắm dây).\n' +
-    '   -> Bấm "In thử" (Test print) để xác nhận máy in đã nhận.\n' +
+    '   -> Kiểu in: Giữ Text mặc định để in không dấu siêu nét 100% không lỗi.\n' +
     '5. Quay lại màn hình Web POS này và bấm "In Thử Hóa Đơn" để giấy tự nhả ngay tức khắc!';
   alert(guide);
 }
@@ -2641,6 +2692,15 @@ function showRawBtGuide() {
 function setPaperWidth(val) {
   localStorage.setItem('pos_paper_width', val);
   showToast(`Đã lưu khổ giấy in: ${val}`, 'info');
+}
+
+function setPrintAccents(val) {
+  localStorage.setItem('pos_print_accents', val);
+  if (val === '1') {
+    showToast('Đã chọn in có dấu (Cần bật Graphic trong RawBT)', 'info');
+  } else {
+    showToast('Đã chọn in không dấu chuẩn nét máy in', 'success');
+  }
 }
 
 // Cấu hình & trạng thái máy in (Đã kết nối chưa, kết nối với máy in nào)
@@ -2715,6 +2775,7 @@ function renderPrinterStatusUI() {
   const btnDisconnect = document.getElementById('btnDisconnectPrinter');
   const toggleRawBt = document.getElementById('toggleRawBtPrint');
   const selectPaper = document.getElementById('selectPaperWidth');
+  const selectAccents = document.getElementById('selectPrintAccents');
 
   if (toggleRawBt) {
     toggleRawBt.checked = isRawBtEnabled();
@@ -2722,6 +2783,10 @@ function renderPrinterStatusUI() {
 
   if (selectPaper) {
     selectPaper.value = localStorage.getItem('pos_paper_width') || '80mm';
+  }
+
+  if (selectAccents) {
+    selectAccents.value = localStorage.getItem('pos_print_accents') || '0';
   }
 
   if (!card) return;

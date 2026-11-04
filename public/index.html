@@ -999,25 +999,34 @@
           Khi BẬT: Bấm in sẽ nhả bill thẳng qua RawBT (USB), <strong>không hiện popup chọn máy in Android</strong>.
         </div>
 
-        <!-- Khổ giấy & Nút trợ giúp -->
-        <div class="flex items-center justify-between pt-1 border-t border-purple-100 text-xs">
-          <div class="flex items-center space-x-1.5">
-            <span class="text-[11px] text-purple-950 font-bold">Khổ giấy:</span>
-            <select id="selectPaperWidth" onchange="setPaperWidth(this.value)" class="text-[11px] font-bold bg-white border border-purple-200 text-purple-900 rounded-lg px-2 py-1 outline-none">
-              <option value="80mm">80mm (Khổ rộng)</option>
-              <option value="58mm">58mm (Khổ nhỏ)</option>
+        <!-- Khổ giấy & Kiểu chữ in -->
+        <div class="grid grid-cols-2 gap-2 pt-1 border-t border-purple-100 text-xs">
+          <div>
+            <label class="text-[10px] text-purple-950 font-bold block mb-0.5">Khổ giấy in:</label>
+            <select id="selectPaperWidth" onchange="setPaperWidth(this.value)" class="w-full text-[11px] font-bold bg-white border border-purple-200 text-purple-900 rounded-lg px-2 py-1 outline-none">
+              <option value="80mm">80mm (Khổ rộng SRP02)</option>
+              <option value="58mm">58mm (Khổ nhỏ mini)</option>
             </select>
           </div>
-          <div class="flex items-center space-x-1">
-            <a href="intent:#Intent;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;" target="_blank" class="px-2 py-1 bg-white hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold rounded-lg text-[10px] flex items-center space-x-1 transition-colors">
-              <i class="fa-brands fa-google-play text-[9px]"></i>
-              <span>Cài RawBT</span>
-            </a>
-            <button type="button" onclick="showRawBtGuide()" class="px-2 py-1 bg-white hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold rounded-lg text-[10px] flex items-center space-x-1 transition-colors">
-              <i class="fa-solid fa-circle-question text-[9px]"></i>
-              <span>Cấu hình</span>
-            </button>
+          <div>
+            <label class="text-[10px] text-purple-950 font-bold block mb-0.5">Kiểu chữ bill:</label>
+            <select id="selectPrintAccents" onchange="setPrintAccents(this.value)" class="w-full text-[11px] font-bold bg-white border border-purple-200 text-purple-900 rounded-lg px-2 py-1 outline-none">
+              <option value="0">Không dấu (100% nét đẹp)</option>
+              <option value="1">Có dấu (Chế độ ảnh)</option>
+            </select>
           </div>
+        </div>
+
+        <!-- Nút trợ giúp & Cài RawBT -->
+        <div class="flex items-center space-x-2 pt-0.5">
+          <a href="intent:#Intent;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;" target="_blank" class="flex-1 py-1.5 bg-white hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold rounded-lg text-[10px] flex items-center justify-center space-x-1 transition-colors">
+            <i class="fa-brands fa-google-play text-[9px]"></i>
+            <span>Mở / Cài RawBT</span>
+          </a>
+          <button type="button" onclick="showRawBtGuide()" class="flex-1 py-1.5 bg-white hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold rounded-lg text-[10px] flex items-center justify-center space-x-1 transition-colors">
+            <i class="fa-solid fa-circle-question text-[9px]"></i>
+            <span>Hướng dẫn 1 chạm</span>
+          </button>
         </div>
       </div>
 
