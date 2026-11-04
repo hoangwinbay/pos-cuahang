@@ -2015,6 +2015,83 @@ function wrapTextLines(text, maxChars = 38) {
   return lines;
 }
 
+function formatBoxedTitle(text, width = 42) {
+  const clean = String(text).trim();
+  const innerWidth = width - 4;
+  const padLeft = Math.max(0, Math.floor((innerWidth - clean.length) / 2));
+  const padRight = Math.max(0, innerWidth - clean.length - padLeft);
+  const border = '+' + '-'.repeat(width - 2) + '+\n';
+  const middle = '| ' + ' '.repeat(padLeft) + clean + ' '.repeat(padRight) + ' |\n';
+  return border + middle + border;
+}
+
+function formatItemRow4Col(name, qty, price, total, width = 42) {
+  const cleanName = String(name).trim();
+  const qtyStr = String(qty);
+  const priceStr = formatReceiptNum(price);
+  const totalStr = formatReceiptNum(total);
+
+  const nameWidth = width === 32 ? 12 : 18;
+  const qtyWidth = 3;
+  const priceWidth = width === 32 ? 7 : 9;
+  const totalWidth = width === 32 ? 7 : 9;
+
+  let lines = [];
+  if (cleanName.length <= nameWidth) {
+    const colName = cleanName.padEnd(nameWidth, ' ');
+    const colQty = qtyStr.padStart(qtyWidth, ' ');
+    const colPrice = priceStr.padStart(priceWidth, ' ');
+    const colTotal = totalStr.padStart(totalWidth, ' ');
+    lines.push(`${colName} ${colQty} ${colPrice} ${colTotal}`);
+  } else {
+    const firstPart = cleanName.substring(0, nameWidth);
+    const restPart = cleanName.substring(nameWidth);
+    const colName = firstPart.padEnd(nameWidth, ' ');
+    const colQty = qtyStr.padStart(qtyWidth, ' ');
+    const colPrice = priceStr.padStart(priceWidth, ' ');
+    const colTotal = totalStr.padStart(totalWidth, ' ');
+    lines.push(`${colName} ${colQty} ${colPrice} ${colTotal}`);
+    lines.push(`  ${restPart.trim()}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+function generateReceiptHtmlFullDoc(order) {
+  const bodyHtml = generateReceiptHtml(order);
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Hóa Đơn</title>
+  <style>
+    @page { margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 76mm;
+      max-width: 76mm;
+      margin: 0 auto;
+      padding: 3mm 1mm;
+      font-family: 'Courier New', Courier, monospace, sans-serif;
+      font-size: 13px;
+      line-height: 1.35;
+      color: #000;
+      background: #fff;
+    }
+    table { width: 100%; border-collapse: collapse; }
+  </style>
+</head>
+<body>
+  ${bodyHtml}
+</body>
+</html>`;
+}
+
+function htmlToBase64(html) {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(html);
+  return uint8ArrayToBase64(bytes);
+}
+
 function generateEscPosPayload(order) {
   const withAccents = localStorage.getItem('pos_print_accents') === '1';
   const sanitize = withAccents ? (s) => (s || '') : removeVietnameseAccents;
@@ -2059,15 +2136,13 @@ function generateEscPosPayload(order) {
   let content = '\x1B\x40'; // Reset / Khoi tao may in
   content += '\x1B\x61\x01'; // Canh giua
   content += '\x1B\x45\x01' + (withAccents ? 'HÓA ĐƠN THANH TOÁN\n\n' : 'HOA DON THANH TOAN\n\n') + '\x1B\x45\x00';
-  content += divider;
-  content += '\x1B\x61\x01'; // Canh giua
-  content += '\x1B\x45\x01'; // In dam
-  content += '\x1D\x21\x11'; // Phong to chu ban x2
-  content += `${tableDisplay} - ${sourceLabel}\n`;
-  content += '\x1D\x21\x00'; // Ve co chu chuan
-  content += '\x1B\x45\x00'; // Tat in dam
-  content += divider;
-  content += '\x1B\x61\x00'; // Canh trai
+  
+  // Khung viền bàn ăn chuẩn như form hóa đơn cũ
+  content += '\x1B\x61\x00'; // Canh trái để khung viền vuông vắn
+  content += '\x1B\x45\x01'; // In đậm tên bàn
+  content += formatBoxedTitle(`${tableDisplay} - ${sourceLabel}`, lineWidth);
+  content += '\x1B\x45\x00'; // Tắt in đậm
+
   content += formatLineColumns(`Gio vao: ${timeStr}`, `Ngay: ${dateStr}`, lineWidth);
   
   if (order.note) {
@@ -2077,20 +2152,20 @@ function generateEscPosPayload(order) {
     });
   }
 
+  // Tiêu đề 4 cột chuẩn theo đúng mẫu hóa đơn cũ
   content += divider;
-  content += formatLineColumns('TEN MON', 'TIEN', lineWidth);
+  content += lineWidth === 32
+    ? 'Ten mon      SL Don gia  T.Tien\n'
+    : 'Ten mon          SL    Don gia  Thanh tien\n';
   content += divider;
 
+  // In từng món theo đúng cấu trúc 4 cột
   (order.items || []).forEach((it) => {
     const qty = Number(it.quantity) || 1;
     const price = Number(it.price) || 0;
     const total = Number(it.total !== undefined ? it.total : price * qty);
     const itemName = sanitize(it.product_name || it.name || 'Mon');
-    const nameLines = wrapTextLines(itemName, lineWidth);
-    nameLines.forEach((nl) => {
-      content += nl + '\n';
-    });
-    content += formatLineColumns(`   ${qty} x ${formatReceiptNum(price)}`, formatReceiptNum(total) + ' d', lineWidth);
+    content += formatItemRow4Col(itemName, qty, price, total, lineWidth);
   });
 
   content += divider;
@@ -2153,18 +2228,28 @@ function generateEscPosBase64(order) {
 
 function printViaRawBt(order) {
   try {
-    const base64Data = generateEscPosBase64(order);
-    if (!base64Data) {
-      throw new Error('Khong the tao du lieu ESC/POS');
+    // Nếu chọn form HTML cũ (hoặc có dấu) -> gửi trực tiếp file HTML gốc vào RawBT
+    const useHtmlForm = localStorage.getItem('pos_print_accents') === '1';
+    let targetUrl;
+
+    if (useHtmlForm) {
+      showToast('Đang gửi Form HTML gốc qua RawBT...', 'info');
+      const htmlDoc = generateReceiptHtmlFullDoc(order);
+      const b64 = htmlToBase64(htmlDoc);
+      targetUrl = 'rawbt:data:text/html;base64,' + b64;
+    } else {
+      showToast('Đang gửi lệnh in trực tiếp tới RawBT...', 'info');
+      const base64Data = generateEscPosBase64(order);
+      if (!base64Data) {
+        throw new Error('Khong the tao du lieu ESC/POS');
+      }
+
+      // Intent URL cho Android Chrome (tu dong mo RawBT ngam khong hoi)
+      const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
+      targetUrl = isChrome
+        ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
+        : 'rawbt:base64,' + base64Data;
     }
-
-    showToast('Dang gui lenh in truc tiep toi RawBT...', 'info');
-
-    // Intent URL cho Android Chrome (tu dong mo RawBT ngam khong hoi)
-    const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
-    const targetUrl = isChrome
-      ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
-      : 'rawbt:base64,' + base64Data;
 
     const a = document.createElement('a');
     a.href = targetUrl;
@@ -2697,9 +2782,9 @@ function setPaperWidth(val) {
 function setPrintAccents(val) {
   localStorage.setItem('pos_print_accents', val);
   if (val === '1') {
-    showToast('Đã chọn in có dấu (Cần bật Graphic trong RawBT)', 'info');
+    showToast('Đã chọn Form HTML cũ (Có dấu & viền khung)', 'success');
   } else {
-    showToast('Đã chọn in không dấu chuẩn nét máy in', 'success');
+    showToast('Đã chọn Form ESC/POS 4 cột (Siêu tốc)', 'info');
   }
 }
 
@@ -2786,7 +2871,7 @@ function renderPrinterStatusUI() {
   }
 
   if (selectAccents) {
-    selectAccents.value = localStorage.getItem('pos_print_accents') || '0';
+    selectAccents.value = localStorage.getItem('pos_print_accents') || '1';
   }
 
   if (!card) return;
