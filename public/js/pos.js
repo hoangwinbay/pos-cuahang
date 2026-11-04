@@ -250,27 +250,48 @@ function connectTableEventSource() {
         if (payload.connected_devices_count !== undefined && typeof updateConnectedDeviceBadgeUI === 'function') {
           updateConnectedDeviceBadgeUI(payload.connected_devices_count);
         }
-        if (payload.type === 'print_job' && payload.print_order) {
-          const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
-          // Bỏ qua nếu chính thiết bị này phát ra lệnh in (tránh máy POS tự in lại lần 2)
-          if (myDevId && payload.sender_device_id && payload.sender_device_id === myDevId) {
-            return;
+        // TỰ ĐỘNG GỌI RAWBT KHI CÓ BÀN MỚI ĐƯỢC ĐẶT (BẤT KỂ ĐẶT QUA MÁY POS HAY TRÊN THIẾT BỊ KHÁC)
+        const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+        const isFromOtherDevice = !myDevId || !payload.sender_device_id || payload.sender_device_id !== myDevId;
+
+        if (isRawBtStation()) {
+          // 1. Trường hợp có bàn mới được đặt hoặc cập nhật món
+          if ((payload.type === 'table_order_updated' || payload.type === 'table_order_placed') && payload.table_name && payload.order_data) {
+            if (isFromOtherDevice) {
+              console.log('Máy POS nhận đơn mới từ thiết bị khác:', payload.table_name);
+              playOrderNotificationSound();
+              const senderTag = payload.sender_name ? ` (${payload.sender_name})` : '';
+              showToast(`🔔 Bàn ${payload.table_name} vừa đặt món${senderTag}! Đang in qua RawBT...`, 'success');
+
+              const printOrder = formatTableOrderForPrint(payload.table_name, payload.order_data);
+              if (printOrder && printOrder.items && printOrder.items.length > 0) {
+                // TỰ ĐỘNG GỌI RAWBT IN NGAY LẬP TỨC
+                callRawBtPrint(printOrder);
+                showRemotePrintAlert(printOrder, payload.sender_name);
+              }
+            }
           }
-          // Chỉ Máy POS / Trạm in quầy mới thực thi lệnh in từ xa
-          if (isPrintStationDevice()) {
-            console.log('Máy POS quầy nhận lệnh in từ xa:', payload.print_order);
-            playOrderNotificationSound();
-            const senderTag = payload.sender_name ? ` (${payload.sender_name})` : '';
-            showToast(`🔔 Đơn mới từ ${payload.print_order.table_name || 'Bàn'}${senderTag}!`, 'success');
 
-            // Hiển thị Banner 1-chạm nổi bật trên màn hình Máy POS (để bấm in ngay nếu Android chặn intent chạy ngầm)
-            showRemotePrintAlert(payload.print_order, payload.sender_name);
+          // 2. Trường hợp có bàn thanh toán thành công từ thiết bị khác
+          if (payload.type === 'table_order_cleared' && payload.checkout_order) {
+            if (isFromOtherDevice) {
+              console.log('Máy POS nhận lệnh in thanh toán từ thiết bị khác:', payload.checkout_order.table_name);
+              playOrderNotificationSound();
+              showToast(`🔔 Bàn ${payload.checkout_order.table_name} đã thanh toán! Đang in hóa đơn...`, 'success');
+              callRawBtPrint(payload.checkout_order);
+              showRemotePrintAlert(payload.checkout_order, payload.sender_name);
+            }
+          }
 
-            // Tự động gọi in nếu bật tự động in
-            if (isAutoPrintEnabled()) {
-              if (Date.now() - (window._lastPrintTimestamp || 0) < 1500) return;
-              window._lastPrintTimestamp = Date.now();
-              printReceipt(payload.print_order, false);
+          // 3. Nhận yêu cầu in thủ công (In bill tạm tính / in lại)
+          if (payload.type === 'print_job' && payload.print_order) {
+            if (isFromOtherDevice) {
+              console.log('Máy POS quầy nhận yêu cầu in thủ công:', payload.print_order);
+              playOrderNotificationSound();
+              const senderTag = payload.sender_name ? ` (${payload.sender_name})` : '';
+              showToast(`🔔 Yêu cầu in từ ${payload.sender_name || 'nhân viên'}: ${payload.print_order.table_name || 'Bàn'}${senderTag}!`, 'success');
+              callRawBtPrint(payload.print_order);
+              showRemotePrintAlert(payload.print_order, payload.sender_name);
             }
           }
         }
@@ -1393,15 +1414,28 @@ function executePrintKitchenSlip() {
   closeKitchenConfirmModal();
   closeTableCartDrawer();
 
-  // 2. KÍCH HOẠT IN PHIẾU BÁO BẾP (Máy POS quầy in trực tiếp, điện thoại nhân viên gửi về quầy)
-  executeOrderPrint(orderForPrint, { isManual: true, isKitchen: true });
+  // 2. KÍCH HOẠT IN PHIẾU BÁO BẾP:
+  if (isRawBtStation()) {
+    // Nếu đặt ngay trên Máy POS quầy -> Tự động gọi RawBT in ngay!
+    callRawBtPrint(orderForPrint);
+  } else if (bluetoothCharacteristic) {
+    printEscPosBluetooth(orderForPrint);
+  } else {
+    // Điện thoại nhân viên: KHÔNG gọi RawBT cục bộ để tránh lỗi trình duyệt
+    showToast(`Đã gửi đơn ${currentTable} thành công!`, 'success');
+  }
 
   // 3. ĐỒNG BỘ NỀN LÊN SERVER (NON-BLOCKING)
+  const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+  const staffName = (state.currentUser && state.currentUser.name) || (state.user && state.user.name) || localStorage.getItem('pos_staff_name') || 'Nhân viên';
+
   api('/api/tables/order', {
     method: 'POST',
     body: JSON.stringify({
       table_name: currentTable,
       order_data: tableOrder,
+      sender_device_id: myDevId,
+      sender_name: staffName,
       check_conflict: true
     })
   }).catch(err => {
@@ -1521,7 +1555,11 @@ async function resolveConflictMerge() {
         total: item.price * item.quantity
       }))
     };
-    executeOrderPrint(orderForPrint, { isKitchen: true });
+    if (isRawBtStation()) {
+      callRawBtPrint(orderForPrint);
+    } else if (bluetoothCharacteristic) {
+      printEscPosBluetooth(orderForPrint);
+    }
 
     showToast(`Đã gộp món vào ${tableName} và in phiếu báo bếp thành công!`);
     showTableFloor();
@@ -1621,7 +1659,11 @@ async function selectConflictNewTable(newTable) {
       total: item.price * item.quantity
     }))
   };
-  executeOrderPrint(orderForPrint, { isKitchen: true });
+  if (isRawBtStation()) {
+    callRawBtPrint(orderForPrint);
+  } else if (bluetoothCharacteristic) {
+    printEscPosBluetooth(orderForPrint);
+  }
 
   showToast(`Đã chuyển toàn bộ món sang ${newTable} và in phiếu bếp!`);
   state.currentTable = newTable;
@@ -1695,7 +1737,9 @@ async function completeCheckoutOrder() {
       raw_table_name: currentTable,
       note: note,
       payment_method: 'cash',
-      cash_given: totalAmount
+      cash_given: totalAmount,
+      sender_device_id: typeof getDeviceId === 'function' ? getDeviceId() : null,
+      sender_name: state.currentUser ? state.currentUser.name : (localStorage.getItem('pos_staff_name') || 'Nhân viên')
     };
 
     const newOrder = await api('/api/orders', {
@@ -1703,7 +1747,7 @@ async function completeCheckoutOrder() {
       body: JSON.stringify(payload)
     });
 
-    // In hóa đơn thanh toán cho khách nếu bật tự động in
+    // In hóa đơn thanh toán cho khách
     const orderForPrint = {
       order_code: newOrder?.order?.order_code || tableOrder?.orderCode || `BILL-${Date.now().toString().slice(-4)}`,
       created_at: new Date().toISOString(),
@@ -1722,8 +1766,10 @@ async function completeCheckoutOrder() {
         total: item.price * item.quantity
       }))
     };
-    if (isAutoPrintEnabled() || bluetoothCharacteristic) {
-      executeOrderPrint(orderForPrint, { isManual: false, isCheckout: true });
+    if (isRawBtStation()) {
+      callRawBtPrint(orderForPrint);
+    } else if (bluetoothCharacteristic) {
+      printEscPosBluetooth(orderForPrint);
     }
 
     // XÓA ĐƠN CỦA BÀN VÀ TRẢ BÀN VỀ TRẠNG THÁI TRỐNG TRÊN CẢ CLIENT VÀ SERVER
@@ -1779,7 +1825,13 @@ function printCheckoutReceipt() {
     }))
   };
 
-  executeOrderPrint(orderForPrint, { isManual: true, isCheckout: true });
+  if (isRawBtStation()) {
+    callRawBtPrint(orderForPrint);
+  } else if (bluetoothCharacteristic) {
+    printEscPosBluetooth(orderForPrint);
+  } else {
+    sendPrintJobToServer(orderForPrint);
+  }
 }
 
 // Compatibility stubs
@@ -1794,10 +1846,32 @@ function formatReceiptNum(val) {
   return num.toLocaleString('en-US').replace(/,/g, '.');
 }
 
-function generateReceiptHtml(order) {
+function generateReceiptHtml(order, options = {}) {
   const storeName = state.settings.store_name || 'Bún mắm miền Tây';
   const storeAddress = state.settings.store_address || '324 Bạch Mai';
   const footerNotice = state.settings.receipt_footer || 'Quý khách vui lòng mang phiếu này ra quầy khi thanh toán';
+
+  const isRaster = Boolean(options.isRaster);
+  const is58mm = Boolean(options.is58mm);
+
+  // Kích thước font chữ tự động tương thích:
+  // Nếu là in raster 576 dots (80mm) -> Tự động dùng font to rõ nét, tràn viền giấy
+  // Nếu là in laptop qua hộp thoại in Chrome -> Dùng kích thước CSS chuẩn như mẫu gốc
+  const titleSize = isRaster ? (is58mm ? '21px' : '28px') : '18px';
+  const tableBoxSize = isRaster ? (is58mm ? '28px' : '36px') : '23px';
+  const tableBoxBorder = isRaster ? (is58mm ? '2.5px dashed #000' : '3px dashed #000') : '2px dashed #000';
+  const tableBoxPadding = isRaster ? '8px 4px' : '6px 4px';
+  const metaSize = isRaster ? (is58mm ? '15px' : '19px') : '13px';
+  const thSize = isRaster ? (is58mm ? '15px' : '19px') : '13px';
+  const itemSize = isRaster ? (is58mm ? '16px' : '20px') : '13.5px';
+  const summarySize = isRaster ? (is58mm ? '16px' : '20px') : '13.5px';
+  const totalSize = isRaster ? (is58mm ? '22px' : '28px') : '16px';
+  const paymentSize = isRaster ? (is58mm ? '15px' : '19px') : '13px';
+  const storeNameSize = isRaster ? (is58mm ? '18px' : '24px') : '15px';
+  const storeAddrSize = isRaster ? (is58mm ? '15px' : '19px') : '12.5px';
+  const footerNoticeSize = isRaster ? (is58mm ? '15px' : '18px') : '12.5px';
+  const paddingCell = isRaster ? '7px 3px' : '5px 2px';
+  const paddingCellSub = isRaster ? '7px 2px' : '5px 1px';
 
   // Xác định hình thức: Mang về hay Tại chỗ
   let orderSource = order.source;
@@ -1833,10 +1907,10 @@ function generateReceiptHtml(order) {
     const itemName = item.product_name || item.name || '';
     return `
       <tr>
-        <td style="text-align: left; vertical-align: top; padding: 5px 2px; word-break: break-word; font-size: 13.5px;">${itemName}</td>
-        <td style="text-align: center; vertical-align: top; padding: 5px 1px; font-size: 13.5px;">${qty}</td>
-        <td style="text-align: right; vertical-align: top; padding: 5px 1px; white-space: nowrap; font-size: 13.5px;">${formatReceiptNum(price)}</td>
-        <td style="text-align: right; vertical-align: top; padding: 5px 1px; white-space: nowrap; font-size: 13.5px;">${formatReceiptNum(total)}</td>
+        <td style="text-align: left; vertical-align: top; padding: ${paddingCell}; word-break: break-word; font-size: ${itemSize};">${itemName}</td>
+        <td style="text-align: center; vertical-align: top; padding: ${paddingCellSub}; font-size: ${itemSize};">${qty}</td>
+        <td style="text-align: right; vertical-align: top; padding: ${paddingCellSub}; white-space: nowrap; font-size: ${itemSize};">${formatReceiptNum(price)}</td>
+        <td style="text-align: right; vertical-align: top; padding: ${paddingCellSub}; white-space: nowrap; font-size: ${itemSize};">${formatReceiptNum(total)}</td>
       </tr>
     `;
   }).join('');
@@ -1852,30 +1926,30 @@ function generateReceiptHtml(order) {
   const paymentMethodLabel = isChuyenKhoan ? 'Thanh toán chuyển khoản' : 'Thanh toán tiền mặt';
 
   return `
-    <div class="receipt-title" style="font-size: 18px; font-weight: 900; text-align: center; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">
+    <div class="receipt-title" style="font-size: ${titleSize}; font-weight: 900; text-align: center; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">
       HÓA ĐƠN THANH TOÁN
     </div>
 
     <div class="receipt-meta" style="margin-bottom: 6px; line-height: 1.4;">
-      <div style="border: 2px dashed #000; padding: 6px 4px; margin: 5px 0 7px 0; text-align: center; border-radius: 4px;">
-        <div style="font-size: 23px; font-weight: 900; letter-spacing: 0.5px; line-height: 1.25;">
+      <div style="border: ${tableBoxBorder}; padding: ${tableBoxPadding}; margin: 5px 0 7px 0; text-align: center; border-radius: 4px;">
+        <div style="font-size: ${tableBoxSize}; font-weight: 900; letter-spacing: 0.5px; line-height: 1.25;">
           ${tableDisplay} - ${sourceLabel}
         </div>
       </div>
-      <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 13px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; font-size: ${metaSize};">
         <span><strong>Giờ vào:</strong> ${timeStr}</span>
         <span><strong>Ngày:</strong> ${dateStr}</span>
       </div>
-      ${order.note ? `<div style="margin-top: 4px; font-size: 13px;"><strong>Ghi chú:</strong> ${order.note}</div>` : ''}
+      ${order.note ? `<div style="margin-top: 4px; font-size: ${metaSize};"><strong>Ghi chú:</strong> ${order.note}</div>` : ''}
     </div>
 
     <table class="receipt-table" style="width: 100%; border-collapse: collapse; margin: 6px 0;">
       <thead>
-        <tr style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-size: 13px;">
-          <th style="width: 48%; text-align: left; padding: 5px 2px; border-right: 1px solid #000; font-weight: bold;">Tên món</th>
-          <th style="width: 14%; text-align: center; padding: 5px 1px; border-right: 1px solid #000; font-weight: bold;">SL</th>
-          <th style="width: 19%; text-align: right; padding: 5px 1px; border-right: 1px solid #000; font-weight: bold;">Đơn giá</th>
-          <th style="width: 19%; text-align: right; padding: 5px 1px; font-weight: bold;">Thành tiền</th>
+        <tr style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-size: ${thSize};">
+          <th style="width: 48%; text-align: left; padding: ${paddingCell}; border-right: 1px solid #000; font-weight: bold;">Tên món</th>
+          <th style="width: 14%; text-align: center; padding: ${paddingCellSub}; border-right: 1px solid #000; font-weight: bold;">SL</th>
+          <th style="width: 19%; text-align: right; padding: ${paddingCellSub}; border-right: 1px solid #000; font-weight: bold;">Đơn giá</th>
+          <th style="width: 19%; text-align: right; padding: ${paddingCellSub}; font-weight: bold;">Thành tiền</th>
         </tr>
       </thead>
       <tbody>
@@ -1885,31 +1959,31 @@ function generateReceiptHtml(order) {
 
     <div class="receipt-divider" style="border-bottom: 1px dashed #000; margin: 5px 0 7px 0;"></div>
 
-    <table class="receipt-summary" style="width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 2px; font-weight: bold;">
+    <table class="receipt-summary" style="width: 100%; border-collapse: collapse; font-size: ${summarySize}; margin-top: 2px; font-weight: bold;">
       <tr style="font-weight: bold;">
-        <td style="padding: 2.5px 0; font-weight: bold;">Thành tiền:</td>
-        <td style="padding: 2.5px 0; text-align: right; font-weight: bold;">${formatReceiptNum(subtotal)} đ</td>
+        <td style="padding: 3px 0; font-weight: bold;">Thành tiền:</td>
+        <td style="padding: 3px 0; text-align: right; font-weight: bold;">${formatReceiptNum(subtotal)} đ</td>
       </tr>
       ${discount > 0 ? `
       <tr style="font-weight: bold;">
-        <td style="padding: 2.5px 0; font-weight: bold;">Giảm giá:</td>
-        <td style="padding: 2.5px 0; text-align: right; font-weight: bold;">-${formatReceiptNum(discount)} đ</td>
+        <td style="padding: 3px 0; font-weight: bold;">Giảm giá:</td>
+        <td style="padding: 3px 0; text-align: right; font-weight: bold;">-${formatReceiptNum(discount)} đ</td>
       </tr>
       ` : ''}
-      <tr class="receipt-total" style="font-size: 16px; font-weight: 900;">
-        <td style="padding: 4px 0; font-weight: 900;">Tổng tiền:</td>
-        <td style="padding: 4px 0; text-align: right; font-weight: 900;">${formatReceiptNum(finalTotal)} đ</td>
+      <tr class="receipt-total" style="font-size: ${totalSize}; font-weight: 900;">
+        <td style="padding: 5px 0; font-weight: 900;">Tổng tiền:</td>
+        <td style="padding: 5px 0; text-align: right; font-weight: 900;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
-      <tr class="receipt-payment-row" style="font-weight: normal; font-size: 13px; color: #000000;">
-        <td style="padding: 2px 0; font-weight: normal; font-size: 13px; color: #000000;">+ ${paymentMethodLabel}</td>
-        <td style="padding: 2px 0; text-align: right; font-weight: normal; font-size: 13px; color: #000000;">${formatReceiptNum(finalTotal)} đ</td>
+      <tr class="receipt-payment-row" style="font-weight: normal; font-size: ${paymentSize}; color: #000000;">
+        <td style="padding: 3px 0; font-weight: normal; font-size: ${paymentSize}; color: #000000;">+ ${paymentMethodLabel}</td>
+        <td style="padding: 3px 0; text-align: right; font-weight: normal; font-size: ${paymentSize}; color: #000000;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
     </table>
 
-    <div class="receipt-footer" style="text-align: center; margin-top: 16px; font-size: 12.5px; line-height: 1.45;">
-      <div style="font-weight: bold; font-size: 15px; margin-bottom: 3px;">${storeName}</div>
+    <div class="receipt-footer" style="text-align: center; margin-top: 16px; font-size: ${storeAddrSize}; line-height: 1.45;">
+      <div style="font-weight: bold; font-size: ${storeNameSize}; margin-bottom: 3px;">${storeName}</div>
       <div style="margin-bottom: 8px;">Địa chỉ: ${storeAddress}</div>
-      <div style="margin-top: 6px; font-weight: bold;">${footerNotice}</div>
+      <div style="margin-top: 6px; font-weight: bold; font-size: ${footerNoticeSize};">${footerNotice}</div>
     </div>
   `;
 }
@@ -2253,39 +2327,97 @@ function dispatchRawBtIntent(targetUrl, fallbackUrl) {
   }
 }
 
+function convertCanvasToEscPosRaster(canvas, targetDots = 576) {
+  const width = canvas.width;
+  const height = canvas.height;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.getImageData(0, 0, width, height);
+  const data = imgData.data;
+
+  const widthInBytes = Math.ceil(targetDots / 8);
+  const chunkHeight = 120;
+  const chunks = [];
+
+  // Khởi tạo máy in và đặt giãn dòng = 0 để in các khối raster liền mạch
+  chunks.push(new Uint8Array([0x1B, 0x40]));
+  chunks.push(new Uint8Array([0x1B, 0x33, 0x00]));
+
+  for (let startY = 0; startY < height; startY += chunkHeight) {
+    const currentH = Math.min(chunkHeight, height - startY);
+    const header = [
+      0x1D, 0x76, 0x30, 0x00, // Lệnh ESC/POS GS v 0 0: In raster bit image
+      widthInBytes & 0xFF,
+      (widthInBytes >> 8) & 0xFF,
+      currentH & 0xFF,
+      (currentH >> 8) & 0xFF
+    ];
+    const buf = new Uint8Array(header.length + (widthInBytes * currentH));
+    buf.set(header, 0);
+    let offset = header.length;
+
+    for (let y = 0; y < currentH; y++) {
+      const realY = startY + y;
+      for (let b = 0; b < widthInBytes; b++) {
+        let byteVal = 0;
+        for (let bit = 0; bit < 8; bit++) {
+          const x = b * 8 + bit;
+          if (x < width) {
+            const idx = (realY * width + x) * 4;
+            const r = data[idx];
+            const g = data[idx + 1];
+            const bVal = data[idx + 2];
+            const a = data[idx + 3];
+            // Điểm tối hơn 190 (chữ, đường kẻ hoặc khung nét đứt) -> kim in nhiệt đen
+            const lum = a < 128 ? 255 : (0.299 * r + 0.587 * g + 0.114 * bVal);
+            if (lum < 190) {
+              byteVal |= (1 << (7 - bit));
+            }
+          }
+        }
+        buf[offset++] = byteVal;
+      }
+    }
+    chunks.push(buf);
+  }
+
+  // Khôi phục khoảng cách dòng, cuộn giấy 4 dòng và kích hoạt lệnh CẮT GIẤY TỰ ĐỘNG
+  const footer = new Uint8Array([
+    0x1B, 0x32, // Trả lại khoảng cách dòng mặc định
+    0x0A, 0x0A, 0x0A, 0x0A, // Cuộn 4 dòng
+    0x1B, 0x64, 0x04, // ESC d 4: Cuộn giấy qua mép dao cắt
+    0x1D, 0x56, 0x01, // GS V 1: Lệnh cắt giấy bán phần
+    0x1D, 0x56, 0x00, // GS V 0: Lệnh cắt giấy toàn phần
+    0x1D, 0x56, 0x42, 0x00 // GS V B 0: Cuộn và cắt chuẩn EPSON/Xprinter
+  ]);
+  chunks.push(footer);
+
+  let totalLen = 0;
+  for (let i = 0; i < chunks.length; i++) totalLen += chunks[i].length;
+  const merged = new Uint8Array(totalLen);
+  let pos = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    merged.set(chunks[i], pos);
+    pos += chunks[i].length;
+  }
+  return merged;
+}
+
 async function printViaRawBt(order) {
   try {
-    // Nếu người dùng chủ động chọn chế độ văn bản ESC/POS siêu tốc
-    const useBitmapForm = localStorage.getItem('pos_print_accents') !== '0';
-
-    if (!useBitmapForm) {
-      showToast('Đang gửi lệnh ESC/POS tới RawBT...', 'info');
-      const base64Data = generateEscPosBase64(order);
-      if (!base64Data) throw new Error('Không thể tạo dữ liệu ESC/POS');
-
-      const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
-      const targetUrl = isChrome
-        ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
-        : 'rawbt:base64,' + base64Data;
-      dispatchRawBtIntent(targetUrl, 'rawbt:base64,' + base64Data);
-      return true;
-    }
-
-    // MẶC ĐỊNH: Form hóa đơn chuẩn y hệt trên Chrome Laptop (Kết xuất Canvas PNG sắc nét rồi gửi RawBT in trực tiếp)
     showToast('Đang kết xuất hóa đơn gửi RawBT...', 'info');
 
-    // 1. Đảm bảo html2canvas đã tải
+    // 1. Đảm bảo thư viện html2canvas đã sẵn sàng
     if (typeof html2canvas === 'undefined') {
       await loadHtml2CanvasScript();
     }
 
-    // 2. Chuẩn bị khổ in
+    // 2. Xác định khổ in: 80mm = 576 dots (tràn viền 72mm giấy), 58mm = 384 dots (tràn viền 48mm giấy)
     const paperWidth = localStorage.getItem('pos_paper_width') || '80mm';
     const is58mm = paperWidth === '58mm';
-    const renderWidthPx = is58mm ? 280 : 360;
-    const canvasScale = is58mm ? 1.37 : 1.6; // Đạt đúng 576 dots chuẩn đầu in 80mm hoặc 384 dots cho 58mm
+    const targetDots = is58mm ? 384 : 576;
+    const renderWidthPx = targetDots;
 
-    // 3. Tạo khung chứa DOM hóa đơn (y hệt mẫu hóa đơn trên laptop)
+    // 3. Tạo khung chứa DOM hóa đơn 1:1 chuẩn đầu in nhiệt (To rõ, tràn giấy)
     const hiddenBox = document.createElement('div');
     hiddenBox.id = 'rawbt-render-container';
     hiddenBox.style.cssText = `
@@ -2294,25 +2426,24 @@ async function printViaRawBt(order) {
       top: 0;
       width: ${renderWidthPx}px;
       max-width: ${renderWidthPx}px;
-      padding: 10px 8px 18px 8px;
+      padding: 6px 4px 18px 4px;
       background: #ffffff !important;
       color: #000000 !important;
       font-family: 'Courier New', Courier, monospace, sans-serif !important;
-      font-size: 13px !important;
       line-height: 1.35 !important;
       box-sizing: border-box !important;
       z-index: -9999;
       pointer-events: none;
     `;
-    hiddenBox.innerHTML = generateReceiptHtml(order);
+    hiddenBox.innerHTML = generateReceiptHtml(order, { isRaster: true, is58mm: is58mm });
     document.body.appendChild(hiddenBox);
 
     // Chờ 60ms để DOM ổn định bố cục font
     await new Promise(r => setTimeout(r, 60));
 
-    // 4. Kết xuất thành Canvas ảnh chất lượng cao
+    // 4. Kết xuất thành Canvas 1:1 với độ phân giải đầu in nhiệt (576 dots)
     const canvas = await html2canvas(hiddenBox, {
-      scale: canvasScale,
+      scale: 1.0,
       backgroundColor: '#ffffff',
       logging: false,
       useCORS: true,
@@ -2324,20 +2455,23 @@ async function printViaRawBt(order) {
       if (hiddenBox.parentNode) hiddenBox.parentNode.removeChild(hiddenBox);
     } catch (e) {}
 
-    // 5. Chuyển sang Data URL PNG
-    const dataUrl = canvas.toDataURL('image/png');
+    // 5. Chuyển đổi Canvas trực tiếp thành luồng lệnh ESC/POS Raster (GS v 0) + CẮT GIẤY TỰ ĐỘNG
+    const escPosBytes = convertCanvasToEscPosRaster(canvas, targetDots);
+    const base64Data = uint8ArrayToBase64(escPosBytes);
 
-    // 6. Gửi tới RawBT Print Service
+    if (!base64Data) throw new Error('Không thể tạo dữ liệu in ESC/POS');
+
+    // 6. Gửi qua RawBT bằng intent / scheme base64 chuẩn
     const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
     const targetUrl = isChrome
-      ? `intent:${dataUrl}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end;`
-      : `rawbt:${dataUrl}`;
+      ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
+      : 'rawbt:base64,' + base64Data;
 
-    dispatchRawBtIntent(targetUrl, 'rawbt:' + dataUrl);
-    showToast('Đã gửi hóa đơn ảnh sắc nét tới máy in RawBT!', 'success');
+    dispatchRawBtIntent(targetUrl, 'rawbt:base64,' + base64Data);
+    showToast('Đã gửi hóa đơn in & cắt giấy qua RawBT!', 'success');
     return true;
   } catch (err) {
-    console.error('Lỗi khi in ảnh qua RawBT:', err);
+    console.error('Lỗi khi in qua RawBT:', err);
     showToast('Lỗi in RawBT: ' + (err.message || err), 'error');
     executeWindowPrint(order, true);
     return false;

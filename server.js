@@ -972,6 +972,24 @@ app.post('/api/orders', requireAuth, (req, res) => {
           broadcastTableUpdate({
             type: 'table_order_cleared',
             table_name: cleanTableName || rawTable,
+            checkout_order: {
+              order_code: orderCode,
+              table_name: cleanTableName || rawTable,
+              total,
+              subtotal,
+              discount: discountAmount,
+              payment_method,
+              cashier_name: cashierName,
+              created_at: new Date().toISOString(),
+              items: verifiedItems.map(it => ({
+                product_name: it.product_name,
+                quantity: it.quantity,
+                price: it.price,
+                total: it.total
+              }))
+            },
+            sender_device_id: req.body.sender_device_id || null,
+            sender_name: req.body.sender_name || cashierName,
             all_table_orders: getAllActiveTableOrders()
           });
           saveDataBackup(db);
@@ -1587,6 +1605,8 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
       type: 'table_order_updated',
       table_name,
       order_data: finalOrder,
+      sender_device_id: req.body.sender_device_id || null,
+      sender_name: req.body.sender_name || (req.user && req.user.name) || 'Nhân viên',
       all_table_orders: allOrders
     });
 
