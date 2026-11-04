@@ -83,10 +83,16 @@
         </button>
       </div>
 
-      <button onclick="promptAddCustomTable()" class="text-xs sm:text-sm font-bold text-emerald-600 hover:text-emerald-700 pb-2.5 flex items-center space-x-1">
-        <i class="fa-solid fa-plus text-xs"></i>
-        <span>Thêm bàn</span>
-      </button>
+      <div class="flex items-center space-x-2 pb-2.5">
+        <button onclick="clearAllTables()" class="text-xs sm:text-sm font-bold text-rose-600 hover:text-rose-700 flex items-center space-x-1 px-2 py-0.5 rounded-lg hover:bg-rose-50 transition-colors" title="Làm trống toàn bộ các bàn">
+          <i class="fa-solid fa-broom text-xs"></i>
+          <span>Dọn tất cả bàn</span>
+        </button>
+        <button onclick="promptAddCustomTable()" class="text-xs sm:text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center space-x-1 px-2 py-0.5 rounded-lg hover:bg-emerald-50 transition-colors">
+          <i class="fa-solid fa-plus text-xs"></i>
+          <span>Thêm bàn</span>
+        </button>
+      </div>
     </div>
 
     <!-- Sơ Đồ Bàn - Lưới 3 cột trên mobile (Ảnh 1) -->

@@ -44,6 +44,18 @@ function queueOfflineOrder(tableName, orderData) {
   updateSyncIndicator(false);
 }
 
+function clearOfflineQueueForTable(tableName) {
+  try {
+    const queue = getOfflineQueue();
+    const cleanTarget = (tableName || '').replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+    const filtered = queue.filter(q => {
+      const qClean = (q.tableName || '').replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+      return qClean !== cleanTarget && (q.tableName || '') !== tableName;
+    });
+    saveOfflineQueue(filtered);
+  } catch (e) {}
+}
+
 let isSyncingOffline = false;
 async function syncOfflineQueue() {
   if (isSyncingOffline || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
@@ -130,6 +142,7 @@ function syncTableOrderToServer(tableName, immediate = false) {
 
 async function deleteTableOrderOnServer(tableName) {
   try {
+    clearOfflineQueueForTable(tableName);
     await api('/api/tables/order/' + encodeURIComponent(tableName), {
       method: 'DELETE'
     });
@@ -151,7 +164,7 @@ async function fetchAndApplyTableSync(silent = false) {
       state.tableList = data.tables;
       localStorage.setItem('pos_table_list', JSON.stringify(state.tableList));
     }
-    if (data && data.tableOrders) {
+    if (data && data.tableOrders !== undefined) {
       applyIncomingTableOrders(data.tableOrders);
     }
     updateSyncIndicator(true);
@@ -165,25 +178,7 @@ function applyIncomingTableOrders(newTableOrders) {
   const incoming = newTableOrders || {};
   const currentLocal = state.tableOrders || {};
 
-  // ============================================================
-  // TỰ ĐỘNG BẢO TOÀN DỮ LIỆU BÀN ĐANG PHỤC VỤ (ZERO DATA LOSS)
-  // ============================================================
-  const serverKeys = Object.keys(incoming);
-  const localTablesWithItems = Object.keys(currentLocal).filter(k => {
-    return currentLocal[k] && Array.isArray(currentLocal[k].items) && currentLocal[k].items.length > 0;
-  });
-
-  // 1. Khi máy chủ vừa khởi động lại (Render deploy mới) hoặc trả về rỗng,
-  // tuyệt đối KHÔNG đè rỗng lên các bàn máy khách đang phục vụ:
-  if (serverKeys.length === 0 && localTablesWithItems.length > 0) {
-    console.log('Máy chủ đang trống, tự động phục hồi các bàn đang mở lên máy chủ:', localTablesWithItems);
-    localTablesWithItems.forEach(tName => {
-      syncTableOrderToServer(tName, true);
-    });
-    return;
-  }
-
-  // 2. Trộn thông minh (Merge):
+  // Dữ liệu từ Server là nguồn chuẩn duy nhất (Source of Truth)
   const mergedOrders = { ...incoming };
   const currentTable = state.currentTable;
   const isActivelyEditingCurrentTable = (
@@ -192,18 +187,10 @@ function applyIncomingTableOrders(newTableOrders) {
     (syncDebounceTimers[currentTable] || (Date.now() - (window._lastDishTapTime || 0) < 3500))
   );
 
-  // Bảo lưu bàn hiện tại người dùng đang bấm nút Stepper
+  // Chỉ bảo lưu bàn hiện tại nếu người dùng tại thiết bị này đang trực tiếp bấm thêm/bớt món trên màn hình gọi món
   if (isActivelyEditingCurrentTable && currentLocal[currentTable]) {
     mergedOrders[currentTable] = currentLocal[currentTable];
   }
-
-  // Tự động đẩy lên server nếu có bàn có món ở máy khách mà server tạm thời chưa có
-  localTablesWithItems.forEach(tName => {
-    if (!mergedOrders[tName] && currentLocal[tName]) {
-      mergedOrders[tName] = currentLocal[tName];
-      syncTableOrderToServer(tName, true);
-    }
-  });
 
   state.tableOrders = mergedOrders;
   localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
@@ -1125,6 +1112,26 @@ function clearCurrentTableOrder() {
   updateTableBottomBar();
   closeTableCartDrawer();
   renderTableGrid();
+}
+
+async function clearAllTables() {
+  if (!confirm('Bạn có chắc chắn muốn LÀM TRỐNG TOÀN BỘ CÁC BÀN đang mở?')) return;
+  try {
+    showToast('Đang làm trống tất cả các bàn...', 'info');
+    await api('/api/tables/orders/clear-all', {
+      method: 'DELETE'
+    });
+    state.tableOrders = {};
+    localStorage.setItem('pos_table_orders', JSON.stringify({}));
+    localStorage.removeItem('pos_offline_orders');
+    renderTableGrid();
+    if (state.activeScreen === 'order') {
+      showTableFloor();
+    }
+    showToast('Đã làm trống toàn bộ các bàn thành công!', 'success');
+  } catch (err) {
+    showToast('Lỗi khi làm trống bàn: ' + err.message, 'error');
+  }
 }
 
 // Menu 3 chấm bàn

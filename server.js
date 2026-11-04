@@ -1599,9 +1599,14 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
 // 4. DELETE /api/tables/order/:tableName: Hủy hoặc làm trống bàn (Đồng bộ tức thì)
 app.delete('/api/tables/order/:tableName', requireAuth, (req, res) => {
   try {
-    const tableName = decodeURIComponent(req.params.tableName);
+    const tableName = decodeURIComponent(req.params.tableName).trim();
     const cleanTableName = tableName.replace(/\s*\([^)]*\)\s*$/, '').trim();
-    db.prepare('DELETE FROM active_table_orders WHERE table_name = ? OR table_name = ?').run(tableName, cleanTableName);
+    db.prepare(`
+      DELETE FROM active_table_orders 
+      WHERE table_name = ? 
+         OR table_name = ? 
+         OR table_name LIKE ?
+    `).run(tableName, cleanTableName, cleanTableName + ' (%)');
 
     const allOrders = getAllActiveTableOrders();
     saveDataBackup(db);
@@ -1612,6 +1617,23 @@ app.delete('/api/tables/order/:tableName', requireAuth, (req, res) => {
     });
 
     res.json({ success: true, table_name: cleanTableName || tableName });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4b. DELETE /api/tables/orders/clear-all: Làm trống tất cả các bàn
+app.delete('/api/tables/orders/clear-all', requireAuth, (req, res) => {
+  try {
+    db.prepare('DELETE FROM active_table_orders').run();
+
+    saveDataBackup(db);
+    broadcastTableUpdate({
+      type: 'all_tables_cleared',
+      all_table_orders: {}
+    });
+
+    res.json({ success: true, message: 'Đã làm trống tất cả các bàn thành công!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
