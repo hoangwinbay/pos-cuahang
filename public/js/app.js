@@ -1598,8 +1598,8 @@ async function openServerConfigModal() {
         if (tunnelInput) tunnelInput.value = info.tunnel_url || info.cloud_url || '';
 
         const targetUrl = info.tunnel_url || info.cloud_url || info.wifi_url;
-        if (qrImg && targetUrl) {
-          qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(targetUrl)}`;
+        if (targetUrl) {
+          renderQrCodeHelper('serverQrCanvasContainer', 'serverQrCodeImg', targetUrl, 160);
         }
       }
     } catch (e) {}
@@ -1614,6 +1614,46 @@ async function openServerConfigModal() {
 function closeServerConfigModal() {
   const modal = document.getElementById('modalServerConfig');
   if (modal) modal.classList.add('hidden');
+}
+
+// =============================================================
+// HELPER: TẠO MÃ QR OFFLINE BẰNG CANVAS (KHÔNG LO TRẮNG HÌNH)
+// =============================================================
+function renderQrCodeHelper(containerId, imgId, text, size = 200) {
+  const container = document.getElementById(containerId);
+  const imgEl = document.getElementById(imgId);
+
+  if (container && typeof QRCode !== 'undefined') {
+    container.innerHTML = '';
+    container.classList.remove('hidden');
+    if (imgEl) imgEl.classList.add('hidden');
+    try {
+      new QRCode(container, {
+        text: text,
+        width: size,
+        height: size,
+        colorDark: '#0f172a',
+        colorLight: '#ffffff',
+        correctLevel: (typeof QRCode.CorrectLevel !== 'undefined') ? QRCode.CorrectLevel.M : 0
+      });
+      const cvs = container.querySelector('canvas') || container.querySelector('img');
+      if (cvs) {
+        cvs.style.borderRadius = '12px';
+        cvs.style.maxWidth = '100%';
+        cvs.style.height = 'auto';
+        cvs.style.display = 'block';
+      }
+      return;
+    } catch (e) {
+      console.warn('QRCode JS render error, using image fallback:', e);
+    }
+  }
+
+  if (imgEl) {
+    if (container) container.classList.add('hidden');
+    imgEl.classList.remove('hidden');
+    imgEl.src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}`;
+  }
 }
 
 // =============================================================
@@ -1685,7 +1725,6 @@ function switchStaffQrNetwork(net) {
 function updateStaffQrView() {
   const tabWifi = document.getElementById('tabStaffQrWifi');
   const tabCloud = document.getElementById('tabStaffQrCloud');
-  const qrImg = document.getElementById('staffQrImg');
   const inputUrl = document.getElementById('staffQrUrlInput');
   const directLink = document.getElementById('staffQrDirectLink');
 
@@ -1694,19 +1733,18 @@ function updateStaffQrView() {
 
   if (tabWifi && tabCloud) {
     if (isWifi) {
-      tabWifi.className = 'py-2 rounded-lg bg-white shadow-xs text-emerald-700 font-bold transition-all';
-      tabCloud.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
+      tabWifi.className = 'py-1.5 rounded-lg bg-white shadow-2xs text-emerald-700 font-bold transition-all';
+      tabCloud.className = 'py-1.5 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
     } else {
-      tabCloud.className = 'py-2 rounded-lg bg-white shadow-xs text-emerald-700 font-bold transition-all';
-      tabWifi.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
+      tabCloud.className = 'py-1.5 rounded-lg bg-white shadow-2xs text-emerald-700 font-bold transition-all';
+      tabWifi.className = 'py-1.5 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
     }
   }
 
   if (inputUrl) inputUrl.value = targetUrl;
   if (directLink) directLink.href = targetUrl;
-  if (qrImg) {
-    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(targetUrl)}`;
-  }
+
+  renderQrCodeHelper('staffQrCanvasContainer', 'staffQrImg', targetUrl, 192);
 }
 
 // =============================================================
