@@ -1235,7 +1235,7 @@ function updateConnectedDeviceBadgeUI(count) {
   const badgeHeader = document.getElementById('headerDeviceCountDisplay');
   const drawerBadge = document.getElementById('drawerDeviceCountBadge');
   const modalBadge = document.getElementById('devicesOnlineCountText');
-  const tabDeviceBadge = document.getElementById('devicesOnlineCountBadge');
+  const tabDeviceBadge = document.getElementById('tabDevicesOnlineCountBadge') || document.getElementById('devicesOnlineCountBadge');
 
   const text = `${count || 1} ĐT`;
   const fullText = `${count || 1} Online`;
@@ -1346,18 +1346,12 @@ async function loadStaffAccounts(silent = false) {
 
     if (staffList.length === 0) {
       container.innerHTML = `
-        <div class="text-center py-8 px-4 text-slate-400 text-xs space-y-3">
-          <div class="w-12 h-12 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
-            <i class="fa-solid fa-user-plus"></i>
+        <div class="text-center py-10 px-4 text-slate-400 text-xs space-y-1.5">
+          <div class="w-10 h-10 mx-auto rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-users"></i>
           </div>
-          <div>
-            <p class="font-bold text-slate-700 text-sm">Chưa có nhân viên nào</p>
-            <p class="text-slate-400 mt-1 max-w-xs mx-auto">Chủ quán không cần tự tạo tài khoản. Bấm <b>"Tạo Mã QR"</b> để nhân viên quét điện thoại, nhập Tên & Số điện thoại là tài khoản tự động tạo và xuất hiện tại đây!</p>
-          </div>
-          <button onclick="openStaffQrModal()" class="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-xs transition-colors">
-            <i class="fa-solid fa-qrcode"></i>
-            <span>Tạo Mã QR Cho Nhân Viên</span>
-          </button>
+          <p class="font-bold text-slate-700 text-xs">Chưa có nhân viên</p>
+          <p class="text-[11px] text-slate-400">Bấm "Tạo mã QR" bên dưới để nhân viên quét vào gọi món</p>
         </div>
       `;
       return;

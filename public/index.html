@@ -1192,40 +1192,20 @@
           <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold shadow-2xs">
             <i class="fa-solid fa-mobile-screen-button"></i>
           </div>
-          <div>
-            <div class="flex items-center space-x-2">
-              <h3 class="font-black text-slate-800 text-base leading-tight">Quản Lý Thiết Bị & Nhân Viên</h3>
-              <span id="devicesOnlineCountBadge" class="bg-emerald-100 text-emerald-800 text-[11px] font-black px-2 py-0.5 rounded-full flex items-center">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mr-1"></span>
-                <span id="devicesOnlineCountText">1 Online</span>
-              </span>
-            </div>
-            <p class="text-[11px] text-slate-400">Các điện thoại nhân viên & máy tính đang kết nối đồng bộ</p>
+          <div class="flex items-center space-x-2">
+            <h3 class="font-bold text-slate-800 text-sm leading-tight">Thiết Bị & Nhân Viên</h3>
+            <span id="devicesOnlineCountBadge" class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mr-1"></span>
+              <span id="devicesOnlineCountText">1 Online</span>
+            </span>
           </div>
         </div>
         <button onclick="closeConnectedDevicesModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors">
-          <i class="fa-solid fa-xmark text-lg"></i>
+          <i class="fa-solid fa-xmark text-base"></i>
         </button>
       </div>
 
-      <!-- Banner thêm nhân viên tạo mã QR -->
-      <div class="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/50">
-        <div class="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-3.5 text-white flex items-center justify-between shadow-sm">
-          <div class="space-y-0.5">
-            <div class="font-black text-xs sm:text-sm flex items-center">
-              <i class="fa-solid fa-user-plus mr-1.5"></i>
-              Thêm Nhân Viên Gọi Món
-            </div>
-            <p class="text-[11px] text-emerald-100">Admin tạo mã QR để nhân viên quét điện thoại vào đặt món</p>
-          </div>
-          <button onclick="openStaffQrModal()" class="px-3.5 py-2 bg-white hover:bg-emerald-50 active:bg-emerald-100 text-emerald-800 font-black text-xs rounded-xl shadow-xs transition-colors shrink-0 flex items-center space-x-1.5">
-            <i class="fa-solid fa-qrcode text-emerald-600"></i>
-            <span>Tạo Mã QR</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Tabs chuyển đổi: 1. Nhân viên đã tạo | 2. Thiết bị đang kết nối -->
+      <!-- Tabs chuyển đổi: 1. Nhân viên | 2. Thiết bị -->
       <div class="px-5 pt-3 pb-0 border-b border-slate-100 flex items-center justify-between bg-white">
         <div class="flex items-center space-x-2 text-xs font-bold">
           <button 
@@ -1235,8 +1215,8 @@
             class="pb-2.5 border-b-2 border-emerald-600 text-emerald-700 flex items-center space-x-1.5 transition-all"
           >
             <i class="fa-solid fa-users text-xs"></i>
-            <span>Tài Khoản Nhân Viên</span>
-            <span id="staffAccountsCountBadge" class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-black">0</span>
+            <span>Nhân viên</span>
+            <span id="staffAccountsCountBadge" class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold">0</span>
           </button>
           <button 
             type="button" 
@@ -1245,8 +1225,8 @@
             class="pb-2.5 border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center space-x-1.5 transition-all"
           >
             <i class="fa-solid fa-satellite-dish text-xs"></i>
-            <span>Thiết Bị Kết Nối</span>
-            <span id="devicesOnlineCountBadge" class="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.2 rounded-full font-black">1 Online</span>
+            <span>Thiết bị</span>
+            <span id="tabDevicesOnlineCountBadge" class="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.2 rounded-full font-bold">1 Online</span>
           </button>
         </div>
 
@@ -1256,21 +1236,21 @@
         </button>
       </div>
 
-      <!-- Body 1: Danh sách Tài khoản nhân viên vừa tạo qua QR -->
+      <!-- Body 1: Danh sách Nhân viên -->
       <div id="staffAccountsContainer" class="p-4 sm:p-5 overflow-y-auto space-y-2.5 flex-1">
         <!-- Injected dynamically -->
       </div>
 
-      <!-- Body 2: Danh sách Thiết bị kết nối realtime (ẩn mặc định, chuyển qua tab 2) -->
+      <!-- Body 2: Danh sách Thiết bị kết nối (ẩn mặc định, chuyển qua tab 2) -->
       <div id="connectedDevicesListContainer" class="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1 hidden">
         <!-- Rendered dynamically -->
       </div>
 
-      <!-- Footer -->
-      <div class="p-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+      <!-- Footer: Duy nhất 1 nút tạo mã QR -->
+      <div class="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
         <button onclick="openStaffQrModal()" class="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-xl flex items-center space-x-1.5 shadow-sm transition-colors">
           <i class="fa-solid fa-qrcode"></i>
-          <span>Tạo Mã QR Thêm Nhân Viên</span>
+          <span>Tạo mã QR</span>
         </button>
         <button onclick="closeConnectedDevicesModal()" class="text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-4 py-2 rounded-xl transition-colors">
           Đóng
@@ -1291,8 +1271,8 @@
             <i class="fa-solid fa-qrcode"></i>
           </div>
           <div>
-            <h3 class="font-bold text-slate-800 text-sm leading-tight">Mã QR Thêm Nhân Viên</h3>
-            <p class="text-[11px] text-slate-400">Quét điện thoại để vào đặt món</p>
+            <h3 class="font-bold text-slate-800 text-sm leading-tight">Mã QR Nhân Viên</h3>
+            <p class="text-[11px] text-slate-400">Quét để vào gọi món</p>
           </div>
         </div>
         <button onclick="closeStaffQrModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors">
@@ -1300,7 +1280,7 @@
         </button>
       </div>
 
-      <!-- Bộ chọn mạng: Wi-Fi quán hoặc Internet/Cloud -->
+      <!-- Bộ chọn mạng: Wi-Fi hoặc 4G -->
       <div class="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold text-center">
         <button type="button" id="tabStaffQrWifi" onclick="switchStaffQrNetwork('wifi')" class="py-1.5 rounded-lg bg-white shadow-2xs text-emerald-700 font-bold transition-all">
           <i class="fa-solid fa-wifi mr-1"></i> Wi-Fi Quán
@@ -1317,11 +1297,11 @@
           <img 
             id="staffQrImg" 
             src="" 
-            alt="Mã QR Thêm Nhân Viên" 
+            alt="Mã QR" 
             class="hidden w-48 h-48 mx-auto object-contain"
           >
         </div>
-        <p class="text-[11px] text-slate-400 mt-2 font-medium">Dùng Camera iPhone / Android quét mã</p>
+        <p class="text-[11px] text-slate-400 mt-2 font-medium">Dùng Camera quét mã</p>
       </div>
 
       <!-- Đường dẫn & Nút sao chép -->
