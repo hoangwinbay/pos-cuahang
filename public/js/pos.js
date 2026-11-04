@@ -1855,23 +1855,23 @@ function generateReceiptHtml(order, options = {}) {
   const is58mm = Boolean(options.is58mm);
 
   // Kích thước font chữ tự động tương thích:
-  // Nếu là in raster 576 dots (80mm) -> Tự động dùng font to rõ nét, tràn viền giấy
+  // Nếu là in raster 576 dots (80mm) -> Dùng font to đậm rõ nét, tràn viền giấy nhiệt
   // Nếu là in laptop qua hộp thoại in Chrome -> Dùng kích thước CSS chuẩn như mẫu gốc
-  const titleSize = isRaster ? (is58mm ? '21px' : '28px') : '18px';
-  const tableBoxSize = isRaster ? (is58mm ? '28px' : '36px') : '23px';
-  const tableBoxBorder = isRaster ? (is58mm ? '2.5px dashed #000' : '3px dashed #000') : '2px dashed #000';
-  const tableBoxPadding = isRaster ? '8px 4px' : '6px 4px';
-  const metaSize = isRaster ? (is58mm ? '15px' : '19px') : '13px';
-  const thSize = isRaster ? (is58mm ? '15px' : '19px') : '13px';
-  const itemSize = isRaster ? (is58mm ? '16px' : '20px') : '13.5px';
-  const summarySize = isRaster ? (is58mm ? '16px' : '20px') : '13.5px';
-  const totalSize = isRaster ? (is58mm ? '22px' : '28px') : '16px';
-  const paymentSize = isRaster ? (is58mm ? '15px' : '19px') : '13px';
-  const storeNameSize = isRaster ? (is58mm ? '18px' : '24px') : '15px';
-  const storeAddrSize = isRaster ? (is58mm ? '15px' : '19px') : '12.5px';
-  const footerNoticeSize = isRaster ? (is58mm ? '15px' : '18px') : '12.5px';
-  const paddingCell = isRaster ? '7px 3px' : '5px 2px';
-  const paddingCellSub = isRaster ? '7px 2px' : '5px 1px';
+  const titleSize = isRaster ? (is58mm ? '26px' : '36px') : '18px';
+  const tableBoxSize = isRaster ? (is58mm ? '34px' : '48px') : '23px';
+  const tableBoxBorder = isRaster ? (is58mm ? '3px dashed #000' : '4px dashed #000') : '2px dashed #000';
+  const tableBoxPadding = isRaster ? '10px 4px' : '6px 4px';
+  const metaSize = isRaster ? (is58mm ? '18px' : '24px') : '13px';
+  const thSize = isRaster ? (is58mm ? '18px' : '24px') : '13px';
+  const itemSize = isRaster ? (is58mm ? '20px' : '28px') : '13.5px';
+  const summarySize = isRaster ? (is58mm ? '20px' : '28px') : '13.5px';
+  const totalSize = isRaster ? (is58mm ? '30px' : '44px') : '16px';
+  const paymentSize = isRaster ? (is58mm ? '18px' : '24px') : '13px';
+  const storeNameSize = isRaster ? (is58mm ? '22px' : '30px') : '15px';
+  const storeAddrSize = isRaster ? (is58mm ? '17px' : '22px') : '12.5px';
+  const footerNoticeSize = isRaster ? (is58mm ? '17px' : '22px') : '12.5px';
+  const paddingCell = isRaster ? '9px 4px' : '5px 2px';
+  const paddingCellSub = isRaster ? '9px 2px' : '5px 1px';
 
   // Xác định hình thức: Mang về hay Tại chỗ
   let orderSource = order.source;
@@ -2199,14 +2199,14 @@ function generateEscPosPayload(order) {
 
   let content = '\x1B\x40'; // Reset / Khoi tao may in
   content += '\x1B\x61\x01'; // Canh giua
-  content += '\x1B\x45\x01' + (withAccents ? 'HÓA ĐƠN THANH TOÁN\n\n' : 'HOA DON THANH TOAN\n\n') + '\x1B\x45\x00';
+  content += '\x1B\x45\x01\x1D\x21\x01' + (withAccents ? 'HÓA ĐƠN THANH TOÁN\n\n' : 'HOA DON THANH TOAN\n\n') + '\x1D\x21\x00\x1B\x45\x00';
   
-  // Khung viền bàn ăn chuẩn như form hóa đơn cũ
+  // Khung viền bàn ăn chuẩn như form hóa đơn cũ (In đậm & Chữ cao gấp đôi to rõ)
   content += '\x1B\x61\x00'; // Canh trái để khung viền vuông vắn
-  content += '\x1B\x45\x01'; // In đậm tên bàn
+  content += '\x1B\x45\x01\x1D\x21\x01'; // In đậm + Tăng chiều cao x2 cho tên bàn
   content += formatBoxedTitle(`${tableDisplay} - ${sourceLabel}`, lineWidth);
-  content += '\x1B\x45\x00'; // Tắt in đậm
-
+  content += '\x1D\x21\x00\x1B\x45\x00'; // Tắt in đậm & reset kích thước
+  
   content += formatLineColumns(`Gio vao: ${timeStr}`, `Ngay: ${dateStr}`, lineWidth);
   
   if (order.note) {
@@ -2218,18 +2218,22 @@ function generateEscPosPayload(order) {
 
   // Tiêu đề 4 cột chuẩn theo đúng mẫu hóa đơn cũ
   content += divider;
+  content += '\x1B\x45\x01'; // In đậm tiêu đề cột
   content += lineWidth === 32
     ? 'Ten mon      SL Don gia  T.Tien\n'
     : 'Ten mon          SL    Don gia  Thanh tien\n';
+  content += '\x1B\x45\x00';
   content += divider;
 
-  // In từng món theo đúng cấu trúc 4 cột
+  // In từng món theo đúng cấu trúc 4 cột (In đậm tên món để đọc rõ)
   (order.items || []).forEach((it) => {
     const qty = Number(it.quantity) || 1;
     const price = Number(it.price) || 0;
     const total = Number(it.total !== undefined ? it.total : price * qty);
     const itemName = sanitize(it.product_name || it.name || 'Mon');
+    content += '\x1B\x45\x01';
     content += formatItemRow4Col(itemName, qty, price, total, lineWidth);
+    content += '\x1B\x45\x00';
   });
 
   content += divider;
@@ -2241,9 +2245,10 @@ function generateEscPosPayload(order) {
   if (discount > 0) {
     content += formatLineColumns(withAccents ? 'Giảm giá:' : 'Giam gia:', '-' + formatReceiptNum(discount) + ' d', lineWidth);
   }
-  content += '\x1B\x45\x01'; // In dam Tong tien
+  // Tổng tiền: In đậm + Chữ cao gấp đôi (Double height)
+  content += '\x1B\x45\x01\x1D\x21\x01';
   content += formatLineColumns(withAccents ? 'Tổng tiền:' : 'Tong tien:', formatReceiptNum(finalTotal) + ' d', lineWidth);
-  content += '\x1B\x45\x00';
+  content += '\x1D\x21\x00\x1B\x45\x00';
 
   const isChuyenKhoan = order.payment_method === 'transfer' || order.payment_method === 'bank' || order.payment_method === 'qr' || order.payment_method === 'chuyenkhoan';
   const payLabel = isChuyenKhoan 
@@ -2267,7 +2272,8 @@ function generateEscPosPayload(order) {
     content += fl + '\n';
   });
 
-  content += '\n\n\n\n\x1D\x56\x01'; // Cuon giay 4 dong va cat giay
+  // Cuộn giấy 3 dòng và CHỈ GỬI ĐÚNG 1 LỆNH CẮT DUY NHẤT
+  content += '\n\n\n\x1D\x56\x01';
 
   return content;
 }
@@ -2380,14 +2386,12 @@ function convertCanvasToEscPosRaster(canvas, targetDots = 576) {
     chunks.push(buf);
   }
 
-  // Khôi phục khoảng cách dòng, cuộn giấy 4 dòng và kích hoạt lệnh CẮT GIẤY TỰ ĐỘNG
+  // Khôi phục khoảng cách dòng, cuộn giấy 4 dòng và kích hoạt ĐÚNG 1 LỆNH CẮT DUY NHẤT
   const footer = new Uint8Array([
     0x1B, 0x32, // Trả lại khoảng cách dòng mặc định
     0x0A, 0x0A, 0x0A, 0x0A, // Cuộn 4 dòng
-    0x1B, 0x64, 0x04, // ESC d 4: Cuộn giấy qua mép dao cắt
-    0x1D, 0x56, 0x01, // GS V 1: Lệnh cắt giấy bán phần
-    0x1D, 0x56, 0x00, // GS V 0: Lệnh cắt giấy toàn phần
-    0x1D, 0x56, 0x42, 0x00 // GS V B 0: Cuộn và cắt chuẩn EPSON/Xprinter
+    0x1B, 0x64, 0x03, // ESC d 3: Cuộn giấy qua mép dao cắt
+    0x1D, 0x56, 0x01 // GS V 1: Lệnh cắt giấy bán phần (1 lần duy nhất)
   ]);
   chunks.push(footer);
 
@@ -2404,6 +2408,26 @@ function convertCanvasToEscPosRaster(canvas, targetDots = 576) {
 
 async function printViaRawBt(order) {
   try {
+    // 0 = ESC/POS Siêu Tốc (MẶC ĐỊNH - Cực nhanh < 10ms, không lag máy POS, chữ to rõ)
+    // 1 = Đồ Họa Bitmap (Có dấu)
+    const printMode = localStorage.getItem('pos_print_accents') || '0';
+
+    if (printMode === '0') {
+      showToast('Đang gửi lệnh in siêu tốc tới RawBT...', 'info');
+      const base64Data = generateEscPosBase64(order);
+      if (!base64Data) throw new Error('Không thể tạo dữ liệu in ESC/POS');
+
+      const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
+      const targetUrl = isChrome
+        ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
+        : 'rawbt:base64,' + base64Data;
+
+      dispatchRawBtIntent(targetUrl, 'rawbt:base64,' + base64Data);
+      showToast('Đã gửi lệnh in siêu tốc tới máy in RawBT!', 'success');
+      return true;
+    }
+
+    // Nếu người dùng chọn Form Đồ Họa Bitmap (1)
     showToast('Đang kết xuất hóa đơn gửi RawBT...', 'info');
 
     // 1. Đảm bảo thư viện html2canvas đã sẵn sàng
@@ -2455,7 +2479,7 @@ async function printViaRawBt(order) {
       if (hiddenBox.parentNode) hiddenBox.parentNode.removeChild(hiddenBox);
     } catch (e) {}
 
-    // 5. Chuyển đổi Canvas trực tiếp thành luồng lệnh ESC/POS Raster (GS v 0) + CẮT GIẤY TỰ ĐỘNG
+    // 5. Chuyển đổi Canvas trực tiếp thành luồng lệnh ESC/POS Raster (GS v 0) + CẮT GIẤY 1 LẦN
     const escPosBytes = convertCanvasToEscPosRaster(canvas, targetDots);
     const base64Data = uint8ArrayToBase64(escPosBytes);
 
@@ -3190,9 +3214,9 @@ function setPaperWidth(val) {
 function setPrintAccents(val) {
   localStorage.setItem('pos_print_accents', val);
   if (val === '1') {
-    showToast('Đã chọn Form gốc như Laptop (Ảnh sắc nét, có viền & dấu)', 'success');
+    showToast('Đã chọn Form Đồ Họa Bitmap (Chữ to, có dấu)', 'info');
   } else {
-    showToast('Đã chọn Form ESC/POS Text (Văn bản)', 'info');
+    showToast('Đã chọn Form ESC/POS Siêu Tốc (In ngay, chữ to rõ)', 'success');
   }
 }
 
@@ -3290,7 +3314,7 @@ function renderPrinterStatusUI() {
   }
 
   if (selectAccents) {
-    selectAccents.value = localStorage.getItem('pos_print_accents') || '1';
+    selectAccents.value = localStorage.getItem('pos_print_accents') || '0';
   }
 
   if (!card) return;
