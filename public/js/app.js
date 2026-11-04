@@ -470,49 +470,69 @@ function isHostServerMachine() {
 
 async function initAuth() {
   const explicitLogout = localStorage.getItem('pos_explicit_logout') === '1';
+  const autoAdmin = localStorage.getItem('pos_auto_login_admin') === '1';
+  const autoStaff = localStorage.getItem('pos_auto_login_staff') === '1';
   const isHost = isHostServerMachine();
 
   const urlParams = new URLSearchParams(window.location.search);
   const isStaffJoin = urlParams.get('staff_join') === '1' || urlParams.get('action') === 'staff_join' || urlParams.get('join') === 'staff';
 
-  // ============================================================
-  // QUY TẮC BẤT DI BẤT DỊCH:
-  // 1. MÁY KHÁC (Điện thoại, máy nhân viên, quét mã QR):
-  //    - TUYỆT ĐỐI KHÔNG BAO GIỜ HIỆN BẢNG ĐĂNG NHẬP CỦA CHỦ QUÁN!
-  //    - Phải hiện form nhập Tên & Số điện thoại nhân viên để vào gọi món!
-  // 2. CHỈ MÁY CHÍNH (Laptop / PC chủ quán) MỚI CÓ ĐĂNG NHẬP CHỦ QUÁN.
-  // ============================================================
+  // 1. Nếu có token trước đó và chưa bấm Đăng xuất rõ ràng: Thử kiểm tra phiên làm việc hiện tại
+  if (state.token && !explicitLogout) {
+    try {
+      const data = await api('/api/auth/me');
+      if (data && data.user && data.user.active !== 0) {
+        state.currentUser = data.user;
+        applyUserRolePermissions();
+        closeLoginModal();
+        closeStaffJoinModal();
+        return;
+      }
+    } catch (e) {
+      console.warn('Phiên đăng nhập cũ đã hết hạn, chuyển sang tự động đăng nhập lại...', e);
+    }
+  }
 
-  if (!isHost || isStaffJoin) {
-    // Nếu máy khác đã có token nhân viên hợp lệ trước đó:
-    if (state.token && !explicitLogout) {
+  // 2. TỰ ĐỘNG ĐĂNG NHẬP (Chỉ kích hoạt nếu người dùng không bấm Đăng Xuất rõ ràng)
+  if (!explicitLogout) {
+    // 2a. Nếu thiết bị đã ghi nhớ Tự động đăng nhập Chủ Quán (Admin):
+    if (autoAdmin || (isHost && !isStaffJoin)) {
+      const savedUser = localStorage.getItem('pos_saved_admin_user') || 'admin';
+      const savedPass = localStorage.getItem('pos_saved_admin_pass') || localStorage.getItem('pos_custom_pin_admin') || '123';
       try {
-        const data = await api('/api/auth/me');
-        if (data && data.user && data.user.active !== 0) {
-          state.currentUser = data.user;
-          applyUserRolePermissions();
+        const res = await api('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ username: savedUser, password: savedPass })
+        });
+        if (res && res.token && res.user && res.user.active !== 0) {
+          state.token = res.token;
+          state.currentUser = res.user;
+          localStorage.setItem('pos_token', res.token);
+          localStorage.setItem('pos_is_host_device', '1');
           closeLoginModal();
+          closeStaffJoinModal();
+          applyUserRolePermissions();
           return;
         }
-      } catch (e) {}
+      } catch (err) {
+        console.warn('Tự động đăng nhập Chủ Quán không thành công:', err.message);
+      }
     }
 
-    // Nếu token hết hạn hoặc máy chủ vừa khởi động lại:
-    // Tự động phục hồi phiên làm việc cho nhân viên nếu máy đã lưu Tên & SĐT trước đó
-    const savedName = localStorage.getItem('pos_staff_name');
-    const savedPhone = localStorage.getItem('pos_staff_phone');
-
-    if (savedName && savedPhone && !explicitLogout) {
+    // 2b. Nếu thiết bị đã ghi nhớ Tự động đăng nhập Nhân Viên (Staff):
+    const savedStaffName = localStorage.getItem('pos_staff_name');
+    const savedStaffPhone = localStorage.getItem('pos_staff_phone');
+    if ((autoStaff || !isHost) && savedStaffName && savedStaffPhone) {
       try {
         const res = await api('/api/auth/staff-join', {
           method: 'POST',
           body: JSON.stringify({
-            name: savedName,
-            phone: savedPhone,
+            name: savedStaffName,
+            phone: savedStaffPhone,
             deviceId: getDeviceId(),
             deviceName: getDeviceName(),
             platform: getDevicePlatform(),
-            deviceType: 'mobile'
+            deviceType: getDeviceType()
           })
         });
         if (res && res.token && res.user && res.user.active !== 0) {
@@ -520,56 +540,27 @@ async function initAuth() {
           state.currentUser = res.user;
           localStorage.setItem('pos_token', res.token);
           closeStaffJoinModal();
+          closeLoginModal();
           applyUserRolePermissions();
           if (typeof showTableFloor === 'function') showTableFloor();
           return;
         }
       } catch (err) {
-        console.warn('Tự động kết nối lại nhân viên thất bại:', err.message);
+        console.warn('Tự động kết nối lại nhân viên không thành công:', err.message);
       }
     }
-
-    // Nếu chưa từng tham gia lần nào: mở form Nhân viên nhập Tên & SĐT
-    state.token = null;
-    state.currentUser = null;
-    localStorage.removeItem('pos_token');
-    closeLoginModal();
-    openStaffJoinModal();
-    applyUserRolePermissions();
-    return;
   }
 
-  // MÁY CHỦ QUÁN (Laptop / PC chính):
-  try {
-    if (state.token && !explicitLogout) {
-      const data = await api('/api/auth/me');
-      if (data && data.user) {
-        state.currentUser = data.user;
-        applyUserRolePermissions();
-        closeLoginModal();
-        return;
-      } else {
-        throw new Error('Invalid session');
-      }
-    } else if (isHost && !explicitLogout) {
-      const customAdminPass = localStorage.getItem('pos_custom_pin_admin') || '123';
-      const res = await api('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ username: 'admin', password: customAdminPass })
-      });
-      state.token = res.token;
-      state.currentUser = res.user;
-      localStorage.setItem('pos_token', res.token);
-      localStorage.setItem('pos_is_host_device', '1');
-      closeLoginModal();
-    } else {
-      openLoginModal(true);
-    }
-  } catch (err) {
-    console.warn('Init auth fallback on host:', err.message);
-    state.token = null;
-    state.currentUser = null;
-    localStorage.removeItem('pos_token');
+  // 3. Nếu chưa đăng nhập được hoặc đã bấm Đăng Xuất:
+  state.token = null;
+  state.currentUser = null;
+  localStorage.removeItem('pos_token');
+
+  if (isStaffJoin || (!isHost && !autoAdmin)) {
+    closeLoginModal();
+    openStaffJoinModal();
+  } else {
+    closeStaffJoinModal();
     openLoginModal(true);
   }
 
@@ -689,12 +680,14 @@ function toggleLoginPasswordVisibility() {
 async function submitLoginWithUserPass() {
   const userInput = document.getElementById('loginUsernameInput');
   const passInput = document.getElementById('loginPasswordInput');
+  const rememberCheckbox = document.getElementById('loginRememberAdmin');
   const errBox = document.getElementById('loginErrorMsg');
   const errText = document.getElementById('loginErrorText');
   const submitBtn = document.getElementById('btnSubmitLogin');
 
   const username = userInput ? userInput.value.trim() : 'admin';
   const password = passInput ? passInput.value.trim() : '';
+  const shouldRemember = rememberCheckbox ? rememberCheckbox.checked : true;
 
   if (!username) {
     if (errBox && errText) {
@@ -730,9 +723,18 @@ async function submitLoginWithUserPass() {
       state.token = res.token;
       state.currentUser = res.user;
       localStorage.setItem('pos_token', res.token);
-      if (res.user.role === 'admin') {
+      
+      if (shouldRemember) {
+        localStorage.setItem('pos_auto_login_admin', '1');
+        localStorage.setItem('pos_saved_admin_user', username);
+        localStorage.setItem('pos_saved_admin_pass', password);
         localStorage.setItem('pos_is_host_device', '1');
+      } else {
+        localStorage.removeItem('pos_auto_login_admin');
+        localStorage.removeItem('pos_saved_admin_user');
+        localStorage.removeItem('pos_saved_admin_pass');
       }
+
       localStorage.removeItem('pos_explicit_logout');
 
       closeLoginModal();
@@ -769,7 +771,7 @@ function handleLogout() {
   localStorage.setItem('pos_explicit_logout', '1');
   applyUserRolePermissions();
   showToast('Đã đăng xuất tài khoản!', 'info');
-  if (wasStaff || !isHostServerMachine()) {
+  if (wasStaff || (!isHostServerMachine() && localStorage.getItem('pos_auto_login_admin') !== '1')) {
     openStaffJoinModal();
   } else {
     openLoginModal(true);
@@ -777,9 +779,9 @@ function handleLogout() {
 }
 
 function openLoginModal(force = false) {
-  // Chỉ máy chính mới được mở Đăng nhập Chủ Quán.
+  // Chỉ máy chính hoặc thiết bị đã nhớ Chủ Quán mới mở Đăng nhập Chủ Quán.
   // Các máy khác quét mã hoặc điện thoại CHỈ mở form Nhân viên nhập Tên & SĐT.
-  if (!force && !isHostServerMachine()) {
+  if (!force && !isHostServerMachine() && localStorage.getItem('pos_auto_login_admin') !== '1') {
     openStaffJoinModal();
     return;
   }
@@ -793,11 +795,15 @@ function openLoginModal(force = false) {
   closeStaffJoinModal();
   const userInput = document.getElementById('loginUsernameInput');
   const passInput = document.getElementById('loginPasswordInput');
+  const rememberCheckbox = document.getElementById('loginRememberAdmin');
   const errBox = document.getElementById('loginErrorMsg');
 
   if (errBox) errBox.classList.add('hidden');
   if (passInput) passInput.value = '';
-  if (userInput) userInput.value = 'admin';
+  if (userInput) userInput.value = localStorage.getItem('pos_saved_admin_user') || 'admin';
+  if (rememberCheckbox) {
+    rememberCheckbox.checked = localStorage.getItem('pos_auto_login_admin') !== '0';
+  }
 
   if (modal) modal.classList.remove('hidden');
   if (passInput) setTimeout(() => passInput.focus(), 150);
@@ -1873,6 +1879,7 @@ function openStaffJoinModal() {
   }
   const nameInput = document.getElementById('staffJoinNameInput');
   const phoneInput = document.getElementById('staffJoinPhoneInput');
+  const rememberCheckbox = document.getElementById('staffJoinRemember');
   const errBox = document.getElementById('staffJoinErrorMsg');
 
   closeLoginModal();
@@ -1883,6 +1890,9 @@ function openStaffJoinModal() {
   const savedPhone = localStorage.getItem('pos_staff_phone') || '';
   if (nameInput && !nameInput.value) nameInput.value = savedName;
   if (phoneInput && !phoneInput.value) phoneInput.value = savedPhone;
+  if (rememberCheckbox) {
+    rememberCheckbox.checked = localStorage.getItem('pos_auto_login_staff') !== '0';
+  }
 
   if (modal) modal.classList.remove('hidden');
 
@@ -1903,12 +1913,14 @@ function closeStaffJoinModal() {
 async function submitStaffJoin() {
   const nameInput = document.getElementById('staffJoinNameInput');
   const phoneInput = document.getElementById('staffJoinPhoneInput');
+  const rememberCheckbox = document.getElementById('staffJoinRemember');
   const errBox = document.getElementById('staffJoinErrorMsg');
   const errText = document.getElementById('staffJoinErrorText');
   const btn = document.getElementById('btnSubmitStaffJoin');
 
   const name = nameInput ? nameInput.value.trim() : '';
   const phone = phoneInput ? phoneInput.value.trim() : '';
+  const shouldRemember = rememberCheckbox ? rememberCheckbox.checked : true;
 
   if (!name) {
     if (errBox && errText) {
@@ -1952,8 +1964,17 @@ async function submitStaffJoin() {
       state.token = res.token;
       state.currentUser = res.user;
       localStorage.setItem('pos_token', res.token);
-      localStorage.setItem('pos_staff_name', res.user.name);
-      localStorage.setItem('pos_staff_phone', res.user.phone || phone);
+      
+      if (shouldRemember) {
+        localStorage.setItem('pos_auto_login_staff', '1');
+        localStorage.setItem('pos_staff_name', res.user.name);
+        localStorage.setItem('pos_staff_phone', res.user.phone || phone);
+      } else {
+        localStorage.removeItem('pos_auto_login_staff');
+        localStorage.removeItem('pos_staff_name');
+        localStorage.removeItem('pos_staff_phone');
+      }
+
       localStorage.removeItem('pos_is_host_device');
       localStorage.removeItem('pos_explicit_logout');
 
