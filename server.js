@@ -1692,11 +1692,13 @@ app.delete('/api/tables/:tableName', requireAdmin, (req, res) => {
 // 6. POST /api/print-job: Nhận lệnh in từ thiết bị di động (Web Browser) và phát tới máy in tại quầy
 app.post('/api/print-job', requireAuth, (req, res) => {
   try {
-    const { order, sender_device_id } = req.body;
+    const { order, sender_device_id, sender_name, print_type } = req.body;
     if (!order) return res.status(400).json({ error: 'Thiếu thông tin đơn hàng để in!' });
     broadcastTableUpdate({
       type: 'print_job',
       sender_device_id: sender_device_id || null,
+      sender_name: sender_name || (req.user && req.user.name) || 'Nhân viên',
+      print_type: print_type || 'receipt',
       print_order: order
     });
     res.json({ success: true, message: 'Đã phát lệnh in thành công tới máy tính quầy!' });

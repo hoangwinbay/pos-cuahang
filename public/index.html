@@ -1030,6 +1030,28 @@
         </div>
       </div>
 
+      <!-- CẤU HÌNH TRẠM IN QUẦY (NHẬN LỆNH IN TỰ ĐỘNG TỪ ĐIỆN THOẠI NHÂN VIÊN) -->
+      <div class="rounded-2xl p-3.5 border border-emerald-200 bg-emerald-50/70 shadow-2xs space-y-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs shadow-2xs font-bold">
+              <i class="fa-solid fa-satellite-dish"></i>
+            </div>
+            <div>
+              <div class="font-black text-xs text-emerald-950">Trạm In Quầy (Tự Động In)</div>
+              <div class="text-[10px] text-emerald-700 font-medium">Nhận lệnh in từ điện thoại nhân viên</div>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="togglePrintStation" onchange="togglePrintStationMode(this.checked)" class="sr-only peer">
+            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+          </label>
+        </div>
+        <p class="text-[11px] text-emerald-800/80 leading-relaxed bg-white/80 p-2 rounded-xl border border-emerald-100">
+          Khi BẬT: Máy POS này sẽ là trạm in chính, tự động in ngay khi bất kỳ điện thoại nhân viên nào bấm Báo Bếp hoặc Thanh Toán.
+        </p>
+      </div>
+
       <!-- Các nút thao tác -->
       <div class="space-y-2 pt-1">
         <!-- 1. In Thử Hóa Đơn Mẫu -->

@@ -252,20 +252,23 @@ function connectTableEventSource() {
         }
         if (payload.type === 'print_job' && payload.print_order) {
           const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
-          // Bỏ qua nếu chính thiết bị này phát ra lệnh in (tránh laptop tự in lại lần 2)
+          // Bỏ qua nếu chính thiết bị này phát ra lệnh in (tránh máy POS tự in lại lần 2)
           if (myDevId && payload.sender_device_id && payload.sender_device_id === myDevId) {
             return;
           }
-          // Bỏ qua trên điện thoại nhỏ của nhân viên phục vụ, nhưng cho phép in trên Máy POS Android (tablet >= 768px) hoặc máy tính quầy
-          const isSmallPhone = /iPhone|iPod/i.test(navigator.userAgent) || (/Android/i.test(navigator.userAgent) && window.innerWidth < 768);
-          if (!isSmallPhone) {
-            console.log('Quầy nhận lệnh in từ thiết bị di động:', payload.print_order);
+          // Chỉ Máy POS / Trạm in quầy mới thực thi lệnh in từ xa
+          if (isPrintStationDevice()) {
+            console.log('Máy POS quầy nhận lệnh in từ xa:', payload.print_order);
             playOrderNotificationSound();
-            showToast(`🔔 Bếp nhận đơn mới từ ${payload.print_order.table_name || 'Bàn'}!`, 'success');
+            const senderTag = payload.sender_name ? ` (${payload.sender_name})` : '';
+            showToast(`🔔 Đơn mới từ ${payload.print_order.table_name || 'Bàn'}${senderTag}!`, 'success');
 
-            // Chỉ gọi lệnh in nếu người dùng BẬT tự động in (đã có máy in bill nhiệt thật)
+            // Hiển thị Banner 1-chạm nổi bật trên màn hình Máy POS (để bấm in ngay nếu Android chặn intent chạy ngầm)
+            showRemotePrintAlert(payload.print_order, payload.sender_name);
+
+            // Tự động gọi in nếu bật tự động in
             if (isAutoPrintEnabled()) {
-              if (Date.now() - (window._lastPrintTimestamp || 0) < 2500) return;
+              if (Date.now() - (window._lastPrintTimestamp || 0) < 1500) return;
               window._lastPrintTimestamp = Date.now();
               printReceipt(payload.print_order, false);
             }
@@ -1390,21 +1393,8 @@ function executePrintKitchenSlip() {
   closeKitchenConfirmModal();
   closeTableCartDrawer();
 
-  // 2. KÍCH HOẠT IN PHIẾU BÁO BẾP
-  printReceipt(orderForPrint, true);
-
-  // Chỉ phát lệnh in từ xa lên quầy nếu người dùng BẬT tự động in (đã có máy in bill)
-  const isMobileDev = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobileDev && isAutoPrintEnabled()) {
-    const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
-    api('/api/print-job', {
-      method: 'POST',
-      body: JSON.stringify({
-        order: orderForPrint,
-        sender_device_id: myDevId
-      })
-    }).catch(() => {});
-  }
+  // 2. KÍCH HOẠT IN PHIẾU BÁO BẾP (Máy POS quầy in trực tiếp, điện thoại nhân viên gửi về quầy)
+  executeOrderPrint(orderForPrint, { isManual: true, isKitchen: true });
 
   // 3. ĐỒNG BỘ NỀN LÊN SERVER (NON-BLOCKING)
   api('/api/tables/order', {
@@ -1531,7 +1521,7 @@ async function resolveConflictMerge() {
         total: item.price * item.quantity
       }))
     };
-    printReceipt(orderForPrint);
+    executeOrderPrint(orderForPrint, { isKitchen: true });
 
     showToast(`Đã gộp món vào ${tableName} và in phiếu báo bếp thành công!`);
     showTableFloor();
@@ -1631,7 +1621,7 @@ async function selectConflictNewTable(newTable) {
       total: item.price * item.quantity
     }))
   };
-  printReceipt(orderForPrint);
+  executeOrderPrint(orderForPrint, { isKitchen: true });
 
   showToast(`Đã chuyển toàn bộ món sang ${newTable} và in phiếu bếp!`);
   state.currentTable = newTable;
@@ -1733,7 +1723,7 @@ async function completeCheckoutOrder() {
       }))
     };
     if (isAutoPrintEnabled() || bluetoothCharacteristic) {
-      printReceipt(orderForPrint, false);
+      executeOrderPrint(orderForPrint, { isManual: false, isCheckout: true });
     }
 
     // XÓA ĐƠN CỦA BÀN VÀ TRẢ BÀN VỀ TRẠNG THÁI TRỐNG TRÊN CẢ CLIENT VÀ SERVER
@@ -1789,7 +1779,7 @@ function printCheckoutReceipt() {
     }))
   };
 
-  printReceipt(orderForPrint, true);
+  executeOrderPrint(orderForPrint, { isManual: true, isCheckout: true });
 }
 
 // Compatibility stubs
@@ -2251,17 +2241,18 @@ function printViaRawBt(order) {
         : 'rawbt:base64,' + base64Data;
     }
 
-    const a = document.createElement('a');
-    a.href = targetUrl;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-
-    setTimeout(() => {
-      try {
-        if (a.parentNode) a.parentNode.removeChild(a);
-      } catch (e) {}
-    }, 1500);
+    try {
+      window.location.href = targetUrl;
+    } catch (e) {
+      const a = document.createElement('a');
+      a.href = targetUrl;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        try { if (a.parentNode) a.parentNode.removeChild(a); } catch (err) {}
+      }, 1500);
+    }
 
     return true;
   } catch (err) {
@@ -2617,20 +2608,157 @@ function openReceiptPrintWindow() {
 
 
 async function sendPrintJobToServer() {
-  if (!lastPrintedOrder) {
+  const orderToSend = order || lastPrintedOrder;
+  if (!orderToSend) {
     showToast('Chưa có thông tin phiếu!', 'error');
     return;
   }
   try {
-    showToast('Đang phát lệnh in tới máy tính quầy...');
+    const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+    const senderName = (state.currentUser && state.currentUser.name) || (state.user && state.user.name) || localStorage.getItem('pos_staff_name') || 'Nhân viên';
     await api('/api/print-job', {
       method: 'POST',
-      body: JSON.stringify({ order: lastPrintedOrder })
+      body: JSON.stringify({
+        order: orderToSend,
+        sender_device_id: myDevId,
+        sender_name: senderName
+      })
     });
-    showToast('Đã gửi lệnh in thành công tới máy tính quầy!', 'success');
+    showToast('Đã gửi lệnh in thành công tới Máy POS quầy!', 'success');
   } catch (err) {
-    showToast('Chưa kết nối máy tính quầy (Vui lòng kiểm tra IP trong Cài đặt)', 'warning');
+    showToast('Chưa thể gửi lệnh in tới máy POS quầy: ' + (err.message || err), 'warning');
   }
+}
+
+// Hàm in thống nhất: Máy POS quầy thì in trực tiếp, điện thoại khác thì phát lệnh qua server
+async function executeOrderPrint(order, options = {}) {
+  const { isManual = false, isKitchen = false, isCheckout = false } = options;
+  if (!order) return;
+
+  // 1. Nếu đây là Máy POS / Trạm In Quầy -> In trực tiếp tại máy này
+  if (isPrintStationDevice()) {
+    printReceipt(order, isManual);
+    return;
+  }
+
+  // 2. Nếu đây là điện thoại khác (nhân viên) -> Phát lệnh in về Máy POS quầy
+  const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+  const staffName = (state.currentUser && state.currentUser.name) || (state.user && state.user.name) || localStorage.getItem('pos_staff_name') || 'Nhân viên';
+
+  try {
+    showToast('Đang phát lệnh in tới Máy POS quầy...', 'info');
+    await api('/api/print-job', {
+      method: 'POST',
+      body: JSON.stringify({
+        order: order,
+        sender_device_id: myDevId,
+        sender_name: staffName,
+        print_type: isKitchen ? 'kitchen' : (isCheckout ? 'checkout' : 'receipt')
+      })
+    });
+    showToast('🔔 Đã gửi lệnh in tới Máy POS quầy thành công!', 'success');
+  } catch (err) {
+    console.warn('Lỗi gửi lệnh in tới server:', err);
+    showToast('Không thể gửi lệnh in tới máy POS quầy: ' + (err.message || err), 'warning');
+  }
+}
+
+let _remotePrintAlertTimer = null;
+let _pendingRemoteOrder = null;
+
+function showRemotePrintAlert(order, senderName) {
+  _pendingRemoteOrder = order;
+  let banner = document.getElementById('remoteOrderPrintBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'remoteOrderPrintBanner';
+    document.body.appendChild(banner);
+  }
+
+  const tableName = order.table_name || 'Bàn';
+  const totalStr = formatReceiptNum(order.total || order.subtotal || 0) + ' đ';
+  const fromWho = senderName ? `${senderName}` : 'Điện thoại nhân viên';
+  const itemCount = (order.items && order.items.length) ? `${order.items.length} món` : '';
+
+  banner.className = 'fixed top-3 left-3 right-3 sm:left-auto sm:right-4 z-[9999] max-w-sm bg-purple-700 text-white p-3.5 rounded-2xl shadow-2xl flex items-center justify-between space-x-3 transition-all animate-bounce border-2 border-white/40 pointer-events-auto';
+  banner.innerHTML = `
+    <div class="flex items-center space-x-3 min-w-0">
+      <div class="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-lg shrink-0">
+        <i class="fa-solid fa-print"></i>
+      </div>
+      <div class="min-w-0">
+        <div class="font-black text-xs sm:text-sm truncate leading-tight">🔔 ${fromWho} gọi món</div>
+        <div class="text-[11px] text-purple-200 font-medium truncate mt-0.5">${tableName} ${itemCount ? '• ' + itemCount : ''} • ${totalStr}</div>
+      </div>
+    </div>
+    <div class="flex items-center space-x-1.5 shrink-0">
+      <button id="btnTapToPrintRemote" type="button" class="px-3 py-2 bg-white hover:bg-purple-50 active:bg-purple-100 text-purple-800 font-black rounded-xl text-xs shadow-md flex items-center space-x-1">
+        <i class="fa-solid fa-receipt text-xs"></i>
+        <span>IN NGAY</span>
+      </button>
+      <button onclick="hideRemotePrintAlert()" type="button" class="w-7 h-7 rounded-lg hover:bg-white/20 text-white/80 flex items-center justify-center text-xs">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+  `;
+
+  const btn = document.getElementById('btnTapToPrintRemote');
+  if (btn) {
+    btn.onclick = () => {
+      if (_pendingRemoteOrder) {
+        printReceipt(_pendingRemoteOrder, true);
+        showToast('Đã bấm in hóa đơn!', 'success');
+      }
+      hideRemotePrintAlert();
+    };
+  }
+
+  if (_remotePrintAlertTimer) clearTimeout(_remotePrintAlertTimer);
+  _remotePrintAlertTimer = setTimeout(() => {
+    hideRemotePrintAlert();
+  }, 12000);
+}
+
+function hideRemotePrintAlert() {
+  const banner = document.getElementById('remoteOrderPrintBanner');
+  if (banner) {
+    banner.className = 'hidden';
+  }
+  if (_remotePrintAlertTimer) {
+    clearTimeout(_remotePrintAlertTimer);
+    _remotePrintAlertTimer = null;
+  }
+}
+
+// Quản lý vai trò Trạm In Quầy
+function isPrintStationDevice() {
+  const saved = localStorage.getItem('pos_is_print_station');
+  if (saved !== null) {
+    return saved === '1';
+  }
+  // Nếu máy này đã bật RawBT -> Chắc chắn là trạm in quầy!
+  if (isRawBtEnabled()) return true;
+  // Nếu máy này đang kết nối Bluetooth -> Chắc chắn là trạm in!
+  if (bluetoothCharacteristic) return true;
+  // Nếu là máy tính / laptop (quầy thu ngân chính) -> Mặc định là trạm in
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!isMobile) return true;
+  // Nếu là tài khoản Admin trên máy POS Android -> Mặc định là trạm in
+  const role = (state.currentUser && state.currentUser.role) || (state.user && state.user.role);
+  if (role === 'admin') return true;
+
+  return false;
+}
+
+function setPrintStationEnabled(enabled) {
+  localStorage.setItem('pos_is_print_station', enabled ? '1' : '0');
+  renderPrinterStatusUI();
+  updateDrawerPrinterBadge();
+}
+
+function togglePrintStationMode(checked) {
+  setPrintStationEnabled(checked);
+  showToast(checked ? 'Đã BẬT Trạm In Quầy (Tự động nhận in từ nhân viên)' : 'Đã TẮT nhận in từ máy khác', 'info');
 }
 
 function triggerDirectSystemPrint() {
@@ -2742,8 +2870,13 @@ function isRawBtEnabled() {
   if (saved !== null) {
     return saved === '1';
   }
-  // Mặc định tự động bật nếu đang chạy trên thiết bị Android (máy POS)
-  return /Android/i.test(navigator.userAgent);
+  // Chỉ tự động bật trên Android NẾU là tài khoản Chủ Quán (Admin) trên máy POS chính
+  const role = (state.currentUser && state.currentUser.role) || (state.user && state.user.role);
+  if (role === 'admin' && /Android/i.test(navigator.userAgent)) {
+    return true;
+  }
+  // Mặc định đối với máy nhân viên: Không tự động bật RawBT trên điện thoại cá nhân
+  return false;
 }
 
 function setRawBtEnabled(enabled) {
@@ -2755,10 +2888,15 @@ function setRawBtEnabled(enabled) {
 function toggleRawBtMode(checked) {
   setRawBtEnabled(checked);
   if (checked) {
-    showToast('Đã BẬT in ngầm RawBT (Bỏ qua hộp thoại Android)', 'success');
+    setPrintStationEnabled(true);
+    const stationToggle = document.getElementById('togglePrintStation');
+    if (stationToggle) stationToggle.checked = true;
+    showToast('Đã BẬT in ngầm RawBT & Nhận in từ xa!', 'success');
   } else {
     showToast('Đã chuyển về in tiêu chuẩn trình duyệt', 'info');
   }
+  renderPrinterStatusUI();
+  updateDrawerPrinterBadge();
 }
 
 function showRawBtGuide() {
@@ -2791,7 +2929,6 @@ function setPrintAccents(val) {
 // Cấu hình & trạng thái máy in (Đã kết nối chưa, kết nối với máy in nào)
 function getPrinterConfig() {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const isAndroid = /Android/i.test(navigator.userAgent);
 
   // 1. Kiểm tra kết nối Bluetooth trực tiếp
   if (bluetoothDevice && bluetoothDevice.gatt && bluetoothDevice.gatt.connected) {
@@ -2830,9 +2967,10 @@ function getPrinterConfig() {
     };
   }
 
-  // Mặc định: Laptop/PC quầy thu ngân kết nối sẵn máy in quầy (Xprinter / USB)
-  const defaultName = isMobile ? 'Máy in Quầy (Gửi từ xa)' : 'Máy in Quầy (Mặc định)';
-  const defaultType = isMobile ? 'Từ xa / Wi-Fi' : 'Cổng Quầy';
+  // Nếu là điện thoại nhân viên: hiển thị rõ là gửi in qua Máy POS quầy
+  const isStation = isPrintStationDevice();
+  const defaultName = isStation ? 'Máy in Quầy (Mặc định)' : 'Máy POS Quầy (Gửi in từ xa)';
+  const defaultType = isStation ? 'Cổng Quầy' : 'Từ xa / Wi-Fi';
 
   return {
     connected: true,
@@ -2849,6 +2987,7 @@ function isAutoPrintEnabled() {
 
 function renderPrinterStatusUI() {
   const config = getPrinterConfig();
+  const isStation = isPrintStationDevice();
   const card = document.getElementById('printerStatusCard');
   const iconBox = document.getElementById('printerStatusIconBox');
   const icon = document.getElementById('printerStatusIcon');
@@ -2859,11 +2998,16 @@ function renderPrinterStatusUI() {
   const badge = document.getElementById('printerTypeBadge');
   const btnDisconnect = document.getElementById('btnDisconnectPrinter');
   const toggleRawBt = document.getElementById('toggleRawBtPrint');
+  const toggleStation = document.getElementById('togglePrintStation');
   const selectPaper = document.getElementById('selectPaperWidth');
   const selectAccents = document.getElementById('selectPrintAccents');
 
   if (toggleRawBt) {
     toggleRawBt.checked = isRawBtEnabled();
+  }
+
+  if (toggleStation) {
+    toggleStation.checked = isStation;
   }
 
   if (selectPaper) {
@@ -2882,7 +3026,7 @@ function renderPrinterStatusUI() {
       if (iconBox) iconBox.className = 'w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-lg shrink-0 shadow-2xs mt-0.5';
       if (icon) icon.className = 'fa-solid fa-bolt-lightning';
       if (statusText) {
-        statusText.textContent = 'RawBT Đang Bật';
+        statusText.textContent = isStation ? 'RawBT Trạm In Quầy' : 'RawBT Đang Bật';
         statusText.className = 'font-bold text-sm text-purple-900';
       }
       if (dot) dot.className = 'w-2 h-2 rounded-full bg-purple-600 animate-pulse';
@@ -2891,7 +3035,7 @@ function renderPrinterStatusUI() {
         nameDisplay.className = 'text-xs font-black text-slate-800 mt-1 truncate';
       }
       if (hintText) {
-        hintText.textContent = 'In ngầm siêu tốc, không hiện hộp thoại Android Print';
+        hintText.textContent = isStation ? 'Tự động in khi điện thoại nhân viên gọi món & thanh toán' : 'In ngầm siêu tốc, không hiện hộp thoại Android Print';
         hintText.className = 'text-[10px] text-purple-700 font-medium mt-0.5';
       }
       if (badge) {
@@ -2903,7 +3047,7 @@ function renderPrinterStatusUI() {
       if (iconBox) iconBox.className = 'w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg shrink-0 shadow-2xs mt-0.5';
       if (icon) icon.className = config.isBluetooth ? 'fa-brands fa-bluetooth-b' : 'fa-solid fa-print';
       if (statusText) {
-        statusText.textContent = 'Đã kết nối';
+        statusText.textContent = isStation ? 'Trạm In Quầy Sẵn Sàng' : 'Đã kết nối';
         statusText.className = 'font-bold text-sm text-emerald-800';
       }
       if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
@@ -2912,7 +3056,7 @@ function renderPrinterStatusUI() {
         nameDisplay.className = 'text-xs font-black text-slate-800 mt-1 truncate';
       }
       if (hintText) {
-        hintText.textContent = 'Sẵn sàng tự động nhả giấy khi có đơn';
+        hintText.textContent = isStation ? 'Tự động nhả giấy khi có đơn từ nhân viên' : 'Đơn sẽ gửi về Máy POS quầy để in';
         hintText.className = 'text-[10px] text-emerald-700/80 font-medium mt-0.5';
       }
       if (badge) {
