@@ -930,6 +930,7 @@ function toggleSideDrawer(open) {
   if (open) {
     drawer.classList.add('drawer-open');
     backdrop.classList.remove('hidden');
+    if (typeof updateDrawerPrinterBadge === 'function') updateDrawerPrinterBadge();
   } else {
     drawer.classList.remove('drawer-open');
     backdrop.classList.add('hidden');

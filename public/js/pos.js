@@ -316,6 +316,7 @@ async function initPos() {
   setupPosSearchListeners();
   showTableFloor();
   initRealtimeTableSync();
+  if (typeof updateDrawerPrinterBadge === 'function') updateDrawerPrinterBadge();
 }
 
 // =============================================================
@@ -1975,8 +1976,22 @@ async function connectBluetoothPrinter() {
     bluetoothDevice = device;
     bluetoothCharacteristic = foundChar;
 
-    closePrinterModal();
-    showToast(`Đã kết nối máy in: ${device.name || 'Bluetooth'}`);
+    const prName = device.name || 'Máy in Bluetooth';
+    localStorage.setItem('pos_printer_name', prName);
+    localStorage.setItem('pos_printer_type', 'Bluetooth');
+    localStorage.setItem('pos_printer_connected', '1');
+
+    device.addEventListener('gattserverdisconnected', () => {
+      bluetoothDevice = null;
+      bluetoothCharacteristic = null;
+      renderPrinterStatusUI();
+      updateDrawerPrinterBadge();
+      showToast(`Máy in "${prName}" đã ngắt kết nối`, 'info');
+    });
+
+    renderPrinterStatusUI();
+    updateDrawerPrinterBadge();
+    showToast(`Đã kết nối máy in: ${prName}`, 'success');
   } catch (err) {
     showToast('Lỗi Bluetooth: ' + err.message, 'error');
   }
@@ -2508,12 +2523,154 @@ function fallbackCopyText(text) {
   document.body.removeChild(ta);
 }
 
-// Tự động in hóa đơn là mặc định
+// Cấu hình & trạng thái máy in (Đã kết nối chưa, kết nối với máy in nào)
+function getPrinterConfig() {
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  // 1. Kiểm tra kết nối Bluetooth trực tiếp
+  if (bluetoothDevice && bluetoothDevice.gatt && bluetoothDevice.gatt.connected) {
+    return {
+      connected: true,
+      name: bluetoothDevice.name || 'Máy in Bluetooth',
+      type: 'Bluetooth',
+      isBluetooth: true
+    };
+  }
+
+  // 2. Lấy cấu hình máy in đã lưu
+  const savedConnected = localStorage.getItem('pos_printer_connected');
+  const savedName = localStorage.getItem('pos_printer_name');
+  const savedType = localStorage.getItem('pos_printer_type');
+
+  if (savedConnected === '0') {
+    return {
+      connected: false,
+      name: 'Chưa kết nối máy in nào',
+      type: 'Chưa kết nối',
+      isBluetooth: false
+    };
+  }
+
+  // Mặc định: Laptop/PC quầy thu ngân kết nối sẵn máy in quầy (Xprinter / USB)
+  const defaultName = isMobile ? 'Máy in Quầy (Gửi từ xa)' : 'Máy in Quầy (Mặc định)';
+  const defaultType = isMobile ? 'Từ xa / Wi-Fi' : 'Cổng Quầy';
+
+  return {
+    connected: true,
+    name: savedName || defaultName,
+    type: savedType || defaultType,
+    isBluetooth: savedType === 'Bluetooth'
+  };
+}
+
 function isAutoPrintEnabled() {
-  return true;
+  return getPrinterConfig().connected;
+}
+
+function renderPrinterStatusUI() {
+  const config = getPrinterConfig();
+  const card = document.getElementById('printerStatusCard');
+  const iconBox = document.getElementById('printerStatusIconBox');
+  const icon = document.getElementById('printerStatusIcon');
+  const statusText = document.getElementById('printerConnectionStatusText');
+  const dot = document.getElementById('printerStatusDot');
+  const nameDisplay = document.getElementById('printerNameDisplayText');
+  const hintText = document.getElementById('printerSubHintText');
+  const badge = document.getElementById('printerTypeBadge');
+  const btnDisconnect = document.getElementById('btnDisconnectPrinter');
+
+  if (!card) return;
+
+  if (config.connected) {
+    card.className = 'rounded-2xl p-4 border border-emerald-200 bg-emerald-50/50 shadow-2xs transition-all';
+    if (iconBox) iconBox.className = 'w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg shrink-0 shadow-2xs mt-0.5';
+    if (icon) icon.className = config.isBluetooth ? 'fa-brands fa-bluetooth-b' : 'fa-solid fa-print';
+    if (statusText) {
+      statusText.textContent = 'Đã kết nối';
+      statusText.className = 'font-bold text-sm text-emerald-800';
+    }
+    if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+    if (nameDisplay) {
+      nameDisplay.textContent = config.name;
+      nameDisplay.className = 'text-xs font-black text-slate-800 mt-1 truncate';
+    }
+    if (hintText) {
+      hintText.textContent = 'Sẵn sàng tự động nhả giấy khi có đơn';
+      hintText.className = 'text-[10px] text-emerald-700/80 font-medium mt-0.5';
+    }
+    if (badge) {
+      badge.textContent = config.type;
+      badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase shrink-0';
+    }
+    if (btnDisconnect) btnDisconnect.style.display = 'flex';
+  } else {
+    card.className = 'rounded-2xl p-4 border border-slate-200 bg-slate-50 shadow-2xs transition-all';
+    if (iconBox) iconBox.className = 'w-10 h-10 rounded-xl bg-slate-200 text-slate-400 flex items-center justify-center text-lg shrink-0 mt-0.5';
+    if (icon) icon.className = 'fa-solid fa-print';
+    if (statusText) {
+      statusText.textContent = 'Chưa kết nối';
+      statusText.className = 'font-bold text-sm text-slate-600';
+    }
+    if (dot) dot.className = 'w-2 h-2 rounded-full bg-slate-300';
+    if (nameDisplay) {
+      nameDisplay.textContent = 'Chưa kết nối máy in nào';
+      nameDisplay.className = 'text-xs font-semibold text-slate-400 mt-1';
+    }
+    if (hintText) {
+      hintText.textContent = 'Bấm nút bên dưới để kết nối máy in';
+      hintText.className = 'text-[10px] text-slate-400 mt-0.5';
+    }
+    if (badge) {
+      badge.textContent = 'OFFLINE';
+      badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 uppercase shrink-0';
+    }
+    if (btnDisconnect) btnDisconnect.style.display = 'none';
+  }
+}
+
+function updateDrawerPrinterBadge() {
+  const badge = document.getElementById('drawerPrinterStatusBadge');
+  if (!badge) return;
+  const config = getPrinterConfig();
+  if (config.connected) {
+    badge.className = 'bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center';
+    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span><span>Đã kết nối</span>';
+    badge.title = `Máy in: ${config.name}`;
+  } else {
+    badge.className = 'bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center';
+    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-300 mr-1"></span><span>Chưa kết nối</span>';
+    badge.title = 'Chưa kết nối máy in';
+  }
+}
+
+function disconnectCurrentPrinter() {
+  if (bluetoothDevice && bluetoothDevice.gatt && bluetoothDevice.gatt.connected) {
+    try { bluetoothDevice.gatt.disconnect(); } catch (e) {}
+  }
+  bluetoothDevice = null;
+  bluetoothCharacteristic = null;
+  localStorage.setItem('pos_printer_connected', '0');
+  renderPrinterStatusUI();
+  updateDrawerPrinterBadge();
+  showToast('Đã ngắt kết nối máy in!', 'info');
+}
+
+function promptChangePrinterName() {
+  const current = getPrinterConfig().name;
+  const defaultPrompt = current.includes('Chưa kết nối') ? 'Xprinter XP-N160II' : current;
+  const newName = prompt('Nhập tên máy in quán đang dùng (ví dụ: Xprinter XP-N160II, Epson TM-T82, POS-80C):', defaultPrompt);
+  if (newName && newName.trim()) {
+    localStorage.setItem('pos_printer_name', newName.trim());
+    localStorage.setItem('pos_printer_type', 'Cổng Quầy');
+    localStorage.setItem('pos_printer_connected', '1');
+    renderPrinterStatusUI();
+    updateDrawerPrinterBadge();
+    showToast(`Đã lưu máy in: ${newName.trim()}`, 'success');
+  }
 }
 
 function openPrinterModal() {
+  renderPrinterStatusUI();
   document.getElementById('printerModal')?.classList.remove('hidden');
 }
 
