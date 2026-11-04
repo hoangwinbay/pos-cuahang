@@ -267,7 +267,7 @@ function connectTableEventSource() {
             if (isAutoPrintEnabled()) {
               if (Date.now() - (window._lastPrintTimestamp || 0) < 2500) return;
               window._lastPrintTimestamp = Date.now();
-              executeWindowPrint(payload.print_order);
+              printReceipt(payload.print_order, false);
             }
           }
         }
@@ -1801,7 +1801,7 @@ function setupVietQRDisplay() {}
 // =============================================================
 function formatReceiptNum(val) {
   const num = Math.round(Number(val) || 0);
-  return num.toLocaleString('en-US');
+  return num.toLocaleString('en-US').replace(/,/g, '.');
 }
 
 function generateReceiptHtml(order) {
@@ -1997,13 +1997,13 @@ async function connectBluetoothPrinter() {
   }
 }
 
-async function printEscPosBluetooth(order) {
-  if (!bluetoothCharacteristic) throw new Error('Chưa kết nối máy in');
-
+function generateEscPosPayload(order) {
   const storeName = state.settings.store_name || 'Bun mam mien Tay';
   const storeAddress = state.settings.store_address || '324 Bach Mai';
   const footerNotice = state.settings.receipt_footer || 'Quy khach vui long mang phieu nay ra quay khi thanh toan';
-  const lineWidth = 32;
+
+  const paperWidth = localStorage.getItem('pos_paper_width') || '80mm';
+  const lineWidth = paperWidth === '58mm' ? 32 : 42;
   const divider = '-'.repeat(lineWidth) + '\n';
 
   let orderSource = order.source;
@@ -2029,48 +2029,117 @@ async function printEscPosBluetooth(order) {
   const timeStr = String(createdAt.getHours()).padStart(2, '0') + ':' + 
                   String(createdAt.getMinutes()).padStart(2, '0');
 
-  let content = '\x1B\x40'; // Reset
-  content += '\x1B\x61\x01'; // Canh giữa
+  let content = '\x1B\x40'; // Reset / Khoi tao may in
+  content += '\x1B\x61\x01'; // Canh giua
   content += '\x1B\x45\x01' + 'HOA DON THANH TOAN\n\n' + '\x1B\x45\x00';
   content += divider;
-  content += '\x1B\x61\x01'; // Canh giữa
-  content += '\x1B\x45\x01'; // In đậm
+  content += '\x1B\x61\x01'; // Canh giua
+  content += '\x1B\x45\x01'; // In dam
+  content += '\x1D\x21\x11'; // Phong to chu ban x2
   content += `${tableDisplay} - ${sourceLabel}\n`;
-  content += '\x1B\x45\x00'; // Bình thường
-  content += '\x1B\x61\x00'; // Canh trái
+  content += '\x1D\x21\x00'; // Ve co chu chuan
+  content += '\x1B\x45\x00'; // Tat in dam
   content += divider;
+  content += '\x1B\x61\x00'; // Canh trai
   content += formatLineColumns(`Gio vao: ${timeStr}`, `Ngay: ${dateStr}`, lineWidth);
   if (order.note) content += `Ghi chu: ${removeVietnameseAccents(order.note)}\n`;
 
   content += divider;
-  content += 'TEN MON | SL | GIA | TIEN\n';
+  content += formatLineColumns('TEN MON', 'TIEN', lineWidth);
   content += divider;
 
   (order.items || []).forEach((it) => {
     const qty = Number(it.quantity) || 1;
     const price = Number(it.price) || 0;
     const total = Number(it.total !== undefined ? it.total : price * qty);
-    content += `${removeVietnameseAccents(it.product_name || it.name)}\n`;
-    content += formatLineColumns(`   ${qty} x ${formatReceiptNum(price)}`, formatReceiptNum(total), lineWidth);
+    content += `${removeVietnameseAccents(it.product_name || it.name || 'Mon')}\n`;
+    content += formatLineColumns(`   ${qty} x ${formatReceiptNum(price)}`, formatReceiptNum(total) + ' d', lineWidth);
   });
 
   content += divider;
   const subtotal = Number(order.subtotal !== undefined ? order.subtotal : (order.total || 0));
-  const finalTotal = Number(order.total !== undefined ? order.total : subtotal);
-  content += '\x1B\x45\x01'; // In đậm Thành tiền và Tổng tiền
-  content += formatLineColumns('Thanh tien:', formatReceiptNum(subtotal) + ' d', lineWidth);
-  content += formatLineColumns('Tong tien:', formatReceiptNum(finalTotal) + ' d', lineWidth);
-  content += '\x1B\x45\x00'; // Hết in đậm trước mục thanh toán để in nét thường/mờ hơn
+  const discount = Number(order.discount || 0);
+  const finalTotal = Number(order.total !== undefined ? order.total : (subtotal - discount));
 
-  const isChuyenKhoan = order.payment_method === 'transfer' || order.payment_method === 'bank' || order.payment_method === 'qr';
+  content += formatLineColumns('Thanh tien:', formatReceiptNum(subtotal) + ' d', lineWidth);
+  if (discount > 0) {
+    content += formatLineColumns('Giam gia:', '-' + formatReceiptNum(discount) + ' d', lineWidth);
+  }
+  content += '\x1B\x45\x01'; // In dam Tong tien
+  content += formatLineColumns('Tong tien:', formatReceiptNum(finalTotal) + ' d', lineWidth);
+  content += '\x1B\x45\x00';
+
+  const isChuyenKhoan = order.payment_method === 'transfer' || order.payment_method === 'bank' || order.payment_method === 'qr' || order.payment_method === 'chuyenkhoan';
   const payLabel = isChuyenKhoan ? '+ Thanh toan chuyen khoan' : '+ Thanh toan tien mat';
   content += formatLineColumns(payLabel, formatReceiptNum(finalTotal) + ' d', lineWidth);
 
-  content += '\n\x1B\x61\x01'; // Canh giữa
+  content += divider;
+  content += '\x1B\x61\x01'; // Canh giua
   content += '\x1B\x45\x01' + removeVietnameseAccents(storeName) + '\x1B\x45\x00\n';
   content += `Dia chi: ${removeVietnameseAccents(storeAddress)}\n`;
-  content += `${removeVietnameseAccents(footerNotice)}\n\n\n\n\x1D\x56\x01`; // Cắt giấy
+  content += `${removeVietnameseAccents(footerNotice)}\n\n\n\n\x1D\x56\x01`; // Cuon giay 4 dong va cat giay
 
+  return content;
+}
+
+function uint8ArrayToBase64(bytes) {
+  let binary = '';
+  const len = bytes.byteLength;
+  const chunkSize = 8192;
+  for (let i = 0; i < len; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, len));
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+}
+
+function generateEscPosBase64(order) {
+  const content = generateEscPosPayload(order);
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(content);
+  return uint8ArrayToBase64(bytes);
+}
+
+function printViaRawBt(order) {
+  try {
+    const base64Data = generateEscPosBase64(order);
+    if (!base64Data) {
+      throw new Error('Khong the tao du lieu ESC/POS');
+    }
+
+    showToast('Dang gui lenh in truc tiep toi RawBT...', 'info');
+
+    // Intent URL cho Android Chrome (tu dong mo RawBT ngam khong hoi)
+    const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
+    const targetUrl = isChrome
+      ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
+      : 'rawbt:base64,' + base64Data;
+
+    const a = document.createElement('a');
+    a.href = targetUrl;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+      try {
+        if (a.parentNode) a.parentNode.removeChild(a);
+      } catch (e) {}
+    }, 1500);
+
+    return true;
+  } catch (err) {
+    console.error('Loi khi in qua RawBT:', err);
+    showToast('Loi gui toi RawBT: ' + (err.message || err), 'error');
+    executeWindowPrint(order, true);
+    return false;
+  }
+}
+
+async function printEscPosBluetooth(order) {
+  if (!bluetoothCharacteristic) throw new Error('Chưa kết nối máy in');
+
+  const content = generateEscPosPayload(order);
   const encoder = new TextEncoder();
   const data = encoder.encode(content);
   const chunkSize = 100;
@@ -2102,6 +2171,7 @@ function printReceipt(order, isManual = false) {
   window._lastPrintTimestamp = Date.now();
   lastPrintedOrder = order;
 
+  // 1. Máy in Bluetooth Web API (nếu đã kết nối trực tiếp)
   if (bluetoothCharacteristic) {
     showToast('Đang in phiếu qua Bluetooth...', 'info');
     printEscPosBluetooth(order).then(() => {
@@ -2113,6 +2183,14 @@ function printReceipt(order, isManual = false) {
     return;
   }
 
+  // 2. Chế độ in ngầm RawBT (dành cho máy POS Android / Cổng USB)
+  const config = getPrinterConfig();
+  if (config.isRawBt) {
+    printViaRawBt(order);
+    return;
+  }
+
+  // 3. Mặc định: Laptop/PC quầy thu ngân (window.print / Kiosk silent print)
   executeWindowPrint(order, isManual);
 }
 
@@ -2523,9 +2601,52 @@ function fallbackCopyText(text) {
   document.body.removeChild(ta);
 }
 
+function isRawBtEnabled() {
+  const saved = localStorage.getItem('pos_rawbt_enabled');
+  if (saved !== null) {
+    return saved === '1';
+  }
+  // Mặc định tự động bật nếu đang chạy trên thiết bị Android (máy POS)
+  return /Android/i.test(navigator.userAgent);
+}
+
+function setRawBtEnabled(enabled) {
+  localStorage.setItem('pos_rawbt_enabled', enabled ? '1' : '0');
+  renderPrinterStatusUI();
+  updateDrawerPrinterBadge();
+}
+
+function toggleRawBtMode(checked) {
+  setRawBtEnabled(checked);
+  if (checked) {
+    showToast('Đã BẬT in ngầm RawBT (Bỏ qua hộp thoại Android)', 'success');
+  } else {
+    showToast('Đã chuyển về in tiêu chuẩn trình duyệt', 'info');
+  }
+}
+
+function showRawBtGuide() {
+  const guide = 'HƯỚNG DẪN CẤU HÌNH RAWBT ĐỂ IN NGẦM 1 CHẠM:\n\n' +
+    '1. Mở app "RawBT Print Service" trên máy POS Android.\n' +
+    '2. Bấm biểu tượng Cài đặt (bánh răng) ở góc ứng dụng.\n' +
+    '3. Chọn mục "Chung" (General):\n' +
+    '   -> BẬT "In tự động" (Autoprint / Silent print).\n' +
+    '4. Chọn mục "Cài đặt máy in" (Printer connection):\n' +
+    '   -> Chọn kết nối: "USB" (chọn máy in SRP02 cắm dây).\n' +
+    '   -> Bấm "In thử" (Test print) để xác nhận máy in đã nhận.\n' +
+    '5. Quay lại màn hình Web POS này và bấm "In Thử Hóa Đơn" để giấy tự nhả ngay tức khắc!';
+  alert(guide);
+}
+
+function setPaperWidth(val) {
+  localStorage.setItem('pos_paper_width', val);
+  showToast(`Đã lưu khổ giấy in: ${val}`, 'info');
+}
+
 // Cấu hình & trạng thái máy in (Đã kết nối chưa, kết nối với máy in nào)
 function getPrinterConfig() {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isAndroid = /Android/i.test(navigator.userAgent);
 
   // 1. Kiểm tra kết nối Bluetooth trực tiếp
   if (bluetoothDevice && bluetoothDevice.gatt && bluetoothDevice.gatt.connected) {
@@ -2533,11 +2654,23 @@ function getPrinterConfig() {
       connected: true,
       name: bluetoothDevice.name || 'Máy in Bluetooth',
       type: 'Bluetooth',
-      isBluetooth: true
+      isBluetooth: true,
+      isRawBt: false
     };
   }
 
-  // 2. Lấy cấu hình máy in đã lưu
+  // 2. Kiểm tra chế độ RawBT (máy POS Android / Cổng USB)
+  if (isRawBtEnabled()) {
+    return {
+      connected: true,
+      name: 'RawBT (Máy POS Android / Cáp USB)',
+      type: 'RawBT USB',
+      isBluetooth: false,
+      isRawBt: true
+    };
+  }
+
+  // 3. Lấy cấu hình máy in đã lưu
   const savedConnected = localStorage.getItem('pos_printer_connected');
   const savedName = localStorage.getItem('pos_printer_name');
   const savedType = localStorage.getItem('pos_printer_type');
@@ -2547,7 +2680,8 @@ function getPrinterConfig() {
       connected: false,
       name: 'Chưa kết nối máy in nào',
       type: 'Chưa kết nối',
-      isBluetooth: false
+      isBluetooth: false,
+      isRawBt: false
     };
   }
 
@@ -2559,7 +2693,8 @@ function getPrinterConfig() {
     connected: true,
     name: savedName || defaultName,
     type: savedType || defaultType,
-    isBluetooth: savedType === 'Bluetooth'
+    isBluetooth: savedType === 'Bluetooth',
+    isRawBt: false
   };
 }
 
@@ -2578,29 +2713,62 @@ function renderPrinterStatusUI() {
   const hintText = document.getElementById('printerSubHintText');
   const badge = document.getElementById('printerTypeBadge');
   const btnDisconnect = document.getElementById('btnDisconnectPrinter');
+  const toggleRawBt = document.getElementById('toggleRawBtPrint');
+  const selectPaper = document.getElementById('selectPaperWidth');
+
+  if (toggleRawBt) {
+    toggleRawBt.checked = isRawBtEnabled();
+  }
+
+  if (selectPaper) {
+    selectPaper.value = localStorage.getItem('pos_paper_width') || '80mm';
+  }
 
   if (!card) return;
 
   if (config.connected) {
-    card.className = 'rounded-2xl p-4 border border-emerald-200 bg-emerald-50/50 shadow-2xs transition-all';
-    if (iconBox) iconBox.className = 'w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg shrink-0 shadow-2xs mt-0.5';
-    if (icon) icon.className = config.isBluetooth ? 'fa-brands fa-bluetooth-b' : 'fa-solid fa-print';
-    if (statusText) {
-      statusText.textContent = 'Đã kết nối';
-      statusText.className = 'font-bold text-sm text-emerald-800';
-    }
-    if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
-    if (nameDisplay) {
-      nameDisplay.textContent = config.name;
-      nameDisplay.className = 'text-xs font-black text-slate-800 mt-1 truncate';
-    }
-    if (hintText) {
-      hintText.textContent = 'Sẵn sàng tự động nhả giấy khi có đơn';
-      hintText.className = 'text-[10px] text-emerald-700/80 font-medium mt-0.5';
-    }
-    if (badge) {
-      badge.textContent = config.type;
-      badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase shrink-0';
+    if (config.isRawBt) {
+      card.className = 'rounded-2xl p-4 border border-purple-200 bg-purple-50/50 shadow-2xs transition-all';
+      if (iconBox) iconBox.className = 'w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-lg shrink-0 shadow-2xs mt-0.5';
+      if (icon) icon.className = 'fa-solid fa-bolt-lightning';
+      if (statusText) {
+        statusText.textContent = 'RawBT Đang Bật';
+        statusText.className = 'font-bold text-sm text-purple-900';
+      }
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-purple-600 animate-pulse';
+      if (nameDisplay) {
+        nameDisplay.textContent = config.name;
+        nameDisplay.className = 'text-xs font-black text-slate-800 mt-1 truncate';
+      }
+      if (hintText) {
+        hintText.textContent = 'In ngầm siêu tốc, không hiện hộp thoại Android Print';
+        hintText.className = 'text-[10px] text-purple-700 font-medium mt-0.5';
+      }
+      if (badge) {
+        badge.textContent = 'RAWBT USB';
+        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 uppercase shrink-0';
+      }
+    } else {
+      card.className = 'rounded-2xl p-4 border border-emerald-200 bg-emerald-50/50 shadow-2xs transition-all';
+      if (iconBox) iconBox.className = 'w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg shrink-0 shadow-2xs mt-0.5';
+      if (icon) icon.className = config.isBluetooth ? 'fa-brands fa-bluetooth-b' : 'fa-solid fa-print';
+      if (statusText) {
+        statusText.textContent = 'Đã kết nối';
+        statusText.className = 'font-bold text-sm text-emerald-800';
+      }
+      if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+      if (nameDisplay) {
+        nameDisplay.textContent = config.name;
+        nameDisplay.className = 'text-xs font-black text-slate-800 mt-1 truncate';
+      }
+      if (hintText) {
+        hintText.textContent = 'Sẵn sàng tự động nhả giấy khi có đơn';
+        hintText.className = 'text-[10px] text-emerald-700/80 font-medium mt-0.5';
+      }
+      if (badge) {
+        badge.textContent = config.type;
+        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase shrink-0';
+      }
     }
     if (btnDisconnect) btnDisconnect.style.display = 'flex';
   } else {
@@ -2621,7 +2789,7 @@ function renderPrinterStatusUI() {
       hintText.className = 'text-[10px] text-slate-400 mt-0.5';
     }
     if (badge) {
-      badge.textContent = 'OFFLINE';
+      badge.textContent = 'CHƯA KẾT NỐI';
       badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 uppercase shrink-0';
     }
     if (btnDisconnect) btnDisconnect.style.display = 'none';
@@ -2633,9 +2801,15 @@ function updateDrawerPrinterBadge() {
   if (!badge) return;
   const config = getPrinterConfig();
   if (config.connected) {
-    badge.className = 'bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center';
-    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span><span>Đã kết nối</span>';
-    badge.title = `Máy in: ${config.name}`;
+    if (config.isRawBt) {
+      badge.className = 'bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center';
+      badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-purple-500 mr-1 animate-pulse"></span><span>RawBT</span>';
+      badge.title = 'In ngầm siêu tốc qua RawBT';
+    } else {
+      badge.className = 'bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center';
+      badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span><span>Đã kết nối</span>';
+      badge.title = `Máy in: ${config.name}`;
+    }
   } else {
     badge.className = 'bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center';
     badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-300 mr-1"></span><span>Chưa kết nối</span>';
@@ -2650,6 +2824,7 @@ function disconnectCurrentPrinter() {
   bluetoothDevice = null;
   bluetoothCharacteristic = null;
   localStorage.setItem('pos_printer_connected', '0');
+  localStorage.setItem('pos_rawbt_enabled', '0');
   renderPrinterStatusUI();
   updateDrawerPrinterBadge();
   showToast('Đã ngắt kết nối máy in!', 'info');
@@ -2663,6 +2838,7 @@ function promptChangePrinterName() {
     localStorage.setItem('pos_printer_name', newName.trim());
     localStorage.setItem('pos_printer_type', 'Cổng Quầy');
     localStorage.setItem('pos_printer_connected', '1');
+    localStorage.setItem('pos_rawbt_enabled', '0');
     renderPrinterStatusUI();
     updateDrawerPrinterBadge();
     showToast(`Đã lưu máy in: ${newName.trim()}`, 'success');
