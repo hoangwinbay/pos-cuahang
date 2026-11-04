@@ -977,27 +977,37 @@
         </div>
       </div>
 
-      <!-- KHỐI CẤU HÌNH MÁY POS IN HÓA ĐƠN RAWBT -->
-      <div class="rounded-2xl p-4 border border-purple-200 bg-purple-50/70 shadow-2xs space-y-3">
+      <!-- 1. CHUYỂN ĐỔI CHẾ ĐỘ IN: CHROME LAPTOP (WINDOWS) vs MÁY POS (RAWBT ANDROID) -->
+      <div class="rounded-2xl p-3 border border-slate-200 bg-slate-50/80 space-y-2">
         <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-2.5">
-            <div class="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center text-sm shadow-2xs font-bold">
-              <i class="fa-solid fa-print"></i>
-            </div>
-            <div>
-              <div class="font-black text-xs text-purple-950">Máy POS In Hóa Đơn (RawBT)</div>
-              <div class="text-[10px] text-purple-700 font-medium">Tự động gọi RawBT khi có bàn mới</div>
-            </div>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" id="toggleRawBtStation" onchange="toggleRawBtStationMode(this.checked)" class="sr-only peer">
-            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-          </label>
+          <span class="text-xs font-black text-slate-800">Thiết bị in quầy:</span>
+          <span id="badgeCurrentPrintEngine" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 uppercase">
+            CHROME LAPTOP
+          </span>
         </div>
 
-        <div class="text-[11px] text-purple-900/80 leading-relaxed bg-white/80 p-2.5 rounded-xl border border-purple-100">
-          <i class="fa-solid fa-circle-check text-purple-600 mr-1"></i>
-          <strong>Chỉ BẬT trên Máy POS quầy:</strong> Tự động gọi RawBT in phiếu ngay khi có bàn mới được đặt (bất kể đặt tại máy POS hay trên điện thoại nhân viên). Điện thoại nhân viên tắt nút này để không gọi in cục bộ.
+        <div class="grid grid-cols-2 gap-2">
+          <!-- Nút A: Chrome Laptop (Windows) -->
+          <button type="button" id="btnModeWindows" onclick="setPrinterStationEngine('windows')" class="p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center space-y-1">
+            <i class="fa-brands fa-windows text-lg text-blue-600"></i>
+            <span class="font-bold text-xs">Chrome Laptop (Win)</span>
+            <span class="text-[10px] text-slate-500">In trực tiếp / Kiosk</span>
+          </button>
+
+          <!-- Nút B: Máy POS Android (RawBT) -->
+          <button type="button" id="btnModeRawBt" onclick="setPrinterStationEngine('rawbt')" class="p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center space-y-1">
+            <i class="fa-brands fa-android text-lg text-emerald-600"></i>
+            <span class="font-bold text-xs">Máy POS Android</span>
+            <span class="text-[10px] text-slate-500">In ngầm qua RawBT</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. KHỐI CẤU HÌNH RAWBT (CHỈ DÀNH CHO MÁY POS ANDROID) -->
+      <div id="rawbtConfigSection" class="rounded-2xl p-3.5 border border-purple-200 bg-purple-50/70 shadow-2xs space-y-2.5">
+        <div class="flex items-center space-x-2">
+          <i class="fa-solid fa-sliders text-purple-700 text-xs"></i>
+          <span class="font-bold text-xs text-purple-950">Tùy chọn in Máy POS RawBT</span>
         </div>
 
         <!-- Khổ giấy & Mẫu in -->
@@ -1012,7 +1022,7 @@
           <div>
             <label class="text-[10px] text-purple-950 font-bold block mb-0.5">Mẫu hóa đơn:</label>
             <select id="selectPrintAccents" onchange="setPrintAccents(this.value)" class="w-full text-[11px] font-bold bg-white border border-purple-200 text-purple-900 rounded-lg px-2 py-1 outline-none">
-              <option value="0">ESC/POS Siêu Tốc (Cực nhanh, chữ to rõ)</option>
+              <option value="0">ESC/POS Siêu Tốc (Nhanh & to rõ)</option>
               <option value="1">Đồ Họa Bitmap (Chữ to, có dấu)</option>
             </select>
           </div>
