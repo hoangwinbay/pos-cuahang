@@ -124,7 +124,7 @@ function syncTableOrderToServer(tableName, immediate = false) {
   if (immediate) {
     return doSync();
   } else {
-    syncDebounceTimers[tableName] = setTimeout(doSync, 300);
+    syncDebounceTimers[tableName] = setTimeout(doSync, 120);
   }
 }
 
@@ -139,6 +139,12 @@ async function deleteTableOrderOnServer(tableName) {
 }
 
 async function fetchAndApplyTableSync(silent = false) {
+  // Tránh gọi sync định kỳ nếu chưa có token để không sinh lỗi 401
+  const hasToken = !!((state && state.token) || (typeof localStorage !== 'undefined' && localStorage.getItem('pos_token')));
+  if (!hasToken) {
+    return;
+  }
+
   try {
     const data = await api('/api/tables/sync');
     if (data && data.tables) {
@@ -156,14 +162,36 @@ async function fetchAndApplyTableSync(silent = false) {
 }
 
 function applyIncomingTableOrders(newTableOrders) {
-  state.tableOrders = newTableOrders || {};
+  const incoming = newTableOrders || {};
+  const currentTable = state.currentTable;
+
+  // Nếu người dùng đang ở màn hình đặt món và đang thao tác nút Stepper gần đây (dưới 3.5 giây)
+  const isActivelyEditingCurrentTable = (
+    state.activeScreen === 'order' &&
+    currentTable &&
+    (syncDebounceTimers[currentTable] || (Date.now() - (window._lastDishTapTime || 0) < 3500))
+  );
+
+  if (isActivelyEditingCurrentTable && state.tableOrders && state.tableOrders[currentTable]) {
+    // Bảo lưu món hiện tại của bàn đang chọn tại chỗ, không cho server sync cũ đè về 0
+    state.tableOrders = {
+      ...incoming,
+      [currentTable]: state.tableOrders[currentTable]
+    };
+  } else {
+    state.tableOrders = incoming;
+  }
+
   localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
 
   if (state.activeScreen === 'tables') {
     renderTableGrid();
   } else if (state.activeScreen === 'order') {
-    renderGroupedDishList();
-    updateTableBottomBar();
+    // Không gián đoạn DOM khi người dùng đang trực tiếp bấm thêm/bớt món
+    if (!isActivelyEditingCurrentTable) {
+      renderGroupedDishList();
+      updateTableBottomBar();
+    }
   }
 }
 
@@ -244,19 +272,28 @@ function connectTableEventSource() {
 }
 
 function initRealtimeTableSync() {
-  fetchAndApplyTableSync();
-  connectTableEventSource();
+  const hasToken = !!((state && state.token) || (typeof localStorage !== 'undefined' && localStorage.getItem('pos_token')));
+  if (hasToken) {
+    fetchAndApplyTableSync();
+    connectTableEventSource();
+  }
 
-  // Polling dự phòng liên tục mỗi 2.5 giây cho mọi thiết bị
+  // Polling dự phòng định kỳ mỗi 2.5 giây cho thiết bị ĐÃ ĐĂNG NHẬP
   setInterval(() => {
-    fetchAndApplyTableSync(true);
+    const isAuthed = !!((state && state.token) || (typeof localStorage !== 'undefined' && localStorage.getItem('pos_token')));
+    if (isAuthed) {
+      fetchAndApplyTableSync(true);
+    }
   }, 2500);
 
   // Khi mở lại tab hoặc mở khóa màn hình điện thoại
   document.addEventListener('visibilitychange', () => {
-    fetchAndApplyTableSync();
-    if (!tableEventSource || tableEventSource.readyState === EventSource.CLOSED) {
-      connectTableEventSource();
+    const isAuthed = !!((state && state.token) || (typeof localStorage !== 'undefined' && localStorage.getItem('pos_token')));
+    if (isAuthed) {
+      fetchAndApplyTableSync();
+      if (!tableEventSource || tableEventSource.readyState === EventSource.CLOSED) {
+        connectTableEventSource();
+      }
     }
   });
 }
@@ -745,24 +782,24 @@ function renderGroupedDishList() {
           </div>
 
           <!-- Bộ nút Stepper [-]  SL  [+] trực tiếp viền trắng bo tròn -->
-          <div class="flex items-center justify-between shrink-0 bg-white border border-slate-200 rounded-xl px-2.5 py-1 min-w-[104px] sm:min-w-[118px] shadow-2xs">
+          <div class="flex items-center justify-between shrink-0 bg-white border border-slate-200 rounded-xl p-1 min-w-[112px] sm:min-w-[124px] shadow-2xs">
             <button 
               type="button"
-              onclick="changeDishQty(${p.id}, -1)" 
-              class="w-7 h-7 flex items-center justify-center text-slate-700 hover:text-slate-900 active:scale-90 text-sm font-bold select-none cursor-pointer transition-all"
+              onclick="event.stopPropagation(); changeDishQty(${p.id}, -1)" 
+              class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700 hover:bg-slate-200 active:scale-90 text-sm font-bold select-none cursor-pointer transition-all"
               title="Giảm 1"
             >
               <i class="fa-solid fa-minus text-xs"></i>
             </button>
 
-            <span id="dish-qty-${p.id}" class="w-7 text-center text-sm sm:text-base font-bold text-slate-900 select-none">
+            <span id="dish-qty-${p.id}" class="w-8 text-center text-sm sm:text-base font-extrabold text-slate-900 select-none">
               ${currentQty}
             </span>
 
             <button 
               type="button"
-              onclick="changeDishQty(${p.id}, 1)" 
-              class="w-7 h-7 flex items-center justify-center text-slate-700 hover:text-slate-900 active:scale-90 text-sm font-bold select-none cursor-pointer transition-all"
+              onclick="event.stopPropagation(); changeDishQty(${p.id}, 1)" 
+              class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 active:scale-90 text-sm font-bold select-none cursor-pointer transition-all shadow-xs"
               title="Thêm 1"
             >
               <i class="fa-solid fa-plus text-xs"></i>
@@ -787,6 +824,8 @@ function renderGroupedDishList() {
 
 // Thay đổi số lượng món bằng nút Stepper
 function changeDishQty(productId, delta) {
+  window._lastDishTapTime = Date.now();
+
   const product = state.products.find(p => p.id === productId);
   if (!product) return;
 
@@ -1031,12 +1070,12 @@ function renderCartDrawerItems() {
           </div>
 
           <div class="flex items-center space-x-1 shrink-0 bg-white border border-slate-200 rounded-lg p-0.5">
-            <button onclick="changeDishQty(${item.id}, -1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 text-xs">
-              <i class="fa-solid fa-minus text-[9px]"></i>
+            <button onclick="event.stopPropagation(); changeDishQty(${item.id}, -1)" class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-90 text-xs">
+              <i class="fa-solid fa-minus text-[10px]"></i>
             </button>
-            <span class="w-6 text-center text-xs font-bold text-slate-800">${item.quantity}</span>
-            <button onclick="changeDishQty(${item.id}, 1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 text-xs">
-              <i class="fa-solid fa-plus text-[9px]"></i>
+            <span class="w-7 text-center text-xs font-bold text-slate-800">${item.quantity}</span>
+            <button onclick="event.stopPropagation(); changeDishQty(${item.id}, 1)" class="w-7 h-7 rounded-md flex items-center justify-center text-emerald-600 hover:bg-emerald-50 active:scale-90 text-xs">
+              <i class="fa-solid fa-plus text-[10px]"></i>
             </button>
           </div>
 

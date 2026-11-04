@@ -409,11 +409,15 @@ async function api(url, options = {}) {
 
     const data = await res.json();
     if (!res.ok) {
-      if (res.status === 401 && typeof openLoginModal === 'function') {
-        if (!isHostServerMachine()) {
-          openStaffJoinModal();
-        } else {
-          openLoginModal();
+      if (res.status === 401) {
+        const loginModalOpen = document.getElementById('loginModal') && !document.getElementById('loginModal').classList.contains('hidden');
+        const staffModalOpen = document.getElementById('modalStaffJoin') && !document.getElementById('modalStaffJoin').classList.contains('hidden');
+        if (!loginModalOpen && !staffModalOpen) {
+          if (!isHostServerMachine()) {
+            if (typeof openStaffJoinModal === 'function') openStaffJoinModal();
+          } else {
+            if (typeof openLoginModal === 'function') openLoginModal();
+          }
         }
       }
       return handleOfflineApi(url, options);
@@ -749,8 +753,13 @@ function openLoginModal(force = false) {
     return;
   }
 
-  closeStaffJoinModal();
   const modal = document.getElementById('loginModal');
+  // Nếu modal đăng nhập đã đang hiển thị, KHÔNG reset/xóa mật khẩu người dùng đang gõ
+  if (modal && !modal.classList.contains('hidden')) {
+    return;
+  }
+
+  closeStaffJoinModal();
   const userInput = document.getElementById('loginUsernameInput');
   const passInput = document.getElementById('loginPasswordInput');
   const errBox = document.getElementById('loginErrorMsg');
@@ -1780,6 +1789,9 @@ function updateStaffQrView() {
 // =============================================================
 function openStaffJoinModal() {
   const modal = document.getElementById('modalStaffJoin');
+  if (modal && !modal.classList.contains('hidden')) {
+    return;
+  }
   const nameInput = document.getElementById('staffJoinNameInput');
   const phoneInput = document.getElementById('staffJoinPhoneInput');
   const errBox = document.getElementById('staffJoinErrorMsg');
@@ -2006,3 +2018,12 @@ if (document.readyState === 'loading') {
 } else {
   startApp();
 }
+
+// Ngăn chặn phóng to màn hình khi chạm 2 lần liên tiếp trên điện thoại di động
+document.addEventListener('gesturestart', (e) => {
+  e.preventDefault();
+});
+document.addEventListener('dblclick', (e) => {
+  e.preventDefault();
+}, { passive: false });
+
