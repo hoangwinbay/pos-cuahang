@@ -1996,9 +1996,9 @@ function removeVietnameseAccents(str) {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 }
 
-function formatLineColumns(left, right, width = 32) {
-  const l = removeVietnameseAccents(String(left));
-  const r = removeVietnameseAccents(String(right));
+function formatLineColumns(left, right, width = 42, keepAccents = true) {
+  const l = keepAccents ? String(left).normalize('NFC') : removeVietnameseAccents(String(left));
+  const r = keepAccents ? String(right).normalize('NFC') : removeVietnameseAccents(String(right));
   const spaceCount = Math.max(1, width - l.length - r.length);
   return l + ' '.repeat(spaceCount) + r + '\n';
 }
@@ -2078,43 +2078,55 @@ function wrapTextLines(text, maxChars = 38) {
   return lines;
 }
 
-function formatBoxedTitle(text, width = 42) {
-  const clean = String(text).trim();
-  const innerWidth = width - 4;
-  const padLeft = Math.max(0, Math.floor((innerWidth - clean.length) / 2));
-  const padRight = Math.max(0, innerWidth - clean.length - padLeft);
-  const border = '+' + '-'.repeat(width - 2) + '+\n';
-  const middle = '| ' + ' '.repeat(padLeft) + clean + ' '.repeat(padRight) + ' |\n';
-  return border + middle + border;
+function formatBoxedTitle(text, width = 42, keepAccents = true) {
+  const clean = keepAccents ? String(text).normalize('NFC').trim() : removeVietnameseAccents(String(text)).trim();
+  const padLeft = Math.max(0, Math.floor((width - clean.length) / 2));
+  const padRight = Math.max(0, width - clean.length - padLeft);
+  const border = '-'.repeat(width) + '\n';
+  const middle = ' '.repeat(padLeft) + clean + ' '.repeat(padRight) + '\n';
+  return { border, middle, full: border + middle + border };
 }
 
-function formatItemRow4Col(name, qty, price, total, width = 42) {
-  const cleanName = String(name).trim();
+function wrapItemName(name, maxLen) {
+  const words = String(name).trim().split(/\s+/);
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if (!w) continue;
+    if (!cur) {
+      cur = w;
+    } else if ((cur + ' ' + w).length <= maxLen) {
+      cur += ' ' + w;
+    } else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function formatItemRow4Col(name, qty, price, total, width = 42, keepAccents = true) {
+  const cleanName = keepAccents ? String(name).normalize('NFC').trim() : removeVietnameseAccents(String(name)).trim();
   const qtyStr = String(qty);
   const priceStr = formatReceiptNum(price);
   const totalStr = formatReceiptNum(total);
 
-  const nameWidth = width === 32 ? 12 : 18;
+  const nameWidth = width === 32 ? 12 : 17;
   const qtyWidth = 3;
   const priceWidth = width === 32 ? 7 : 9;
-  const totalWidth = width === 32 ? 7 : 9;
+  const totalWidth = width === 32 ? 7 : 10;
 
-  let lines = [];
-  if (cleanName.length <= nameWidth) {
-    const colName = cleanName.padEnd(nameWidth, ' ');
-    const colQty = qtyStr.padStart(qtyWidth, ' ');
-    const colPrice = priceStr.padStart(priceWidth, ' ');
-    const colTotal = totalStr.padStart(totalWidth, ' ');
-    lines.push(`${colName} ${colQty} ${colPrice} ${colTotal}`);
-  } else {
-    const firstPart = cleanName.substring(0, nameWidth);
-    const restPart = cleanName.substring(nameWidth);
-    const colName = firstPart.padEnd(nameWidth, ' ');
-    const colQty = qtyStr.padStart(qtyWidth, ' ');
-    const colPrice = priceStr.padStart(priceWidth, ' ');
-    const colTotal = totalStr.padStart(totalWidth, ' ');
-    lines.push(`${colName} ${colQty} ${colPrice} ${colTotal}`);
-    lines.push(`  ${restPart.trim()}`);
+  const wrapped = wrapItemName(cleanName, nameWidth);
+  const firstPart = (wrapped[0] || '').padEnd(nameWidth, ' ');
+  const colQty = qtyStr.padStart(qtyWidth, ' ');
+  const colPrice = priceStr.padStart(priceWidth, ' ');
+  const colTotal = totalStr.padStart(totalWidth, ' ');
+
+  const lines = [];
+  lines.push(`${firstPart} ${colQty} ${colPrice} ${colTotal}`);
+  for (let i = 1; i < wrapped.length; i++) {
+    lines.push(`  ${wrapped[i]}`);
   }
   return lines.join('\n') + '\n';
 }
@@ -2156,8 +2168,9 @@ function htmlToBase64(html) {
 }
 
 function generateEscPosPayload(order) {
-  const withAccents = localStorage.getItem('pos_print_accents') === '1';
-  const sanitize = withAccents ? (s) => (s || '') : removeVietnameseAccents;
+  const printAccentsMode = localStorage.getItem('pos_print_accents') || '0';
+  const withAccents = printAccentsMode !== '2';
+  const sanitize = withAccents ? (s) => (s ? String(s).normalize('NFC') : '') : removeVietnameseAccents;
 
   const rawStoreName = state.settings.store_name || 'Bún mắm miền Tây';
   const rawStoreAddress = state.settings.store_address || '324 Bạch Mai';
@@ -2178,16 +2191,15 @@ function generateEscPosPayload(order) {
   if (!orderSource) orderSource = state.currentSource || 'taicho';
   const isMangVe = (orderSource === 'mangve') || 
                    (order.order_type && order.order_type.toLowerCase().includes('mang')) ||
-                   (order.table_name && order.table_name.toLowerCase().includes('mang ve'));
+                   (order.table_name && order.table_name.toLowerCase().includes('mang'));
   const sourceLabel = isMangVe ? (withAccents ? 'MANG VỀ' : 'MANG VE') : (withAccents ? 'TẠI CHỖ' : 'TAI CHO');
 
-  // Chuẩn hóa tên bàn triệt để: Tránh lỗi trùng "Ban" và lỗi rỗng dấu như "Ban B  n 2"
-  let cleanTable = removeVietnameseAccents(order.table_name || 'Ban 1').trim();
-  let tableUpper = cleanTable.toUpperCase();
-  if (!tableUpper.startsWith('BAN') && !tableUpper.startsWith('MANG')) {
-    tableUpper = 'BAN ' + tableUpper;
+  let rawTable = String(order.table_name || 'Bàn 1').trim();
+  let tableDisplay = rawTable;
+  if (!tableDisplay.toLowerCase().startsWith('bàn') && !tableDisplay.toLowerCase().startsWith('ban') && !tableDisplay.toLowerCase().startsWith('mang')) {
+    tableDisplay = (withAccents ? 'Bàn ' : 'Ban ') + tableDisplay;
   }
-  const tableDisplay = withAccents ? (order.table_name || tableUpper) : tableUpper;
+  tableDisplay = sanitize(tableDisplay);
 
   const createdAt = order.created_at ? new Date(order.created_at) : new Date();
   const dateStr = String(createdAt.getDate()).padStart(2, '0') + '/' + 
@@ -2196,17 +2208,22 @@ function generateEscPosPayload(order) {
   const timeStr = String(createdAt.getHours()).padStart(2, '0') + ':' + 
                   String(createdAt.getMinutes()).padStart(2, '0');
 
-  let content = '\x1B\x40'; // Reset / Khoi tao may in
-  content += '\x1B\x61\x01'; // Canh giua
+  let content = '\x1B\x40'; // Reset / Khởi tạo máy in
+  content += '\x1B\x61\x01'; // Canh giữa
   content += '\x1B\x45\x01\x1D\x21\x01' + (withAccents ? 'HÓA ĐƠN THANH TOÁN\n\n' : 'HOA DON THANH TOAN\n\n') + '\x1D\x21\x00\x1B\x45\x00';
   
-  // Khung viền bàn ăn chuẩn như form hóa đơn cũ (In đậm & Chữ cao gấp đôi to rõ)
-  content += '\x1B\x61\x00'; // Canh trái để khung viền vuông vắn
+  // Khung viền bàn ăn chuẩn như mẫu Windows (Đường kẻ đứt trên dưới, chữ bàn to đậm gấp đôi)
+  content += '\x1B\x61\x00'; // Canh trái để viền chuẩn
+  const boxedInfo = formatBoxedTitle(`${tableDisplay} - ${sourceLabel}`, lineWidth, withAccents);
+  content += boxedInfo.border;
   content += '\x1B\x45\x01\x1D\x21\x01'; // In đậm + Tăng chiều cao x2 cho tên bàn
-  content += formatBoxedTitle(`${tableDisplay} - ${sourceLabel}`, lineWidth);
+  content += boxedInfo.middle;
   content += '\x1D\x21\x00\x1B\x45\x00'; // Tắt in đậm & reset kích thước
+  content += boxedInfo.border;
   
-  content += formatLineColumns(`Gio vao: ${timeStr}`, `Ngay: ${dateStr}`, lineWidth);
+  const labelTime = withAccents ? `Giờ vào: ${timeStr}` : `Gio vao: ${timeStr}`;
+  const labelDate = withAccents ? `Ngày: ${dateStr}` : `Ngay: ${dateStr}`;
+  content += formatLineColumns(labelTime, labelDate, lineWidth, withAccents);
   
   if (order.note) {
     const noteLines = wrapTextLines(sanitize(`Ghi chú: ${order.note}`), lineWidth);
@@ -2215,12 +2232,14 @@ function generateEscPosPayload(order) {
     });
   }
 
-  // Tiêu đề 4 cột chuẩn theo đúng mẫu hóa đơn cũ
+  // Tiêu đề 4 cột chuẩn theo đúng mẫu hóa đơn Windows
   content += divider;
   content += '\x1B\x45\x01'; // In đậm tiêu đề cột
-  content += lineWidth === 32
-    ? 'Ten mon      SL Don gia  T.Tien\n'
-    : 'Ten mon          SL    Don gia  Thanh tien\n';
+  if (lineWidth === 32) {
+    content += withAccents ? 'Tên món      SL Đơn giá  T.Tiền\n' : 'Ten mon      SL Don gia  T.Tien\n';
+  } else {
+    content += withAccents ? 'Tên món           SL   Đơn giá Thành tiền\n' : 'Ten mon           SL   Don gia Thanh tien\n';
+  }
   content += '\x1B\x45\x00';
   content += divider;
 
@@ -2229,9 +2248,9 @@ function generateEscPosPayload(order) {
     const qty = Number(it.quantity) || 1;
     const price = Number(it.price) || 0;
     const total = Number(it.total !== undefined ? it.total : price * qty);
-    const itemName = sanitize(it.product_name || it.name || 'Mon');
+    const itemName = sanitize(it.product_name || it.name || 'Món');
     content += '\x1B\x45\x01';
-    content += formatItemRow4Col(itemName, qty, price, total, lineWidth);
+    content += formatItemRow4Col(itemName, qty, price, total, lineWidth, withAccents);
     content += '\x1B\x45\x00';
   });
 
@@ -2240,27 +2259,31 @@ function generateEscPosPayload(order) {
   const discount = Number(order.discount || 0);
   const finalTotal = Number(order.total !== undefined ? order.total : (subtotal - discount));
 
-  content += formatLineColumns(withAccents ? 'Thành tiền:' : 'Thanh tien:', formatReceiptNum(subtotal) + ' d', lineWidth);
+  const labelSubtotal = withAccents ? 'Thành tiền:' : 'Thanh tien:';
+  content += formatLineColumns(labelSubtotal, formatReceiptNum(subtotal) + (withAccents ? ' đ' : ' d'), lineWidth, withAccents);
   if (discount > 0) {
-    content += formatLineColumns(withAccents ? 'Giảm giá:' : 'Giam gia:', '-' + formatReceiptNum(discount) + ' d', lineWidth);
+    const labelDiscount = withAccents ? 'Giảm giá:' : 'Giam gia:';
+    content += formatLineColumns(labelDiscount, '-' + formatReceiptNum(discount) + (withAccents ? ' đ' : ' d'), lineWidth, withAccents);
   }
   // Tổng tiền: In đậm + Chữ cao gấp đôi (Double height)
   content += '\x1B\x45\x01\x1D\x21\x01';
-  content += formatLineColumns(withAccents ? 'Tổng tiền:' : 'Tong tien:', formatReceiptNum(finalTotal) + ' d', lineWidth);
+  const labelTotal = withAccents ? 'Tổng tiền:' : 'Tong tien:';
+  content += formatLineColumns(labelTotal, formatReceiptNum(finalTotal) + (withAccents ? ' đ' : ' d'), lineWidth, withAccents);
   content += '\x1D\x21\x00\x1B\x45\x00';
 
   const isChuyenKhoan = order.payment_method === 'transfer' || order.payment_method === 'bank' || order.payment_method === 'qr' || order.payment_method === 'chuyenkhoan';
   const payLabel = isChuyenKhoan 
     ? (withAccents ? '+ Thanh toán chuyển khoản' : '+ Thanh toan chuyen khoan')
     : (withAccents ? '+ Thanh toán tiền mặt' : '+ Thanh toan tien mat');
-  content += formatLineColumns(payLabel, formatReceiptNum(finalTotal) + ' d', lineWidth);
+  content += formatLineColumns(payLabel, formatReceiptNum(finalTotal) + (withAccents ? ' đ' : ' d'), lineWidth, withAccents);
 
   content += divider;
-  content += '\x1B\x61\x01'; // Canh giua
+  content += '\x1B\x61\x01'; // Canh giữa
   content += '\x1B\x45\x01' + storeName + '\x1B\x45\x00\n';
   
   // Tự động ngắt dòng địa chỉ nếu dài
-  const addrLines = wrapTextLines(`Dia chi: ${storeAddress}`, Math.max(26, lineWidth - 4));
+  const labelAddr = withAccents ? 'Địa chỉ: ' : 'Dia chi: ';
+  const addrLines = wrapTextLines(labelAddr + storeAddress, Math.max(26, lineWidth - 4));
   addrLines.forEach((al) => {
     content += al + '\n';
   });
@@ -3265,9 +3288,11 @@ function setPaperWidth(val) {
 function setPrintAccents(val) {
   localStorage.setItem('pos_print_accents', val);
   if (val === '1') {
-    showToast('Đã chọn Form Đồ Họa Bitmap (Chữ to, có dấu)', 'info');
+    showToast('Đã chọn Mẫu Đồ Họa Bitmap (Giống hệt 100% Windows)', 'success');
+  } else if (val === '2') {
+    showToast('Đã chọn Mẫu ESC/POS Không dấu (Dành cho máy in cũ)', 'info');
   } else {
-    showToast('Đã chọn Form ESC/POS Siêu Tốc (In ngay, chữ to rõ)', 'success');
+    showToast('Đã chọn Mẫu Chuẩn ESC/POS (Có dấu, khớp mẫu Windows)', 'success');
   }
 }
 
@@ -3511,13 +3536,14 @@ function testPrintSample() {
     created_at: new Date().toISOString(),
     table_name: 'Bàn 5',
     source: 'taicho',
-    cashier_name: '.',
+    cashier_name: (state.currentUser && state.currentUser.name) || 'Thu ngân',
     payment_method: 'cash',
-    subtotal: 55000,
+    subtotal: 70000,
     discount: 0,
-    total: 55000,
+    total: 70000,
     items: [
-      { product_name: 'Bún mắm cá tươi', quantity: 1, price: 55000, total: 55000 }
+      { product_name: 'Bún mắm cá tươi', quantity: 1, price: 55000, total: 55000 },
+      { product_name: 'Trà đá đường', quantity: 3, price: 5000, total: 15000 }
     ]
   };
   executeOrderPrint(sampleOrder, { isManual: true });
