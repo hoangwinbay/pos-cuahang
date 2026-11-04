@@ -497,8 +497,39 @@ async function initAuth() {
       } catch (e) {}
     }
 
-    // Nếu chưa đăng nhập hoặc token hết hạn:
-    // Luôn mở form Nhân viên nhập Tên & SĐT, tuyệt đối không mở Đăng nhập Chủ Quán!
+    // Nếu token hết hạn hoặc máy chủ vừa khởi động lại:
+    // Tự động phục hồi phiên làm việc cho nhân viên nếu máy đã lưu Tên & SĐT trước đó
+    const savedName = localStorage.getItem('pos_staff_name');
+    const savedPhone = localStorage.getItem('pos_staff_phone');
+
+    if (savedName && savedPhone && !explicitLogout) {
+      try {
+        const res = await api('/api/auth/staff-join', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: savedName,
+            phone: savedPhone,
+            deviceId: getDeviceId(),
+            deviceName: getDeviceName(),
+            platform: getDevicePlatform(),
+            deviceType: 'mobile'
+          })
+        });
+        if (res && res.token && res.user && res.user.active !== 0) {
+          state.token = res.token;
+          state.currentUser = res.user;
+          localStorage.setItem('pos_token', res.token);
+          closeStaffJoinModal();
+          applyUserRolePermissions();
+          if (typeof showTableFloor === 'function') showTableFloor();
+          return;
+        }
+      } catch (err) {
+        console.warn('Tự động kết nối lại nhân viên thất bại:', err.message);
+      }
+    }
+
+    // Nếu chưa từng tham gia lần nào: mở form Nhân viên nhập Tên & SĐT
     state.token = null;
     state.currentUser = null;
     localStorage.removeItem('pos_token');
@@ -1304,6 +1335,12 @@ async function openConnectedDevicesModal() {
   const modal = document.getElementById('modalConnectedDevices');
   if (modal) modal.classList.remove('hidden');
 
+  const isAdmin = state.currentUser && state.currentUser.role === 'admin';
+  const btnQr = document.getElementById('btnFooterCreateStaffQr');
+  if (btnQr) {
+    btnQr.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
+
   switchDeviceModalTab('staff');
   loadStaffAccounts();
   loadConnectedDevices(true);
@@ -1335,6 +1372,8 @@ async function loadStaffAccounts(silent = false) {
   const countBadge = document.getElementById('staffAccountsCountBadge');
   if (!container) return;
 
+  const isAdmin = state.currentUser && state.currentUser.role === 'admin';
+
   if (!silent) {
     container.innerHTML = `
       <div class="text-center py-8 text-slate-400 text-xs">
@@ -1346,7 +1385,34 @@ async function loadStaffAccounts(silent = false) {
 
   try {
     const users = await api('/api/users');
-    const staffList = Array.isArray(users) ? users.filter(u => u.role === 'staff') : [];
+    let staffList = Array.isArray(users) ? users.filter(u => u.role === 'staff') : [];
+
+    // Tự động sao lưu và bảo vệ danh sách nhân viên trên máy Admin
+    if (isAdmin) {
+      if (staffList.length > 0) {
+        localStorage.setItem('pos_backup_staff_accounts', JSON.stringify(staffList));
+      } else {
+        const backupStr = localStorage.getItem('pos_backup_staff_accounts');
+        if (backupStr) {
+          try {
+            const backupList = JSON.parse(backupStr);
+            if (Array.isArray(backupList) && backupList.length > 0) {
+              for (const s of backupList) {
+                if (s.name && s.phone) {
+                  await api('/api/auth/staff-join', {
+                    method: 'POST',
+                    body: JSON.stringify({ name: s.name, phone: s.phone })
+                  });
+                }
+              }
+              const reloadedUsers = await api('/api/users');
+              staffList = Array.isArray(reloadedUsers) ? reloadedUsers.filter(u => u.role === 'staff') : backupList;
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
     cachedStaffAccounts = staffList;
 
     if (countBadge) {
@@ -1360,7 +1426,7 @@ async function loadStaffAccounts(silent = false) {
             <i class="fa-solid fa-users"></i>
           </div>
           <p class="font-bold text-slate-700 text-xs">Chưa có nhân viên</p>
-          <p class="text-[11px] text-slate-400">Bấm "Tạo mã QR" bên dưới để nhân viên quét vào gọi món</p>
+          <p class="text-[11px] text-slate-400">${isAdmin ? 'Bấm "Tạo mã QR" bên dưới để nhân viên quét vào gọi món' : 'Chưa có nhân viên nào khác đang tham gia'}</p>
         </div>
       `;
       return;
@@ -1370,6 +1436,34 @@ async function loadStaffAccounts(silent = false) {
       const isActive = Boolean(u.active);
       const phoneDisplay = u.phone || 'Chưa cập nhật SĐT';
       const createdTime = u.created_at ? new Date(u.created_at).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'Quét mã QR';
+
+      // Nút thao tác: Chỉ Admin mới có quyền Khóa hoặc Xóa nhân viên; máy khác chỉ xem
+      const actionsHtml = isAdmin ? `
+        <div class="flex items-center space-x-1.5 shrink-0">
+          <button 
+            onclick="toggleStaffActive(${u.id}, '${escapeHtml(u.name)}', ${isActive ? 1 : 0})" 
+            class="px-2.5 py-1.5 ${isActive ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'} rounded-xl text-xs font-bold transition-colors flex items-center space-x-1"
+            title="${isActive ? 'Khóa tài khoản này (nhân viên không thể vào đặt món)' : 'Mở khóa tài khoản'}"
+          >
+            <i class="fa-solid ${isActive ? 'fa-lock' : 'fa-lock-open'} text-xs"></i>
+            <span class="hidden sm:inline">${isActive ? 'Khóa' : 'Mở'}</span>
+          </button>
+          <button 
+            onclick="deleteStaffUser(${u.id}, '${escapeHtml(u.name)}')" 
+            class="p-1.5 px-2 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded-xl text-xs font-bold transition-colors"
+            title="Xóa tài khoản nhân viên"
+          >
+            <i class="fa-solid fa-trash-can text-xs"></i>
+          </button>
+        </div>
+      ` : `
+        <div class="shrink-0 text-right">
+          ${isActive 
+            ? '<span class="text-xs font-bold text-emerald-600 flex items-center space-x-1"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>Hoạt động</span></span>' 
+            : '<span class="text-xs font-medium text-rose-500 flex items-center space-x-1"><i class="fa-solid fa-lock text-[10px]"></i><span>Đã khóa</span></span>'
+          }
+        </div>
+      `;
 
       return `
         <div class="border ${isActive ? 'border-slate-200 bg-white hover:border-emerald-300' : 'border-rose-200 bg-rose-50/30'} rounded-2xl p-3 sm:p-3.5 flex items-center justify-between space-x-3 transition-all shadow-2xs">
@@ -1396,23 +1490,7 @@ async function loadStaffAccounts(silent = false) {
             </div>
           </div>
 
-          <div class="flex items-center space-x-1.5 shrink-0">
-            <button 
-              onclick="toggleStaffActive(${u.id}, '${escapeHtml(u.name)}', ${isActive ? 1 : 0})" 
-              class="px-2.5 py-1.5 ${isActive ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'} rounded-xl text-xs font-bold transition-colors flex items-center space-x-1"
-              title="${isActive ? 'Khóa tài khoản này (nhân viên không thể vào đặt món)' : 'Mở khóa tài khoản'}"
-            >
-              <i class="fa-solid ${isActive ? 'fa-lock' : 'fa-lock-open'} text-xs"></i>
-              <span class="hidden sm:inline">${isActive ? 'Khóa' : 'Mở khóa'}</span>
-            </button>
-            <button 
-              onclick="deleteStaffUser(${u.id}, '${escapeHtml(u.name)}')" 
-              class="p-1.5 px-2 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded-xl text-xs font-bold transition-colors"
-              title="Xóa tài khoản nhân viên"
-            >
-              <i class="fa-solid fa-trash-can text-xs"></i>
-            </button>
-          </div>
+          ${actionsHtml}
         </div>
       `;
     }).join('');
@@ -1475,6 +1553,7 @@ async function loadConnectedDevices(silent = false) {
     const res = await api('/api/devices');
     const devices = res?.devices || [];
     const totalOnline = res?.totalOnline || devices.filter(d => d.isOnline).length;
+    const isAdmin = state.currentUser && state.currentUser.role === 'admin';
 
     updateConnectedDeviceBadgeUI(totalOnline);
 
@@ -1558,7 +1637,7 @@ async function loadConnectedDevices(silent = false) {
               <div class="text-[10px] text-slate-400">${isOnline ? 'Đang hoạt động' : lastSeenText}</div>
             </div>
 
-            ${!isOnline && !isSelf ? `
+            ${isAdmin && !isOnline && !isSelf ? `
               <button onclick="deleteConnectedDevice('${dev.id}')" class="p-1.5 text-slate-300 hover:text-rose-500 rounded-lg hover:bg-rose-50 transition-colors" title="Xóa thiết bị offline">
                 <i class="fa-solid fa-trash-can text-xs"></i>
               </button>

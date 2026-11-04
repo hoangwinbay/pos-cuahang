@@ -163,25 +163,49 @@ async function fetchAndApplyTableSync(silent = false) {
 
 function applyIncomingTableOrders(newTableOrders) {
   const incoming = newTableOrders || {};
-  const currentTable = state.currentTable;
+  const currentLocal = state.tableOrders || {};
 
-  // Nếu người dùng đang ở màn hình đặt món và đang thao tác nút Stepper gần đây (dưới 3.5 giây)
+  // ============================================================
+  // TỰ ĐỘNG BẢO TOÀN DỮ LIỆU BÀN ĐANG PHỤC VỤ (ZERO DATA LOSS)
+  // ============================================================
+  const serverKeys = Object.keys(incoming);
+  const localTablesWithItems = Object.keys(currentLocal).filter(k => {
+    return currentLocal[k] && Array.isArray(currentLocal[k].items) && currentLocal[k].items.length > 0;
+  });
+
+  // 1. Khi máy chủ vừa khởi động lại (Render deploy mới) hoặc trả về rỗng,
+  // tuyệt đối KHÔNG đè rỗng lên các bàn máy khách đang phục vụ:
+  if (serverKeys.length === 0 && localTablesWithItems.length > 0) {
+    console.log('Máy chủ đang trống, tự động phục hồi các bàn đang mở lên máy chủ:', localTablesWithItems);
+    localTablesWithItems.forEach(tName => {
+      syncTableOrderToServer(tName, true);
+    });
+    return;
+  }
+
+  // 2. Trộn thông minh (Merge):
+  const mergedOrders = { ...incoming };
+  const currentTable = state.currentTable;
   const isActivelyEditingCurrentTable = (
     state.activeScreen === 'order' &&
     currentTable &&
     (syncDebounceTimers[currentTable] || (Date.now() - (window._lastDishTapTime || 0) < 3500))
   );
 
-  if (isActivelyEditingCurrentTable && state.tableOrders && state.tableOrders[currentTable]) {
-    // Bảo lưu món hiện tại của bàn đang chọn tại chỗ, không cho server sync cũ đè về 0
-    state.tableOrders = {
-      ...incoming,
-      [currentTable]: state.tableOrders[currentTable]
-    };
-  } else {
-    state.tableOrders = incoming;
+  // Bảo lưu bàn hiện tại người dùng đang bấm nút Stepper
+  if (isActivelyEditingCurrentTable && currentLocal[currentTable]) {
+    mergedOrders[currentTable] = currentLocal[currentTable];
   }
 
+  // Tự động đẩy lên server nếu có bàn có món ở máy khách mà server tạm thời chưa có
+  localTablesWithItems.forEach(tName => {
+    if (!mergedOrders[tName] && currentLocal[tName]) {
+      mergedOrders[tName] = currentLocal[tName];
+      syncTableOrderToServer(tName, true);
+    }
+  });
+
+  state.tableOrders = mergedOrders;
   localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
 
   if (state.activeScreen === 'tables') {

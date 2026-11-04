@@ -1,0 +1,122 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "password": "scrypt:f3630563c0c16c743d1b4a5dd851b475:46b8c2cdac4bae551006a5cae39ea65e1f6a76263306ec87c9cd0a771f98872a5593ce7d3968bcf068b35c8a1ba591fe7bcfb9b98c8802fb279f5888c3cee08e",
+      "name": "Chủ Cửa Hàng",
+      "role": "admin",
+      "pin": "scrypt:50583f5bd011dcbc65ade3205155cd1b:d46c6b5f21b2b3983fbb8b60016165c7baf0df2de68e032d4cc54db3cc45d4391e95afdb678bf2defbd2021e748c3905650d3ca0aa008c1fb4ddc49df613a759",
+      "active": 1,
+      "phone": "",
+      "email": null,
+      "created_at": "2026-10-09 13:01:48"
+    },
+    {
+      "id": 8,
+      "username": "nv_0332105390",
+      "password": "scrypt:dd7843585569b98834fe4f2f260e540d:5855aeef584798eb631e1ccc0c5af6c26e1d413975a91d541c02858a8ba6108c3d5a731c43efa2caa67b7309e3e3070be75f363f845f0e554ab8e98ccff546fa",
+      "name": "Hoàng",
+      "role": "staff",
+      "pin": "scrypt:119e64dd56907d2c246471ad7e82b9d2:083e02b5c7ccd29da69a811030a9d9ddd545877de2aff8f742fa7fe2be4d65a130226cc57e2f794c633329f77cb53c7afa807e92de5679471fece67b7de2e7e0",
+      "active": 1,
+      "phone": "0332105390",
+      "email": null,
+      "created_at": "2026-11-04 04:33:49"
+    }
+  ],
+  "active_table_orders": [],
+  "table_definitions": [
+    {
+      "table_name": "Bàn 1",
+      "sort_order": 1
+    },
+    {
+      "table_name": "Bàn 2",
+      "sort_order": 2
+    },
+    {
+      "table_name": "Bàn 3",
+      "sort_order": 3
+    },
+    {
+      "table_name": "Bàn 4",
+      "sort_order": 4
+    },
+    {
+      "table_name": "Bàn 5",
+      "sort_order": 5
+    },
+    {
+      "table_name": "Bàn 6",
+      "sort_order": 6
+    },
+    {
+      "table_name": "Bàn 7",
+      "sort_order": 7
+    },
+    {
+      "table_name": "Bàn 8",
+      "sort_order": 8
+    },
+    {
+      "table_name": "Bàn 9",
+      "sort_order": 9
+    },
+    {
+      "table_name": "Bàn 10",
+      "sort_order": 10
+    },
+    {
+      "table_name": "Bàn 11",
+      "sort_order": 11
+    },
+    {
+      "table_name": "Bàn 12",
+      "sort_order": 12
+    }
+  ],
+  "settings": [
+    {
+      "key": "store_phone",
+      "value": "0909 888 999"
+    },
+    {
+      "key": "store_greeting",
+      "value": "Cảm ơn quý khách và hẹn gặp lại! Hotline hỗ trợ: 0909 888 999"
+    },
+    {
+      "key": "bank_id",
+      "value": "MB"
+    },
+    {
+      "key": "bank_account_no",
+      "value": "0909888999"
+    },
+    {
+      "key": "bank_account_name",
+      "value": "NGUYEN VAN POS"
+    },
+    {
+      "key": "paper_size",
+      "value": "80mm"
+    },
+    {
+      "key": "store_name",
+      "value": "Bún mắm miền Tây"
+    },
+    {
+      "key": "store_address",
+      "value": "324 Bạch Mai"
+    },
+    {
+      "key": "receipt_footer",
+      "value": "Quý khách vui lòng mang phiếu này ra quầy khi thanh toán"
+    },
+    {
+      "key": "zalo_mini_app_id",
+      "value": "3906597427562388428"
+    }
+  ],
+  "saved_at": "2026-11-04T04:34:41.955Z"
+}

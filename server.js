@@ -12,6 +12,7 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const db = require('./db.js');
 const { hashSecret, verifySecret } = require('./auth-utils.js');
+const { saveDataBackup } = require('./data-persistence.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -349,6 +350,8 @@ app.post('/api/auth/staff-join', (req, res) => {
       });
     }
 
+    saveDataBackup(db);
+
     res.json({
       success: true,
       token,
@@ -411,8 +414,8 @@ app.post('/api/auth/change-pin', (req, res) => {
   }
 });
 
-// List all users (Admin only) - Đầy đủ thông tin thành viên
-app.get('/api/users', requireAdmin, (req, res) => {
+// List all users (Authenticated) - Xem danh sách thành viên (nhân viên có thể xem nhưng không thể sửa/xóa/khóa)
+app.get('/api/users', requireAuth, (req, res) => {
   try {
     const users = db.prepare(`
       SELECT id, username, name, role, phone, email, avatar, active, created_at,
@@ -438,6 +441,7 @@ app.put('/api/users/:id/toggle-active', requireAdmin, (req, res) => {
 
     const newActive = user.active ? 0 : 1;
     db.prepare('UPDATE users SET active = ? WHERE id = ?').run(newActive, userId);
+    saveDataBackup(db);
     res.json({ success: true, active: newActive, name: user.name });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -562,6 +566,7 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
       }
     }
 
+    saveDataBackup(db);
     res.json({ success: true, message: 'Đã xóa tài khoản thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -969,6 +974,7 @@ app.post('/api/orders', requireAuth, (req, res) => {
             table_name: cleanTableName || rawTable,
             all_table_orders: getAllActiveTableOrders()
           });
+          saveDataBackup(db);
         } catch (e) {
           console.error('Lỗi dọn bàn active_table_orders:', e);
         }
@@ -1576,6 +1582,7 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
     upsert.run(table_name, orderJson);
 
     const allOrders = getAllActiveTableOrders();
+    saveDataBackup(db);
     broadcastTableUpdate({
       type: 'table_order_updated',
       table_name,
@@ -1597,6 +1604,7 @@ app.delete('/api/tables/order/:tableName', requireAuth, (req, res) => {
     db.prepare('DELETE FROM active_table_orders WHERE table_name = ? OR table_name = ?').run(tableName, cleanTableName);
 
     const allOrders = getAllActiveTableOrders();
+    saveDataBackup(db);
     broadcastTableUpdate({
       type: 'table_order_cleared',
       table_name: cleanTableName || tableName,
@@ -1620,6 +1628,7 @@ app.post('/api/tables/custom', requireAdmin, (req, res) => {
     db.prepare('INSERT OR IGNORE INTO table_definitions (table_name, sort_order) VALUES (?, ?)').run(trimmed, count + 1);
 
     const tables = getAllTableDefinitions();
+    saveDataBackup(db);
     broadcastTableUpdate({
       type: 'table_list_updated',
       tables
@@ -1644,6 +1653,7 @@ app.delete('/api/tables/:tableName', requireAdmin, (req, res) => {
 
     const tables = getAllTableDefinitions();
     const allOrders = getAllActiveTableOrders();
+    saveDataBackup(db);
 
     broadcastTableUpdate({
       type: 'table_list_updated',

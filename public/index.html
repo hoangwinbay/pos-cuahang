@@ -1246,13 +1246,13 @@
         <!-- Rendered dynamically -->
       </div>
 
-      <!-- Footer: Duy nhất 1 nút tạo mã QR -->
+      <!-- Footer: Duy nhất 1 nút tạo mã QR (chỉ Admin) -->
       <div class="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-        <button onclick="openStaffQrModal()" class="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-xl flex items-center space-x-1.5 shadow-sm transition-colors">
+        <button id="btnFooterCreateStaffQr" onclick="openStaffQrModal()" class="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-xl flex items-center space-x-1.5 shadow-sm transition-colors">
           <i class="fa-solid fa-qrcode"></i>
           <span>Tạo mã QR</span>
         </button>
-        <button onclick="closeConnectedDevicesModal()" class="text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-4 py-2 rounded-xl transition-colors">
+        <button onclick="closeConnectedDevicesModal()" class="text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-4 py-2 rounded-xl transition-colors ml-auto">
           Đóng
         </button>
       </div>

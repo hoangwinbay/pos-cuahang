@@ -145,10 +145,23 @@ function initDatabase() {
   // Seed default users if empty
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (userCount === 0) {
-    const insertUser = db.prepare('INSERT INTO users (username, password, name, role, pin, active) VALUES (?, ?, ?, ?, ?, ?)');
-    insertUser.run('admin', hashSecret('123'), 'Chủ Cửa Hàng', 'admin', hashSecret('9999'), 1);
-    insertUser.run('nhanvien', hashSecret('123'), 'Nhân Viên Thu Ngân', 'staff', hashSecret('1234'), 1);
+    const insertUser = db.prepare('INSERT INTO users (username, password, name, role, pin, active, phone) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    insertUser.run('admin', hashSecret('123'), 'Chủ Cửa Hàng', 'admin', hashSecret('9999'), 1, '');
+    insertUser.run('nv_0332105390', hashSecret('123456'), 'Hoàng', 'staff', hashSecret('1234'), 1, '0332105390');
   } else {
+    // Đảm bảo luôn giữ nguyên tài khoản nhân viên Hoàng (0332105390) đã tạo
+    try {
+      const hoang = db.prepare("SELECT id FROM users WHERE phone = '0332105390' OR username = 'nv_0332105390'").get();
+      if (!hoang) {
+        db.prepare("INSERT INTO users (username, password, name, role, pin, active, phone) VALUES (?, ?, ?, ?, ?, ?, ?)").run('nv_0332105390', hashSecret('123456'), 'Hoàng', 'staff', hashSecret('1234'), 1, '0332105390');
+      }
+    } catch (e) {}
+
+    // Dọn dẹp tài khoản nháp cũ không có SĐT nếu có
+    try {
+      db.prepare("DELETE FROM users WHERE username = 'nhanvien' AND (phone IS NULL OR phone = '')").run();
+    } catch (e) {}
+
     // Transparent migration: Hash any existing plaintext passwords and PINs
     try {
       const existingUsers = db.prepare('SELECT id, password, pin FROM users').all();
@@ -221,7 +234,6 @@ function initDatabase() {
     if (!hasCorrectMenu) {
       db.exec('DELETE FROM products;');
       db.exec('DELETE FROM categories;');
-      db.exec('DELETE FROM active_table_orders;');
       try {
         db.exec("DELETE FROM sqlite_sequence WHERE name IN ('categories', 'products');");
       } catch (e) {}
@@ -287,5 +299,14 @@ function initDatabase() {
 }
 
 initDatabase();
+
+// Tự động phục hồi và lưu bản sao lưu bền vững data_backup.json
+try {
+  const { restoreDataBackup, saveDataBackup } = require('./data-persistence.js');
+  restoreDataBackup(db);
+  saveDataBackup(db);
+} catch (e) {
+  console.warn('Lỗi khởi tạo sao lưu bền vững:', e.message);
+}
 
 module.exports = db;
