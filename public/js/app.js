@@ -685,7 +685,7 @@ async function submitLoginWithUserPass() {
   const errText = document.getElementById('loginErrorText');
   const submitBtn = document.getElementById('btnSubmitLogin');
 
-  const username = userInput ? userInput.value.trim() : 'admin';
+  const username = userInput ? userInput.value.trim() : '';
   const password = passInput ? passInput.value.trim() : '';
   const shouldRemember = rememberCheckbox ? rememberCheckbox.checked : true;
 
@@ -764,30 +764,25 @@ function switchToStaffMode() {
 }
 
 function handleLogout() {
-  const wasStaff = state.currentUser && state.currentUser.role === 'staff';
   state.token = null;
   state.currentUser = null;
   localStorage.removeItem('pos_token');
   localStorage.setItem('pos_explicit_logout', '1');
   applyUserRolePermissions();
   showToast('Đã đăng xuất tài khoản!', 'info');
-  if (wasStaff || (!isHostServerMachine() && localStorage.getItem('pos_auto_login_admin') !== '1')) {
-    openStaffJoinModal();
-  } else {
-    openLoginModal(true);
-  }
+  // Khi đăng xuất, luôn mở form Nhân viên gọi món để ca sau tiếp nhận
+  // Không bao giờ tự động hiện form Chủ Quán để bảo mật tuyệt đối
+  openStaffJoinModal();
 }
 
 function openLoginModal(force = false) {
-  // Chỉ máy chính hoặc thiết bị đã nhớ Chủ Quán mới mở Đăng nhập Chủ Quán.
-  // Các máy khác quét mã hoặc điện thoại CHỈ mở form Nhân viên nhập Tên & SĐT.
+  // Chỉ mở khi được gọi chủ động hoặc từ liên kết "Bạn là Chủ Quán?"
   if (!force && !isHostServerMachine() && localStorage.getItem('pos_auto_login_admin') !== '1') {
     openStaffJoinModal();
     return;
   }
 
   const modal = document.getElementById('loginModal');
-  // Nếu modal đăng nhập đã đang hiển thị, KHÔNG reset/xóa mật khẩu người dùng đang gõ
   if (modal && !modal.classList.contains('hidden')) {
     return;
   }
@@ -799,14 +794,15 @@ function openLoginModal(force = false) {
   const errBox = document.getElementById('loginErrorMsg');
 
   if (errBox) errBox.classList.add('hidden');
+  // Xóa trắng cả tên đăng nhập và mật khẩu để bảo mật thông tin Chủ Quán
+  if (userInput) userInput.value = '';
   if (passInput) passInput.value = '';
-  if (userInput) userInput.value = localStorage.getItem('pos_saved_admin_user') || 'admin';
   if (rememberCheckbox) {
     rememberCheckbox.checked = localStorage.getItem('pos_auto_login_admin') !== '0';
   }
 
   if (modal) modal.classList.remove('hidden');
-  if (passInput) setTimeout(() => passInput.focus(), 150);
+  if (userInput) setTimeout(() => userInput.focus(), 150);
 }
 
 function closeLoginModal() {
