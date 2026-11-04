@@ -2500,43 +2500,12 @@ function fallbackCopyText(text) {
   document.body.removeChild(ta);
 }
 
+// Tự động in hóa đơn là mặc định
 function isAutoPrintEnabled() {
-  const val = localStorage.getItem('pos_auto_print_enabled');
-  if (val === null) {
-    // Mặc định BẬT để sẵn sàng in khi cắm máy in
-    return true;
-  }
-  return val === 'true';
-}
-
-function toggleAutoPrintSetting(enabled) {
-  localStorage.setItem('pos_auto_print_enabled', enabled ? 'true' : 'false');
-  updateAutoPrintUI();
-  if (enabled) {
-    showToast('Đã BẬT tự động in khi có đơn từ điện thoại!', 'success');
-  } else {
-    showToast('Đã TẮT tự động in (Không mở File Explorer & không lưu file)', 'info');
-  }
-}
-
-function updateAutoPrintUI() {
-  const isEnabled = isAutoPrintEnabled();
-  const toggle = document.getElementById('toggleAutoPrintSwitch');
-  if (toggle) toggle.checked = isEnabled;
-  const hint = document.getElementById('autoPrintHintText');
-  if (hint) {
-    if (isEnabled) {
-      hint.innerHTML = '🟢 <strong>Đang BẬT</strong>: Máy tính sẽ tự động nhả giấy in khi có đơn từ điện thoại. <em>(Chỉ dùng khi đã cắm máy in bill thật)</em>.';
-      hint.className = 'text-[10px] leading-relaxed text-emerald-800 bg-emerald-50 p-2 rounded-xl border border-emerald-200';
-    } else {
-      hint.innerHTML = '⚪ <strong>Đang TẮT</strong>: Máy tính chỉ báo chuông & cập nhật bàn, <strong>không mở File Explorer và không lưu file bill</strong>. Hãy BẬT khi quán đã cắm máy in hóa đơn nhiệt thật.';
-      hint.className = 'text-[10px] leading-relaxed text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-200';
-    }
-  }
+  return true;
 }
 
 function openPrinterModal() {
-  updateAutoPrintUI();
   document.getElementById('printerModal')?.classList.remove('hidden');
 }
 
