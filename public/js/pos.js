@@ -256,9 +256,10 @@ function connectTableEventSource() {
           if (myDevId && payload.sender_device_id && payload.sender_device_id === myDevId) {
             return;
           }
-          const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-          if (!isMobile) {
-            console.log('Quầy nhận lệnh từ di động:', payload.print_order);
+          // Bỏ qua trên điện thoại nhỏ của nhân viên phục vụ, nhưng cho phép in trên Máy POS Android (tablet >= 768px) hoặc máy tính quầy
+          const isSmallPhone = /iPhone|iPod/i.test(navigator.userAgent) || (/Android/i.test(navigator.userAgent) && window.innerWidth < 768);
+          if (!isSmallPhone) {
+            console.log('Quầy nhận lệnh in từ thiết bị di động:', payload.print_order);
             playOrderNotificationSound();
             showToast(`🔔 Bếp nhận đơn mới từ ${payload.print_order.table_name || 'Bàn'}!`, 'success');
 
