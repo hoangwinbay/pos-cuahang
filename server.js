@@ -302,7 +302,10 @@ app.post('/api/auth/staff-join', (req, res) => {
     let user = db.prepare("SELECT * FROM users WHERE (phone = ? OR username = ?) AND role = 'staff'").get(cleanPhone, 'nv_' + cleanPhone);
 
     if (user) {
-      db.prepare('UPDATE users SET name = ?, phone = ?, active = 1 WHERE id = ?').run(cleanName, cleanPhone, user.id);
+      if (user.active === 0) {
+        return res.status(403).json({ error: 'Tài khoản nhân viên này đã bị Chủ Quán khóa. Vui lòng liên hệ Chủ Quán để mở lại!' });
+      }
+      db.prepare('UPDATE users SET name = ?, phone = ? WHERE id = ?').run(cleanName, cleanPhone, user.id);
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
     } else {
       const username = 'nv_' + cleanPhone.replace(/[^0-9]/g, '');
@@ -412,12 +415,30 @@ app.post('/api/auth/change-pin', (req, res) => {
 app.get('/api/users', requireAdmin, (req, res) => {
   try {
     const users = db.prepare(`
-      SELECT id, username, name, role, email, avatar, active, created_at,
+      SELECT id, username, name, role, phone, email, avatar, active, created_at,
              (CASE WHEN pin IS NOT NULL AND pin != '' THEN 1 ELSE 0 END) as has_pin
       FROM users
-      ORDER BY role ASC, id ASC
+      ORDER BY role ASC, id DESC
     `).all();
     res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Toggle user active status (Admin only)
+app.put('/api/users/:id/toggle-active', requireAdmin, (req, res) => {
+  try {
+    const userId = req.params.id;
+    if (req.user.id == userId) {
+      return res.status(400).json({ error: 'Bạn không thể tự khóa tài khoản của chính mình!' });
+    }
+    const user = db.prepare('SELECT id, active, name FROM users WHERE id = ?').get(userId);
+    if (!user) return res.status(404).json({ error: 'Không tìm thấy tài khoản người dùng!' });
+
+    const newActive = user.active ? 0 : 1;
+    db.prepare('UPDATE users SET active = ? WHERE id = ?').run(newActive, userId);
+    res.json({ success: true, active: newActive, name: user.name });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -529,7 +550,18 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
     if (req.user.id == userId) {
       return res.status(400).json({ error: 'Bạn không thể tự xóa tài khoản của chính mình!' });
     }
+    const user = db.prepare('SELECT id, phone, name FROM users WHERE id = ?').get(userId);
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+    if (user && user.phone) {
+      for (const [devId, dev] of connectedDevices.entries()) {
+        if (dev.phone === user.phone) {
+          connectedDevices.delete(devId);
+          try { db.prepare('DELETE FROM devices WHERE id = ?').run(devId); } catch (e) {}
+        }
+      }
+    }
+
     res.json({ success: true, message: 'Đã xóa tài khoản thành công' });
   } catch (err) {
     res.status(500).json({ error: err.message });
