@@ -424,7 +424,7 @@ function filterTableArea(filter) {
 }
 
 async function promptAddCustomTable() {
-  const custom = prompt('Nhập tên bàn mới (VD: Bàn 13, Bàn VIP, Sân thượng...):', '');
+  const custom = prompt('Nhập tên bàn mới:', '');
   if (custom && custom.trim()) {
     const tableName = custom.trim();
     if (!state.tableList.includes(tableName)) {

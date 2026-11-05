@@ -542,7 +542,7 @@ async function confirmDeleteTable(tableName) {
 }
 
 function promptAddTableFromManagement() {
-  const custom = prompt('Nhập tên bàn mới (VD: Bàn 13, Bàn VIP, Sân thượng...):', '');
+  const custom = prompt('Nhập tên bàn mới:', '');
   if (custom && custom.trim()) {
     const input = document.getElementById('inputQuickTableName');
     if (input) input.value = custom.trim();
