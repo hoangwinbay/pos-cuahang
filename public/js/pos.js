@@ -127,7 +127,8 @@ function syncTableOrderToServer(tableName, immediate = false) {
           order_data: orderData,
           sender_device_id: myDevId,
           sender_name: staffName,
-          is_confirmed: Boolean(orderData.confirmed || orderData.hasPrintedKitchen),
+          action: 'sync_dishes',
+          is_confirmed: false, // Thêm/bớt món thì CHƯA PHẢI XÁC NHẬN ĐƠN
           trigger_print: false // TUYỆT ĐỐI KHÔNG IN KHI ĐANG ĐỒNG BỘ MÓN / BẤM CỘNG MÓN
         })
       });
@@ -263,12 +264,10 @@ function connectTableEventSource() {
 
         if (isPrintStationDevice()) {
           // 1. Trường hợp có bàn được XÁC NHẬN đặt món từ thiết bị khác
-          // CHÚ Ý: CHỈ IN KHI trigger_print = true VÀ ĐÃ ĐƯỢC XÁC NHẬN (TUYỆT ĐỐI KHÔNG IN KHI ĐANG BẤM CỘNG MÓN)
-          const shouldTriggerPrint = Boolean(payload.trigger_print || payload.action === 'confirm_order');
-          const isConfirmed = Boolean(payload.is_confirmed || (payload.order_data && (payload.order_data.confirmed || payload.order_data.hasPrintedKitchen)));
-
-          if ((payload.type === 'table_order_updated' || payload.type === 'table_order_confirmed' || payload.type === 'table_order_placed') && payload.table_name && payload.order_data) {
-            if (isFromOtherDevice && shouldTriggerPrint && isConfirmed) {
+          // CHÚ Ý: CHỈ IN KHI type = 'table_order_confirmed', action = 'confirm_order', VÀ trigger_print = true
+          // TUYỆT ĐỐI KHÔNG IN KHI CẬP NHẬT MÓN, BẤM CỘNG/TRỪ MÓN (table_order_updated)
+          if (payload.type === 'table_order_confirmed' && payload.action === 'confirm_order' && payload.trigger_print === true) {
+            if (isFromOtherDevice && payload.table_name && payload.order_data) {
               console.log('Trạm in quầy nhận đơn xác nhận từ thiết bị khác:', payload.table_name);
               playOrderNotificationSound();
               const senderTag = payload.sender_name ? ` (${payload.sender_name})` : '';
@@ -276,7 +275,12 @@ function connectTableEventSource() {
 
               const printOrder = formatTableOrderForPrint(payload.table_name, payload.order_data);
               if (printOrder && printOrder.items && printOrder.items.length > 0) {
-                executeOrderPrint(printOrder, { isKitchen: true });
+                window._explicitPrintAuthorized = true;
+                try {
+                  executeOrderPrint(printOrder, { isKitchen: true });
+                } finally {
+                  window._explicitPrintAuthorized = false;
+                }
                 showRemotePrintAlert(printOrder, payload.sender_name);
               }
             }
@@ -288,7 +292,12 @@ function connectTableEventSource() {
               console.log('Trạm in quầy nhận lệnh in thanh toán từ thiết bị khác:', payload.checkout_order.table_name);
               playOrderNotificationSound();
               showToast(`🔔 Bàn ${payload.checkout_order.table_name} đã thanh toán! Đang in hóa đơn...`, 'success');
-              executeOrderPrint(payload.checkout_order, { isCheckout: true });
+              window._explicitPrintAuthorized = true;
+              try {
+                executeOrderPrint(payload.checkout_order, { isCheckout: true });
+              } finally {
+                window._explicitPrintAuthorized = false;
+              }
               showRemotePrintAlert(payload.checkout_order, payload.sender_name);
             }
           }
@@ -946,6 +955,9 @@ function changeDishQty(productId, delta) {
     });
   }
 
+  // Khi bấm thêm/bớt món, bàn có thay đổi chưa xác nhận (cần bấm "Xác Nhận" mới in báo bếp)
+  tableOrder.confirmed = false;
+
   // Cập nhật localStorage
   localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
 
@@ -1471,7 +1483,12 @@ function executePrintKitchenSlip() {
   // 2. KÍCH HOẠT IN PHIẾU BÁO BẾP:
   if (isPrintStationDevice()) {
     // Trạm quầy: Tự động in theo chế độ Chrome Windows hoặc RawBT Android
-    executeOrderPrint(orderForPrint, { isKitchen: true });
+    window._explicitPrintAuthorized = true;
+    try {
+      executeOrderPrint(orderForPrint, { isKitchen: true });
+    } finally {
+      window._explicitPrintAuthorized = false;
+    }
   } else if (bluetoothCharacteristic) {
     printEscPosBluetooth(orderForPrint);
   } else {
@@ -1613,7 +1630,12 @@ async function resolveConflictMerge() {
       }))
     };
     if (isPrintStationDevice()) {
-      executeOrderPrint(orderForPrint, { isCheckout: true });
+      window._explicitPrintAuthorized = true;
+      try {
+        executeOrderPrint(orderForPrint, { isCheckout: true });
+      } finally {
+        window._explicitPrintAuthorized = false;
+      }
     } else if (bluetoothCharacteristic) {
       printEscPosBluetooth(orderForPrint);
     }
@@ -1824,7 +1846,12 @@ async function completeCheckoutOrder() {
       }))
     };
     if (isPrintStationDevice()) {
-      executeOrderPrint(orderForPrint, { isCheckout: true });
+      window._explicitPrintAuthorized = true;
+      try {
+        executeOrderPrint(orderForPrint, { isCheckout: true });
+      } finally {
+        window._explicitPrintAuthorized = false;
+      }
     } else if (bluetoothCharacteristic) {
       printEscPosBluetooth(orderForPrint);
     }
@@ -2660,7 +2687,18 @@ function playOrderNotificationSound() {
   } catch (e) {}
 }
 
+// Biến toàn cục bảo vệ lệnh in: CHỈ cho phép in khi người dùng bấm "Xác Nhận" hoặc "Thanh Toán"
+window._explicitPrintAuthorized = false;
+
 function executeWindowPrint(order, isManual = false) {
+  // BẢO VỆ TUYỆT ĐỐI: CHẶN TẤT CẢ LỆNH IN KHI BẤM CỘNG/TRỪ MÓN HOẶC ĐỒNG BỘ NỀN
+  // Chỉ in nếu là in thủ công (isManual=true: In bill tạm tính, in lại, in thử)
+  // HOẶC được cấp quyền rõ ràng từ Xác Nhận Báo Bếp / Thanh Toán (window._explicitPrintAuthorized=true)
+  if (!isManual && !window._explicitPrintAuthorized) {
+    console.warn('executeWindowPrint: ĐÃ CHẶN LỆNH IN TỰ ĐỘNG KHÔNG HỢP LỆ (Chưa bấm Xác Nhận / Thanh Toán)');
+    return;
+  }
+
   // Chỉ gọi window.print nếu người dùng BẬT tự động in, có máy in Bluetooth, hoặc chủ động bấm nút In
   if (!isManual && !isAutoPrintEnabled() && !bluetoothCharacteristic) {
     console.log('Chế độ in đang tắt, bỏ qua executeWindowPrint');
@@ -2689,6 +2727,10 @@ function executeWindowPrint(order, isManual = false) {
 }
 
 function printViaIsolatedIframe(receiptHtml, isManual = false) {
+  if (!isManual && !window._explicitPrintAuthorized) {
+    console.warn('printViaIsolatedIframe: ĐÃ CHẶN LỆNH IN QUA IFRAME KHÔNG HỢP LỆ');
+    return;
+  }
   if (!isManual && !isAutoPrintEnabled() && !bluetoothCharacteristic) {
     console.log('Chế độ in đang tắt, bỏ qua printViaIsolatedIframe');
     return;
@@ -3027,6 +3069,13 @@ async function sendPrintJobToServer(order) {
 async function executeOrderPrint(order, options = {}) {
   const { isManual = false, isKitchen = false, isCheckout = false } = options;
   if (!order) return;
+
+  // BẢO VỆ TUYỆT ĐỐI: Bỏ qua nếu không phải loại in hợp lệ
+  if (!isManual && !isKitchen && !isCheckout) {
+    console.warn('executeOrderPrint: Bỏ qua lệnh in vì không có loại in hợp lệ');
+    return;
+  }
+
   lastPrintedOrder = order;
 
   // 1. Nếu đây là Trạm In Quầy (Laptop Chrome hoặc Máy POS Android)

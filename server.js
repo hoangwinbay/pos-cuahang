@@ -1602,16 +1602,19 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
     const allOrders = getAllActiveTableOrders();
     saveDataBackup(db);
 
-    const isConfirmed = Boolean(req.body.is_confirmed || req.body.action === 'confirm_order');
-    const triggerPrint = Boolean(req.body.trigger_print || req.body.action === 'confirm_order');
+    // CHỈ COI LÀ XÁC NHẬN KHI CÓ ACTION 'confirm_order' (TỪ NÚT "XÁC NHẬN" GỌI BẾP)
+    // TUYỆT ĐỐI KHÔNG IN KHI CHỈ CẬP NHẬT/THÊM/BỚT MÓN TRÊN BÀN (sync_dishes)
+    const isConfirmAction = req.body.action === 'confirm_order';
+    const isConfirmed = isConfirmAction;
+    const triggerPrint = isConfirmAction && Boolean(req.body.trigger_print);
 
     broadcastTableUpdate({
-      type: isConfirmed ? 'table_order_confirmed' : 'table_order_updated',
+      type: isConfirmAction ? 'table_order_confirmed' : 'table_order_updated',
       table_name,
       order_data: finalOrder,
-      is_confirmed: isConfirmed || Boolean(finalOrder.confirmed || finalOrder.hasPrintedKitchen),
+      is_confirmed: isConfirmed,
       trigger_print: triggerPrint,
-      action: req.body.action || null,
+      action: req.body.action || 'sync',
       sender_device_id: req.body.sender_device_id || null,
       sender_name: req.body.sender_name || (req.user && req.user.name) || 'Nhân viên',
       all_table_orders: allOrders
