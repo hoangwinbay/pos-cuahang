@@ -117,11 +117,18 @@ function syncTableOrderToServer(tableName, immediate = false) {
         deleteTableOrderOnServer(tableName);
         return;
       }
+      const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+      const staffName = (state.currentUser && state.currentUser.name) || (state.user && state.user.name) || localStorage.getItem('pos_staff_name') || 'Nhân viên';
+
       await api('/api/tables/order', {
         method: 'POST',
         body: JSON.stringify({
           table_name: tableName,
-          order_data: orderData
+          order_data: orderData,
+          sender_device_id: myDevId,
+          sender_name: staffName,
+          is_confirmed: Boolean(orderData.confirmed || orderData.hasPrintedKitchen),
+          trigger_print: false // TUYỆT ĐỐI KHÔNG IN KHI ĐANG ĐỒNG BỘ MÓN / BẤM CỘNG MÓN
         })
       });
     } catch (e) {
@@ -250,18 +257,22 @@ function connectTableEventSource() {
         if (payload.connected_devices_count !== undefined && typeof updateConnectedDeviceBadgeUI === 'function') {
           updateConnectedDeviceBadgeUI(payload.connected_devices_count);
         }
-        // TỰ ĐỘNG IN KHI CÓ BÀN MỚI ĐƯỢC ĐẶT (TRẠM IN QUẦY TỰ ĐỘNG IN THEO CHẾ ĐỘ LAPTOP HOẶC RAWBT)
+        // TỰ ĐỘNG IN KHI CÓ BÀN ĐƯỢC XÁC NHẬN (CHỈ IN KHI ĐÃ BẤM XÁC NHẬN - BÀN HIỆN XANH, KHÔNG IN KHI BẤM CỘNG MÓN)
         const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
         const isFromOtherDevice = !myDevId || !payload.sender_device_id || payload.sender_device_id !== myDevId;
 
         if (isPrintStationDevice()) {
-          // 1. Trường hợp có bàn mới được đặt hoặc cập nhật món
-          if ((payload.type === 'table_order_updated' || payload.type === 'table_order_placed') && payload.table_name && payload.order_data) {
-            if (isFromOtherDevice) {
-              console.log('Trạm in quầy nhận đơn mới từ thiết bị khác:', payload.table_name);
+          // 1. Trường hợp có bàn được XÁC NHẬN đặt món từ thiết bị khác
+          // CHÚ Ý: CHỈ IN KHI trigger_print = true VÀ ĐÃ ĐƯỢC XÁC NHẬN (TUYỆT ĐỐI KHÔNG IN KHI ĐANG BẤM CỘNG MÓN)
+          const shouldTriggerPrint = Boolean(payload.trigger_print || payload.action === 'confirm_order');
+          const isConfirmed = Boolean(payload.is_confirmed || (payload.order_data && (payload.order_data.confirmed || payload.order_data.hasPrintedKitchen)));
+
+          if ((payload.type === 'table_order_updated' || payload.type === 'table_order_confirmed' || payload.type === 'table_order_placed') && payload.table_name && payload.order_data) {
+            if (isFromOtherDevice && shouldTriggerPrint && isConfirmed) {
+              console.log('Trạm in quầy nhận đơn xác nhận từ thiết bị khác:', payload.table_name);
               playOrderNotificationSound();
               const senderTag = payload.sender_name ? ` (${payload.sender_name})` : '';
-              showToast(`🔔 Bàn ${payload.table_name} vừa đặt món${senderTag}!`, 'success');
+              showToast(`🔔 Bàn ${payload.table_name} vừa xác nhận đặt món${senderTag}!`, 'success');
 
               const printOrder = formatTableOrderForPrint(payload.table_name, payload.order_data);
               if (printOrder && printOrder.items && printOrder.items.length > 0) {
@@ -428,9 +439,9 @@ function renderTableGrid() {
   const filter = state.currentAreaFilter;
   const tables = state.tableList.filter(tableName => {
     const order = state.tableOrders[tableName];
-    const hasItems = order && order.items && order.items.length > 0;
-    if (filter === 'occupied') return hasItems;
-    if (filter === 'empty') return !hasItems;
+    const isConfirmed = order && Array.isArray(order.items) && order.items.length > 0 && Boolean(order.confirmed || order.hasPrintedKitchen);
+    if (filter === 'occupied') return isConfirmed;
+    if (filter === 'empty') return !isConfirmed;
     return true;
   });
 
@@ -448,10 +459,11 @@ function renderTableGrid() {
 
   container.innerHTML = tables.map(tableName => {
     const order = state.tableOrders[tableName];
-    const hasItems = order && order.items && order.items.length > 0;
+    const hasItems = order && Array.isArray(order.items) && order.items.length > 0;
+    const isConfirmed = hasItems && Boolean(order.confirmed || order.hasPrintedKitchen);
 
-    if (hasItems) {
-      // BÀN CÓ KHÁCH: Màu Xanh Ngọc (Tại chỗ) hoặc Màu Vàng Cam (Mang về)
+    if (isConfirmed) {
+      // BÀN ĐÃ XÁC NHẬN (CÓ KHÁCH): Màu Xanh Ngọc (Tại chỗ - HIỆN XANH) hoặc Màu Vàng Cam (Mang về)
       const totalAmount = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const totalCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
       const startTime = order.startTime || now;
@@ -482,6 +494,37 @@ function renderTableGrid() {
           <div class="flex items-center justify-between text-[11px] sm:text-xs text-white/90 font-medium">
             <span>${isMangVe ? 'Mang về' : 'Tại chỗ'}</span>
             <span>${elapsedMin}p</span>
+          </div>
+        </div>
+      `;
+    } else if (hasItems) {
+      // BÀN CHƯA XÁC NHẬN (ĐANG CHỌN MÓN / DRAFT): Viền nét đứt cam nhạt, KHÔNG HIỆN XANH
+      const totalAmount = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const totalCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+      const isMangVe = order.source === 'mangve';
+
+      return `
+        <div 
+          onclick="openTableOrder('${tableName}')"
+          class="table-card bg-amber-50/90 border-2 border-dashed border-amber-400 text-slate-800 rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between shadow-2xs cursor-pointer aspect-square active:scale-95 transition-all hover:bg-amber-100/60"
+        >
+          <div class="flex items-center justify-between">
+            <span class="font-black text-sm sm:text-base tracking-tight text-slate-800">${tableName}</span>
+            <span class="text-[9px] font-bold bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded shadow-2xs">CHƯA XÁC NHẬN</span>
+          </div>
+
+          <div class="my-auto text-center py-1">
+            <div class="text-sm sm:text-base font-black text-amber-950 leading-tight">
+              ${formatMoney(totalAmount)}
+            </div>
+            <div class="text-xs sm:text-sm text-amber-800 font-bold mt-0.5">
+              ${totalCount} Món (Đang chọn)
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] sm:text-xs text-amber-700 font-medium">
+            <span>${isMangVe ? 'Mang về' : 'Tại chỗ'}</span>
+            <span class="text-amber-600 font-bold italic">Chưa xác nhận</span>
           </div>
         </div>
       `;
@@ -518,7 +561,9 @@ function openTableOrder(tableName) {
       source: state.currentSource || 'taicho',
       startTime: Date.now(),
       note: '',
-      items: []
+      items: [],
+      confirmed: false,
+      hasPrintedKitchen: false
     };
   } else if (!state.tableOrders[tableName].source) {
     state.tableOrders[tableName].source = state.currentSource || 'taicho';
@@ -588,13 +633,19 @@ function toggleCurrentTableSource() {
   updateTableBottomBar();
   showToast(`Đã chuyển ${currentTable} sang: ${newSource === 'mangve' ? 'MANG VỀ' : 'TẠI CHỖ'}`);
 
-  // Nếu bàn đã có món, đồng bộ ngay sang các máy khác
+  // Nếu bàn đã có món, đồng bộ ngay sang các máy khác (KHÔNG IN)
   if (state.tableOrders[currentTable].items && state.tableOrders[currentTable].items.length > 0) {
+    const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+    const staffName = (state.currentUser && state.currentUser.name) || (state.user && state.user.name) || localStorage.getItem('pos_staff_name') || 'Nhân viên';
     api('/api/tables/order', {
       method: 'POST',
       body: JSON.stringify({
         table_name: currentTable,
         order_data: state.tableOrders[currentTable],
+        sender_device_id: myDevId,
+        sender_name: staffName,
+        is_confirmed: Boolean(state.tableOrders[currentTable].confirmed || state.tableOrders[currentTable].hasPrintedKitchen),
+        trigger_print: false,
         check_conflict: false
       })
     }).catch(e => console.warn('Lỗi đồng bộ nguồn đơn:', e));
@@ -871,7 +922,9 @@ function changeDishQty(productId, delta) {
       source: state.currentSource,
       startTime: Date.now(),
       note: '',
-      items: []
+      items: [],
+      confirmed: false,
+      hasPrintedKitchen: false
     };
   }
 
@@ -1377,6 +1430,8 @@ function executePrintKitchenSlip() {
   }
   tableOrder.note = note;
   tableOrder.hasPrintedKitchen = true;
+  tableOrder.confirmed = true;
+  tableOrder.confirmedAt = new Date().toISOString();
 
   // Đồng bộ lại ô ghi chú trong giỏ hàng nếu có
   const cartNoteInput = document.getElementById('orderNoteInput');
@@ -1424,7 +1479,7 @@ function executePrintKitchenSlip() {
     showToast(`Đã gửi đơn ${currentTable} thành công!`, 'success');
   }
 
-  // 3. ĐỒNG BỘ NỀN LÊN SERVER (NON-BLOCKING)
+  // 3. ĐỒNG BỘ NỀN LÊN SERVER (NON-BLOCKING) VỚI CỜ XÁC NHẬN ĐƠN (TRIGGER PRINT TẠI QUẦY)
   const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
   const staffName = (state.currentUser && state.currentUser.name) || (state.user && state.user.name) || localStorage.getItem('pos_staff_name') || 'Nhân viên';
 
@@ -1435,7 +1490,10 @@ function executePrintKitchenSlip() {
       order_data: tableOrder,
       sender_device_id: myDevId,
       sender_name: staffName,
-      check_conflict: true
+      check_conflict: true,
+      is_confirmed: true,
+      action: 'confirm_order',
+      trigger_print: true
     })
   }).catch(err => {
     if (err.status === 409 || err.data?.conflict) {
@@ -1446,8 +1504,8 @@ function executePrintKitchenSlip() {
     }
   });
 
-  // 4. CHUYỂN VỀ SƠ ĐỒ BÀN
-  showToast(`Đã xác nhận món ${currentTable}!`);
+  // 4. CHUYỂN VỀ SƠ ĐỒ BÀN (LÚC NÀY BÀN HIỆN XANH)
+  showToast(`Đã xác nhận món ${currentTable}!`, 'success');
   if (state.activeScreen !== 'tables') showTableFloor();
 }
 
@@ -1693,8 +1751,8 @@ function handleBackFromOrderScreen() {
   const currentTable = state.currentTable;
   const order = state.tableOrders[currentTable];
 
-  // Nếu bàn có món nhưng CHƯA TỪNG in gửi bếp:
-  if (order && order.items && order.items.length > 0 && !order.hasPrintedKitchen) {
+  // Nếu bàn có món nhưng CHƯA TỪNG in gửi bếp / chưa xác nhận:
+  if (order && order.items && order.items.length > 0 && !order.hasPrintedKitchen && !order.confirmed) {
     const shouldClear = confirm(
       `${currentTable} vừa chọn món nhưng CHƯA BẤM XÁC NHẬN.\n\n` +
       `- Bấm [OK] để: HỦY GỌI MÓN (Trả bàn về trống)\n` +

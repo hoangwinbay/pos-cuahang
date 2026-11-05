@@ -1601,10 +1601,17 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
 
     const allOrders = getAllActiveTableOrders();
     saveDataBackup(db);
+
+    const isConfirmed = Boolean(req.body.is_confirmed || req.body.action === 'confirm_order');
+    const triggerPrint = Boolean(req.body.trigger_print || req.body.action === 'confirm_order');
+
     broadcastTableUpdate({
-      type: 'table_order_updated',
+      type: isConfirmed ? 'table_order_confirmed' : 'table_order_updated',
       table_name,
       order_data: finalOrder,
+      is_confirmed: isConfirmed || Boolean(finalOrder.confirmed || finalOrder.hasPrintedKitchen),
+      trigger_print: triggerPrint,
+      action: req.body.action || null,
       sender_device_id: req.body.sender_device_id || null,
       sender_name: req.body.sender_name || (req.user && req.user.name) || 'Nhân viên',
       all_table_orders: allOrders
