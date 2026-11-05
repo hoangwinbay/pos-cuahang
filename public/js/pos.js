@@ -2092,63 +2092,6 @@ function formatLineColumns(left, right, width = 42, keepAccents = true) {
   return l + ' '.repeat(spaceCount) + r + '\n';
 }
 
-async function connectBluetoothPrinter() {
-  if (!navigator.bluetooth) {
-    showToast('Trình duyệt chưa hỗ trợ Bluetooth. Hãy mở bằng Chrome trên Android hoặc in qua Wi-Fi!', 'error');
-    return;
-  }
-
-  try {
-    showToast('Đang tìm máy in Bluetooth...');
-    const device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [
-        '000018f0-0000-1000-8000-00805f9b34fb',
-        '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-        '0000ff00-0000-1000-8000-00805f9b34fb'
-      ]
-    });
-
-    const server = await device.gatt.connect();
-    let foundChar = null;
-    const services = await server.getPrimaryServices();
-    for (const service of services) {
-      const chars = await service.getCharacteristics();
-      for (const char of chars) {
-        if (char.properties.write || char.properties.writeWithoutResponse) {
-          foundChar = char;
-          break;
-        }
-      }
-      if (foundChar) break;
-    }
-
-    if (!foundChar) throw new Error('Không tìm thấy cổng in trên thiết bị');
-
-    bluetoothDevice = device;
-    bluetoothCharacteristic = foundChar;
-
-    const prName = device.name || 'Máy in Bluetooth';
-    localStorage.setItem('pos_printer_name', prName);
-    localStorage.setItem('pos_printer_type', 'Bluetooth');
-    localStorage.setItem('pos_printer_connected', '1');
-
-    device.addEventListener('gattserverdisconnected', () => {
-      bluetoothDevice = null;
-      bluetoothCharacteristic = null;
-      renderPrinterStatusUI();
-      updateDrawerPrinterBadge();
-      showToast(`Máy in "${prName}" đã ngắt kết nối`, 'info');
-    });
-
-    renderPrinterStatusUI();
-    updateDrawerPrinterBadge();
-    showToast(`Đã kết nối máy in: ${prName}`, 'success');
-  } catch (err) {
-    showToast('Lỗi Bluetooth: ' + err.message, 'error');
-  }
-}
-
 function wrapTextLines(text, maxChars = 38) {
   if (!text) return [];
   const words = text.split(/\s+/);
