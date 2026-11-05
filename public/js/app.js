@@ -2088,7 +2088,7 @@ function saveServerConfig() {
 
 // App Initialization
 async function startApp() {
-  const CURRENT_APP_BUILD = '20261105_fix_v6';
+  const CURRENT_APP_BUILD = '20261106_fix_v7';
   if (localStorage.getItem('pos_app_build') !== CURRENT_APP_BUILD) {
     localStorage.setItem('pos_app_build', CURRENT_APP_BUILD);
     if ('caches' in window) {
