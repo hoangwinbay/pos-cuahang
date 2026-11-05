@@ -260,7 +260,9 @@ function connectTableEventSource() {
         }
         // TỰ ĐỘNG IN KHI CÓ BÀN ĐƯỢC XÁC NHẬN (CHỈ IN KHI ĐÃ BẤM XÁC NHẬN - BÀN HIỆN XANH, KHÔNG IN KHI BẤM CỘNG MÓN)
         const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
-        const isFromOtherDevice = !myDevId || !payload.sender_device_id || payload.sender_device_id !== myDevId;
+        const senderId = payload.sender_device_id || null;
+        // Chỉ coi là thiết bị khác nếu CẢ HAI đều có ID VÀ KHÁC NHAU (tránh nhận nhầm chính thiết bị này)
+        const isFromOtherDevice = Boolean(myDevId && senderId && senderId !== myDevId);
 
         if (isPrintStationDevice()) {
           // 1. Trường hợp có bàn được XÁC NHẬN đặt món từ thiết bị khác
@@ -882,10 +884,11 @@ function renderGroupedDishList() {
             <button 
               type="button"
               onclick="event.stopPropagation(); changeDishQty(${p.id}, -1)" 
+              ondblclick="event.stopPropagation(); event.preventDefault();"
               class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700 hover:bg-slate-200 active:scale-90 text-sm font-bold select-none cursor-pointer transition-all"
               title="Giảm 1"
             >
-              <i class="fa-solid fa-minus text-xs"></i>
+              <i class="fa-solid fa-minus text-xs pointer-events-none"></i>
             </button>
 
             <span id="dish-qty-${p.id}" class="w-8 text-center text-sm sm:text-base font-extrabold text-slate-900 select-none">
@@ -895,10 +898,11 @@ function renderGroupedDishList() {
             <button 
               type="button"
               onclick="event.stopPropagation(); changeDishQty(${p.id}, 1)" 
+              ondblclick="event.stopPropagation(); event.preventDefault();"
               class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 active:scale-90 text-sm font-bold select-none cursor-pointer transition-all shadow-xs"
               title="Thêm 1"
             >
-              <i class="fa-solid fa-plus text-xs"></i>
+              <i class="fa-solid fa-plus text-xs pointer-events-none"></i>
             </button>
           </div>
         </div>
@@ -1171,12 +1175,12 @@ function renderCartDrawerItems() {
           </div>
 
           <div class="flex items-center space-x-1 shrink-0 bg-white border border-slate-200 rounded-lg p-0.5">
-            <button onclick="event.stopPropagation(); changeDishQty(${item.id}, -1)" class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-90 text-xs">
-              <i class="fa-solid fa-minus text-[10px]"></i>
+            <button type="button" onclick="event.stopPropagation(); changeDishQty(${item.id}, -1)" ondblclick="event.stopPropagation(); event.preventDefault();" class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-90 text-xs">
+              <i class="fa-solid fa-minus text-[10px] pointer-events-none"></i>
             </button>
             <span class="w-7 text-center text-xs font-bold text-slate-800">${item.quantity}</span>
-            <button onclick="event.stopPropagation(); changeDishQty(${item.id}, 1)" class="w-7 h-7 rounded-md flex items-center justify-center text-emerald-600 hover:bg-emerald-50 active:scale-90 text-xs">
-              <i class="fa-solid fa-plus text-[10px]"></i>
+            <button type="button" onclick="event.stopPropagation(); changeDishQty(${item.id}, 1)" ondblclick="event.stopPropagation(); event.preventDefault();" class="w-7 h-7 rounded-md flex items-center justify-center text-emerald-600 hover:bg-emerald-50 active:scale-90 text-xs">
+              <i class="fa-solid fa-plus text-[10px] pointer-events-none"></i>
             </button>
           </div>
 
@@ -2604,7 +2608,7 @@ async function printViaRawBt(order) {
   } catch (err) {
     console.error('Lỗi khi in qua RawBT:', err);
     showToast('Lỗi in RawBT: ' + (err.message || err), 'error');
-    executeWindowPrint(order, true);
+    executeWindowPrint(order, false);
     return false;
   }
 }
@@ -2691,7 +2695,13 @@ function playOrderNotificationSound() {
 window._explicitPrintAuthorized = false;
 
 function executeWindowPrint(order, isManual = false) {
-  // BẢO VỆ TUYỆT ĐỐI: CHẶN TẤT CẢ LỆNH IN KHI BẤM CỘNG/TRỪ MÓN HOẶC ĐỒNG BỘ NỀN
+  // BẢO VỆ TUYỆT ĐỐI 1: Nếu đang ở màn hình chọn món (screen-order) và KHÔNG ĐƯỢC ủy quyền rõ ràng qua modal Xác Nhận / Thanh Toán -> CHẶN 100%
+  if (state.activeScreen === 'order' && !window._explicitPrintAuthorized) {
+    console.warn('executeWindowPrint: ĐÃ CHẶN vì người dùng đang ở màn hình gọi món, chưa bấm Xác Nhận / Thanh Toán');
+    return;
+  }
+
+  // BẢO VỆ TUYỆT ĐỐI 2: CHẶN TẤT CẢ LỆNH IN KHI BẤM CỘNG/TRỪ MÓN HOẶC ĐỒNG BỘ NỀN
   // Chỉ in nếu là in thủ công (isManual=true: In bill tạm tính, in lại, in thử)
   // HOẶC được cấp quyền rõ ràng từ Xác Nhận Báo Bếp / Thanh Toán (window._explicitPrintAuthorized=true)
   if (!isManual && !window._explicitPrintAuthorized) {
@@ -3010,12 +3020,12 @@ function formatTableOrderForPrint(tableName, orderData) {
 }
 
 // Hàm gọi in RawBT duy nhất (BẢO VỆ CHẶN LỖI TRÌNH DUYỆT TRÊN LAPTOP / ĐIỆN THOẠI)
-function callRawBtPrint(order) {
+function callRawBtPrint(order, isManual = false) {
   if (!order) return false;
   // BẢO VỆ TUYỆT ĐỐI: Nếu đang ở chế độ Chrome Windows -> Tuyệt đối không gọi URL scheme rawbt mà in trực tiếp
   const engine = getPrintEngine();
   if (engine === 'windows') {
-    executeWindowPrint(order, true);
+    executeWindowPrint(order, isManual);
     return true;
   }
   // Nếu thiết bị này KHÔNG phải máy POS in RawBT -> Dừng ngay
@@ -3070,9 +3080,15 @@ async function executeOrderPrint(order, options = {}) {
   const { isManual = false, isKitchen = false, isCheckout = false } = options;
   if (!order) return;
 
-  // BẢO VỆ TUYỆT ĐỐI: Bỏ qua nếu không phải loại in hợp lệ
+  // BẢO VỆ TUYỆT ĐỐI 1: Bỏ qua nếu không phải loại in hợp lệ
   if (!isManual && !isKitchen && !isCheckout) {
     console.warn('executeOrderPrint: Bỏ qua lệnh in vì không có loại in hợp lệ');
+    return;
+  }
+
+  // BẢO VỆ TUYỆT ĐỐI 2: Đang ở màn hình gọi món mà chưa bấm Xác Nhận / Thanh Toán -> CHẶN 100%
+  if (state.activeScreen === 'order' && !window._explicitPrintAuthorized && !isManual) {
+    console.warn('executeOrderPrint: ĐÃ CHẶN vì đang ở màn hình đặt món (chưa bấm Xác Nhận)');
     return;
   }
 
@@ -3087,7 +3103,7 @@ async function executeOrderPrint(order, options = {}) {
       return;
     } else {
       // IN TRỰC TIẾP QUA RAWBT MÁY POS ANDROID
-      callRawBtPrint(order);
+      callRawBtPrint(order, isManual);
       return;
     }
   }

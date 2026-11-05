@@ -2088,6 +2088,17 @@ function saveServerConfig() {
 
 // App Initialization
 async function startApp() {
+  const CURRENT_APP_BUILD = '20261105_fix_v6';
+  if (localStorage.getItem('pos_app_build') !== CURRENT_APP_BUILD) {
+    localStorage.setItem('pos_app_build', CURRENT_APP_BUILD);
+    if ('caches' in window) {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      } catch (e) {}
+    }
+  }
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then(reg => {
       // Khi có bản cập nhật mới, tự động phát hiện và reload
