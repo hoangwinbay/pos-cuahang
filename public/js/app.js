@@ -1015,6 +1015,11 @@ async function loadSettings() {
 
 // Global Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'F5' || (e.ctrlKey && (e.key === 'r' || e.key === 'R'))) {
+    e.preventDefault();
+    window.location.reload();
+    return;
+  }
   if (e.key === 'Escape') {
     if (typeof closeCheckoutModal === 'function') closeCheckoutModal();
     if (typeof closeKitchenConfirmModal === 'function') closeKitchenConfirmModal();
@@ -2084,7 +2089,28 @@ function saveServerConfig() {
 // App Initialization
 async function startApp() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      // Khi có bản cập nhật mới, tự động phát hiện và reload
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        if (newWorker) {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('Có phiên bản cập nhật mới, tự động tải lại...');
+              window.location.reload();
+            }
+          });
+        }
+      });
+    }).catch(() => {});
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
   }
 
   // Tự động dọn dẹp bộ nhớ đệm thực đơn cũ trên trình duyệt để nạp thực đơn mới
