@@ -583,10 +583,27 @@ function openTableOrder(tableName) {
   // Cập nhật nguồn hiện tại theo bàn này
   state.currentSource = state.tableOrders[tableName].source;
 
+  // Đồng bộ ô ghi chú trên thanh giỏ hàng theo bàn mới (tránh dính ghi chú bàn cũ)
+  syncCartNoteToCurrentTable();
+
   updateOrderScreenHeader();
   renderOrderCategoriesPills();
   renderGroupedDishList();
   updateTableBottomBar();
+}
+
+// Đồng bộ giá trị ô ghi chú (orderNoteInput) + badge theo bàn hiện tại
+function syncCartNoteToCurrentTable() {
+  const noteInput = document.getElementById('orderNoteInput');
+  const noteBox = document.getElementById('orderNoteBox');
+  // Đóng khung nhập ghi chú khi chuyển bàn (tránh hiện ghi chú bàn cũ)
+  if (noteBox) noteBox.classList.add('hidden');
+  if (noteInput) {
+    noteInput.value = state.tableOrders[state.currentTable]?.note || '';
+  }
+  if (typeof updateOrderNoteDisplay === 'function') {
+    updateOrderNoteDisplay(state.tableOrders[state.currentTable]?.note || '');
+  }
 }
 
 function updateOrderScreenHeader() {
