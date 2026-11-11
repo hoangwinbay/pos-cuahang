@@ -2,6 +2,28 @@
 // POS ORDER - CORE APP & STATE MANAGEMENT
 // =============================================================
 
+// Tự động phóng to cực đại cửa sổ (Maximized) vừa vặn thanh Taskbar
+(function autoMaximizeWindow() {
+  try {
+    if (window.screen && window.screen.availWidth && window.screen.availHeight) {
+      if (window.outerWidth < window.screen.availWidth || window.outerHeight < window.screen.availHeight) {
+        window.moveTo(0, 0);
+        window.resizeTo(window.screen.availWidth, window.screen.availHeight);
+      }
+    }
+  } catch (e) {}
+  window.addEventListener('load', () => {
+    try {
+      if (window.screen && window.screen.availWidth && window.screen.availHeight) {
+        if (window.outerWidth < window.screen.availWidth || window.outerHeight < window.screen.availHeight) {
+          window.moveTo(0, 0);
+          window.resizeTo(window.screen.availWidth, window.screen.availHeight);
+        }
+      }
+    } catch (e) {}
+  });
+})();
+
 const state = {
   activeScreen: 'tables', // 'tables', 'order', 'reports', 'menu'
   currentTable: 'Bàn 1',
