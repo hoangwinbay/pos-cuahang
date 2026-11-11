@@ -283,7 +283,7 @@ function connectTableEventSource() {
                 } finally {
                   window._explicitPrintAuthorized = false;
                 }
-                showRemotePrintAlert(printOrder, payload.sender_name);
+                // showRemotePrintAlert(printOrder, payload.sender_name);
               }
             }
           }
@@ -291,16 +291,8 @@ function connectTableEventSource() {
           // 2. Trường hợp có bàn thanh toán thành công từ thiết bị khác
           if (payload.type === 'table_order_cleared' && payload.checkout_order) {
             if (isFromOtherDevice) {
-              console.log('Trạm in quầy nhận lệnh in thanh toán từ thiết bị khác:', payload.checkout_order.table_name);
-              playOrderNotificationSound();
-              showToast(`🔔 Bàn ${payload.checkout_order.table_name} đã thanh toán! Đang in hóa đơn...`, 'success');
-              window._explicitPrintAuthorized = true;
-              try {
-                executeOrderPrint(payload.checkout_order, { isCheckout: true });
-              } finally {
-                window._explicitPrintAuthorized = false;
-              }
-              showRemotePrintAlert(payload.checkout_order, payload.sender_name);
+              console.log('Trạm in quầy nhận thông báo bàn thanh toán:', payload.checkout_order.table_name);
+              showToast(`🔔 Bàn ${payload.checkout_order.table_name} đã thanh toán & trả bàn!`, 'info');
             }
           }
 
@@ -312,7 +304,7 @@ function connectTableEventSource() {
               const senderTag = payload.sender_name ? ` (${payload.sender_name})` : '';
               showToast(`🔔 Yêu cầu in từ ${payload.sender_name || 'nhân viên'}: ${payload.print_order.table_name || 'Bàn'}${senderTag}!`, 'success');
               executeOrderPrint(payload.print_order, { isManual: true });
-              showRemotePrintAlert(payload.print_order, payload.sender_name);
+              // showRemotePrintAlert(payload.print_order, payload.sender_name);
             }
           }
         }
@@ -1653,7 +1645,7 @@ async function resolveConflictMerge() {
     if (isPrintStationDevice()) {
       window._explicitPrintAuthorized = true;
       try {
-        executeOrderPrint(orderForPrint, { isCheckout: true });
+        executeOrderPrint(orderForPrint, { isKitchen: true });
       } finally {
         window._explicitPrintAuthorized = false;
       }
@@ -1866,16 +1858,19 @@ async function completeCheckoutOrder() {
         total: item.price * item.quantity
       }))
     };
+    // Da tat in tu dong khi thanh toan hoan tat
+    /*
     if (isPrintStationDevice()) {
-      window._explicitPrintAuthorized = true;
-      try {
-        executeOrderPrint(orderForPrint, { isCheckout: true });
-      } finally {
-        window._explicitPrintAuthorized = false;
-      }
-    } else if (bluetoothCharacteristic) {
-      printEscPosBluetooth(orderForPrint);
-    }
+          window._explicitPrintAuthorized = true;
+          try {
+            executeOrderPrint(orderForPrint, { isCheckout: true });
+          } finally {
+            window._explicitPrintAuthorized = false;
+          }
+        } else if (bluetoothCharacteristic) {
+          printEscPosBluetooth(orderForPrint);
+        }
+    */
 
     // XÓA ĐƠN CỦA BÀN VÀ TRẢ BÀN VỀ TRẠNG THÁI TRỐNG TRÊN CẢ CLIENT VÀ SERVER
     delete state.tableOrders[currentTable];
@@ -3094,67 +3089,14 @@ let _remotePrintAlertTimer = null;
 let _pendingRemoteOrder = null;
 
 function showRemotePrintAlert(order, senderName) {
-  _pendingRemoteOrder = order;
-  let banner = document.getElementById('remoteOrderPrintBanner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'remoteOrderPrintBanner';
-    document.body.appendChild(banner);
-  }
-
-  const tableName = order.table_name || 'Bàn';
-  const totalStr = formatReceiptNum(order.total || order.subtotal || 0) + ' đ';
-  const fromWho = senderName ? `${senderName}` : 'Điện thoại nhân viên';
-  const itemCount = (order.items && order.items.length) ? `${order.items.length} món` : '';
-
-  banner.className = 'fixed top-3 left-3 right-3 sm:left-auto sm:right-4 z-[9999] max-w-sm bg-purple-700 text-white p-3.5 rounded-2xl shadow-2xl flex items-center justify-between space-x-3 transition-all animate-bounce border-2 border-white/40 pointer-events-auto';
-  banner.innerHTML = `
-    <div class="flex items-center space-x-3 min-w-0">
-      <div class="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-lg shrink-0">
-        <i class="fa-solid fa-print"></i>
-      </div>
-      <div class="min-w-0">
-        <div class="font-black text-xs sm:text-sm truncate leading-tight">🔔 ${fromWho} gọi món</div>
-        <div class="text-[11px] text-purple-200 font-medium truncate mt-0.5">${tableName} ${itemCount ? '• ' + itemCount : ''} • ${totalStr}</div>
-      </div>
-    </div>
-    <div class="flex items-center space-x-1.5 shrink-0">
-      <button id="btnTapToPrintRemote" type="button" class="px-3 py-2 bg-white hover:bg-purple-50 active:bg-purple-100 text-purple-800 font-black rounded-xl text-xs shadow-md flex items-center space-x-1">
-        <i class="fa-solid fa-receipt text-xs"></i>
-        <span>IN LẠI</span>
-      </button>
-      <button onclick="hideRemotePrintAlert()" type="button" class="w-7 h-7 rounded-lg hover:bg-white/20 text-white/80 flex items-center justify-center text-xs">
-        <i class="fa-solid fa-xmark"></i>
-      </button>
-    </div>
-  `;
-
-  const btn = document.getElementById('btnTapToPrintRemote');
-  if (btn) {
-    btn.onclick = () => {
-      if (_pendingRemoteOrder) {
-        executeOrderPrint(_pendingRemoteOrder, { isManual: true });
-        showToast('Đã kích hoạt in hóa đơn!', 'success');
-      }
-      hideRemotePrintAlert();
-    };
-  }
-
-  if (_remotePrintAlertTimer) clearTimeout(_remotePrintAlertTimer);
-  _remotePrintAlertTimer = setTimeout(() => {
-    hideRemotePrintAlert();
-  }, 12000);
+  // Đã tắt banner tím [IN LẠI] theo yêu cầu
+  const existing = document.getElementById('remoteOrderPrintBanner');
+  if (existing) existing.remove();
 }
 
 function hideRemotePrintAlert() {
-  const banner = document.getElementById('remoteOrderPrintBanner');
-  if (banner) {
-    banner.className = 'hidden';
-  }
-  if (_remotePrintAlertTimer) {
-    clearTimeout(_remotePrintAlertTimer);
-    _remotePrintAlertTimer = null;
-  }
+  const existing = document.getElementById('remoteOrderPrintBanner');
+  if (existing) existing.remove();
 }
 
 // =============================================================
