@@ -969,6 +969,8 @@ function changeDishQty(productId, delta) {
   }
 
   // Khi bấm thêm/bớt món, bàn có thay đổi chưa xác nhận (cần bấm "Xác Nhận" mới in báo bếp)
+  tableOrder.subtotal = (tableOrder.items || []).reduce((s, it) => s + ((Number(it.price) || 0) * (Number(it.quantity) || 0)), 0);
+  tableOrder.total = tableOrder.subtotal;
   tableOrder.confirmed = false;
 
   // Cập nhật localStorage
@@ -1457,6 +1459,8 @@ function executePrintKitchenSlip() {
   tableOrder.hasPrintedKitchen = true;
   tableOrder.confirmed = true;
   tableOrder.confirmedAt = new Date().toISOString();
+  tableOrder.subtotal = totalAmount;
+  tableOrder.total = totalAmount;
 
   // Đồng bộ lại ô ghi chú trong giỏ hàng nếu có
   const cartNoteInput = document.getElementById('orderNoteInput');
@@ -2002,8 +2006,13 @@ function generateReceiptHtml(order, options = {}) {
 
   const itemsHtml = (order.items || []).map((item) => {
     const qty = Number(item.quantity) || 1;
-    const price = Number(item.price) || 0;
-    const total = Number(item.total !== undefined ? item.total : price * qty);
+    let price = Number(item.price);
+    if (!price || isNaN(price)) {
+      const p = (state.products || []).find(prod => (item.id && prod.id === item.id) || (prod.name === (item.product_name || item.name)));
+      if (p && p.price) price = Number(p.price);
+    }
+    price = price || 0;
+    const total = Number(item.total !== undefined && item.total !== null && item.total > 0 ? item.total : price * qty);
     const itemName = item.product_name || item.name || '';
     return `
       <tr>
@@ -2015,9 +2024,22 @@ function generateReceiptHtml(order, options = {}) {
     `;
   }).join('');
 
-  const subtotal = Number(order.subtotal !== undefined ? order.subtotal : (order.total || 0));
+  // TÍNH TOÁN LẠI TỔNG TIỀN NẾU subtotal HOẶC total BẰNG 0
+  const itemsCalculatedTotal = (order.items || []).reduce((sum, it) => {
+    const q = Number(it.quantity) || 1;
+    let p = Number(it.price);
+    if (!p || isNaN(p)) {
+      const prod = (state.products || []).find(pr => (it.id && pr.id === it.id) || (pr.name === (it.product_name || it.name)));
+      if (prod && prod.price) p = Number(prod.price);
+    }
+    p = p || 0;
+    const t = Number(it.total !== undefined && it.total !== null && it.total > 0 ? it.total : p * q);
+    return sum + t;
+  }, 0);
+
+  const subtotal = (Number(order.subtotal) > 0 ? Number(order.subtotal) : (Number(order.total) > 0 ? Number(order.total) : itemsCalculatedTotal));
   const discount = Number(order.discount || 0);
-  const finalTotal = Number(order.total !== undefined ? order.total : (subtotal - discount));
+  const finalTotal = (Number(order.total) > 0 ? Number(order.total) : Math.max(0, subtotal - discount));
 
   const isChuyenKhoan = order.payment_method === 'transfer' || 
                         order.payment_method === 'bank' || 
@@ -2290,8 +2312,13 @@ function generateEscPosPayload(order) {
   // In từng món theo đúng cấu trúc 4 cột (In đậm tên món để đọc rõ)
   (order.items || []).forEach((it) => {
     const qty = Number(it.quantity) || 1;
-    const price = Number(it.price) || 0;
-    const total = Number(it.total !== undefined ? it.total : price * qty);
+    let price = Number(it.price);
+    if (!price || isNaN(price)) {
+      const p = (state.products || []).find(prod => (it.id && prod.id === it.id) || (prod.name === (it.product_name || it.name)));
+      if (p && p.price) price = Number(p.price);
+    }
+    price = price || 0;
+    const total = Number(it.total !== undefined && it.total !== null && it.total > 0 ? it.total : price * qty);
     const itemName = sanitize(it.product_name || it.name || 'Món');
     content += '\x1B\x45\x01';
     content += formatItemRow4Col(itemName, qty, price, total, lineWidth, withAccents);
@@ -2299,9 +2326,21 @@ function generateEscPosPayload(order) {
   });
 
   content += divider;
-  const subtotal = Number(order.subtotal !== undefined ? order.subtotal : (order.total || 0));
+  const itemsCalculatedTotal = (order.items || []).reduce((sum, it) => {
+    const q = Number(it.quantity) || 1;
+    let p = Number(it.price);
+    if (!p || isNaN(p)) {
+      const prod = (state.products || []).find(pr => (it.id && pr.id === it.id) || (pr.name === (it.product_name || it.name)));
+      if (prod && prod.price) p = Number(prod.price);
+    }
+    p = p || 0;
+    const t = Number(it.total !== undefined && it.total !== null && it.total > 0 ? it.total : p * q);
+    return sum + t;
+  }, 0);
+
+  const subtotal = (Number(order.subtotal) > 0 ? Number(order.subtotal) : (Number(order.total) > 0 ? Number(order.total) : itemsCalculatedTotal));
   const discount = Number(order.discount || 0);
-  const finalTotal = Number(order.total !== undefined ? order.total : (subtotal - discount));
+  const finalTotal = (Number(order.total) > 0 ? Number(order.total) : Math.max(0, subtotal - discount));
 
   const labelSubtotal = withAccents ? 'Thành tiền:' : 'Thanh tien:';
   content += formatLineColumns(labelSubtotal, formatReceiptNum(subtotal) + (withAccents ? ' đ' : ' d'), lineWidth, withAccents);
@@ -2943,9 +2982,15 @@ function formatTableOrderForPrint(tableName, orderData) {
   const items = rawItems.map(it => {
     const name = it.product_name || it.name || 'Món';
     const quantity = Number(it.quantity) || 1;
-    const price = Number(it.price) || 0;
-    const total = Number(it.total !== undefined ? it.total : price * quantity);
+    let price = Number(it.price);
+    if (!price || isNaN(price)) {
+      const p = (state.products || []).find(prod => (it.id && prod.id === it.id) || (prod.name === name));
+      if (p && p.price) price = Number(p.price);
+    }
+    price = price || 0;
+    const total = Number(it.total !== undefined && it.total !== null && it.total > 0 ? it.total : price * quantity);
     return {
+      id: it.id,
       product_name: name,
       name: name,
       quantity: quantity,
@@ -2955,12 +3000,14 @@ function formatTableOrderForPrint(tableName, orderData) {
     };
   });
 
-  const subtotal = Number(orderData.subtotal !== undefined ? orderData.subtotal : (orderData.total || 0));
+  // TÍNH TOÁN LẠI TỔNG TIỀN NẾU subtotal/total BẰNG 0 HOẶC CHƯA CÓ
+  const calculatedItemsTotal = items.reduce((sum, it) => sum + (Number(it.total) || 0), 0);
+  const subtotal = (Number(orderData.subtotal) > 0 ? Number(orderData.subtotal) : (Number(orderData.total) > 0 ? Number(orderData.total) : calculatedItemsTotal));
   const discount = Number(orderData.discount || 0);
-  const total = Number(orderData.total !== undefined ? orderData.total : (subtotal - discount));
+  const total = (Number(orderData.total) > 0 ? Number(orderData.total) : Math.max(0, subtotal - discount));
 
   return {
-    order_code: orderData.order_code || ('BAN-' + String(tableName).replace(/\s+/g, '') + '-' + Date.now().toString().slice(-4)),
+    order_code: orderData.order_code || orderData.orderCode || ('BAN-' + String(tableName).replace(/\s+/g, '') + '-' + Date.now().toString().slice(-4)),
     table_name: tableName,
     source: orderData.source || 'taicho',
     note: orderData.note || '',
