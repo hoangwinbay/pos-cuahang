@@ -261,9 +261,7 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ error: 'Tên đăng nhập, mật khẩu hoặc mã PIN không chính xác' });
     }
 
-    if (user.role !== 'admin') {
-      return res.status(403).json({ error: 'Giao diện đăng nhập này chỉ dành riêng cho Chủ Quán! Nhân viên vui lòng quét mã QR từ máy Chủ Quán để vào đặt món.' });
-    }
+    // Staff and admin both allowed to login
 
     const token = generateToken(user);
     res.json({
@@ -272,7 +270,8 @@ app.post('/api/auth/login', (req, res) => {
         id: user.id,
         username: user.username,
         name: user.name,
-        role: user.role
+        role: user.role,
+        phone: user.phone || ''
       }
     });
   } catch (err) {
@@ -451,7 +450,7 @@ app.put('/api/users/:id/toggle-active', requireAdmin, (req, res) => {
 // Create new user (Admin only) - Chủ quán tạo tài khoản cho thành viên
 app.post('/api/users', requireAdmin, (req, res) => {
   try {
-    const { username, password, name, role, pin, email } = req.body;
+    const { username, password, name, role, pin, email, phone } = req.body;
     if (!username || !password || !name) {
       return res.status(400).json({ error: 'Tên đăng nhập, mật khẩu và họ tên là bắt buộc!' });
     }
@@ -470,12 +469,13 @@ app.post('/api/users', requireAdmin, (req, res) => {
       }
     }
 
+    const cleanPhone = phone ? String(phone).trim() : null;
     const hashedPass = hashSecret(password);
     const hashedPin = hashSecret(pin ? String(pin).trim() : '1234');
 
     const stmt = db.prepare(`
-      INSERT INTO users (username, password, name, role, pin, email, active)
-      VALUES (?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO users (username, password, name, role, pin, email, phone, active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
     `);
     const result = stmt.run(
       cleanUser,
@@ -483,10 +483,12 @@ app.post('/api/users', requireAdmin, (req, res) => {
       name.trim(),
       role === 'admin' ? 'admin' : 'staff',
       hashedPin,
-      cleanEmail
+      cleanEmail,
+      cleanPhone
     );
 
-    const created = db.prepare('SELECT id, username, name, role, email, active, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    saveDataBackup(db);
+    const created = db.prepare('SELECT id, username, name, role, phone, email, active, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -496,7 +498,7 @@ app.post('/api/users', requireAdmin, (req, res) => {
 // Update user (Admin only) - Cập nhật thông tin thành viên
 app.put('/api/users/:id', requireAdmin, (req, res) => {
   try {
-    const { username, password, name, role, pin, active, email } = req.body;
+    const { username, password, name, role, pin, active, email, phone } = req.body;
     const userId = req.params.id;
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
@@ -521,6 +523,7 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
     const newPin = (pin !== undefined && String(pin).trim() !== '') ? hashSecret(String(pin).trim()) : user.pin;
     const newActive = active !== undefined ? (active ? 1 : 0) : user.active;
     const newEmail = email !== undefined ? (email ? email.trim().toLowerCase() : null) : user.email;
+    const newPhone = phone !== undefined ? (phone ? String(phone).trim() : null) : user.phone;
     const newUsername = username !== undefined ? username.trim().toLowerCase() : user.username;
 
     // Check duplicate username if changed
@@ -536,11 +539,12 @@ app.put('/api/users/:id', requireAdmin, (req, res) => {
     }
 
     db.prepare(`
-      UPDATE users SET username = ?, password = ?, name = ?, role = ?, pin = ?, active = ?, email = ?
+      UPDATE users SET username = ?, password = ?, name = ?, role = ?, pin = ?, active = ?, email = ?, phone = ?
       WHERE id = ?
-    `).run(newUsername, newPass, newName, newRole, newPin, newActive, newEmail, userId);
+    `).run(newUsername, newPass, newName, newRole, newPin, newActive, newEmail, newPhone, userId);
 
-    const updated = db.prepare('SELECT id, username, name, role, email, avatar, active, created_at FROM users WHERE id = ?').get(userId);
+    saveDataBackup(db);
+    const updated = db.prepare('SELECT id, username, name, role, phone, email, avatar, active, created_at FROM users WHERE id = ?').get(userId);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -541,7 +541,31 @@ async function initAuth() {
       }
     }
 
-    // 2b. Nếu thiết bị đã ghi nhớ Tự động đăng nhập Nhân Viên (Staff):
+    // 2b. Nếu thiết bị đã ghi nhớ Tự động đăng nhập Nhân Viên bằng tài khoản & mật khẩu:
+    const savedStaffUser = localStorage.getItem('pos_saved_staff_user');
+    const savedStaffPass = localStorage.getItem('pos_saved_staff_pass');
+    if (autoStaff && savedStaffUser && savedStaffPass) {
+      try {
+        const res = await api('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ username: savedStaffUser, password: savedStaffPass })
+        });
+        if (res && res.token && res.user && res.user.active !== 0) {
+          state.token = res.token;
+          state.currentUser = res.user;
+          localStorage.setItem('pos_token', res.token);
+          closeStaffJoinModal();
+          closeLoginModal();
+          applyUserRolePermissions();
+          if (typeof showTableFloor === 'function') showTableFloor();
+          return;
+        }
+      } catch (err) {
+        console.warn('Tự động đăng nhập tài khoản nhân viên không thành công:', err.message);
+      }
+    }
+
+    // 2c. Nếu thiết bị đã ghi nhớ Tự động đăng nhập Nhân Viên qua SĐT quét mã (Staff):
     const savedStaffName = localStorage.getItem('pos_staff_name');
     const savedStaffPhone = localStorage.getItem('pos_staff_phone');
     if ((autoStaff || !isHost) && savedStaffName && savedStaffPhone) {
@@ -713,7 +737,7 @@ async function submitLoginWithUserPass() {
 
   if (!username) {
     if (errBox && errText) {
-      errText.textContent = 'Vui lòng nhập tên đăng nhập Chủ Quán!';
+      errText.textContent = 'Vui lòng nhập tên đăng nhập!';
       errBox.classList.remove('hidden');
     }
     if (userInput) userInput.focus();
@@ -722,7 +746,7 @@ async function submitLoginWithUserPass() {
 
   if (!password) {
     if (errBox && errText) {
-      errText.textContent = 'Vui lòng nhập mật khẩu Chủ Quán!';
+      errText.textContent = 'Vui lòng nhập mật khẩu!';
       errBox.classList.remove('hidden');
     }
     if (passInput) passInput.focus();
@@ -745,23 +769,40 @@ async function submitLoginWithUserPass() {
       state.token = res.token;
       state.currentUser = res.user;
       localStorage.setItem('pos_token', res.token);
-      
-      if (shouldRemember) {
-        localStorage.setItem('pos_auto_login_admin', '1');
-        localStorage.setItem('pos_saved_admin_user', username);
-        localStorage.setItem('pos_saved_admin_pass', password);
-        localStorage.setItem('pos_is_host_device', '1');
-      } else {
-        localStorage.removeItem('pos_auto_login_admin');
-        localStorage.removeItem('pos_saved_admin_user');
-        localStorage.removeItem('pos_saved_admin_pass');
-      }
-
       localStorage.removeItem('pos_explicit_logout');
 
-      closeLoginModal();
-      applyUserRolePermissions();
-      showToast(`Đăng nhập thành công: Chủ Quán (${res.user.name})`, 'success');
+      const isAdmin = res.user.role === 'admin';
+      if (isAdmin) {
+        if (shouldRemember) {
+          localStorage.setItem('pos_auto_login_admin', '1');
+          localStorage.setItem('pos_saved_admin_user', username);
+          localStorage.setItem('pos_saved_admin_pass', password);
+          localStorage.setItem('pos_is_host_device', '1');
+        } else {
+          localStorage.removeItem('pos_auto_login_admin');
+          localStorage.removeItem('pos_saved_admin_user');
+          localStorage.removeItem('pos_saved_admin_pass');
+        }
+        closeLoginModal();
+        applyUserRolePermissions();
+        showToast(`Đăng nhập thành công: Chủ Quán (${res.user.name})`, 'success');
+      } else {
+        if (shouldRemember) {
+          localStorage.setItem('pos_auto_login_staff', '1');
+          localStorage.setItem('pos_saved_staff_user', username);
+          localStorage.setItem('pos_saved_staff_pass', password);
+        } else {
+          localStorage.removeItem('pos_auto_login_staff');
+          localStorage.removeItem('pos_saved_staff_user');
+          localStorage.removeItem('pos_saved_staff_pass');
+        }
+        localStorage.setItem('pos_staff_name', res.user.name || username);
+        if (res.user.phone) localStorage.setItem('pos_staff_phone', res.user.phone);
+        closeLoginModal();
+        applyUserRolePermissions();
+        showToast(`Xin chào nhân viên ${res.user.name || username}!`, 'success');
+        if (typeof showTableFloor === 'function') showTableFloor();
+      }
     } else {
       throw new Error(res?.error || 'Tên đăng nhập hoặc mật khẩu không chính xác!');
     }
@@ -1370,6 +1411,10 @@ async function openConnectedDevicesModal() {
   if (btnQr) {
     btnQr.style.display = isAdmin ? 'inline-flex' : 'none';
   }
+  const btnAdd = document.getElementById('btnFooterAddStaffUser');
+  if (btnAdd) {
+    btnAdd.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
 
   switchDeviceModalTab('staff');
   loadStaffAccounts();
@@ -1467,9 +1512,17 @@ async function loadStaffAccounts(silent = false) {
       const phoneDisplay = u.phone || 'Chưa cập nhật SĐT';
       const createdTime = u.created_at ? new Date(u.created_at).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : 'Quét mã QR';
 
-      // Nút thao tác: Chỉ Admin mới có quyền Khóa hoặc Xóa nhân viên; máy khác chỉ xem
+      // Nút thao tác: Chỉ Admin mới có quyền Đổi MK, Khóa hoặc Xóa nhân viên; máy khác chỉ xem
       const actionsHtml = isAdmin ? `
         <div class="flex items-center space-x-1.5 shrink-0">
+          <button 
+            onclick="openResetStaffPassModal(${u.id}, '${escapeHtml(u.name)}', '${escapeHtml(u.username)}')" 
+            class="px-2.5 py-1.5 bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-700 border border-slate-200 hover:border-amber-200 rounded-xl text-xs font-bold transition-colors flex items-center space-x-1"
+            title="Đổi mật khẩu cho nhân viên này"
+          >
+            <i class="fa-solid fa-key text-xs text-amber-500"></i>
+            <span class="hidden sm:inline">Đổi MK</span>
+          </button>
           <button 
             onclick="toggleStaffActive(${u.id}, '${escapeHtml(u.name)}', ${isActive ? 1 : 0})" 
             class="px-2.5 py-1.5 ${isActive ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'} rounded-xl text-xs font-bold transition-colors flex items-center space-x-1"
@@ -1504,6 +1557,7 @@ async function loadStaffAccounts(silent = false) {
             <div class="truncate">
               <div class="flex items-center space-x-1.5">
                 <span class="font-bold text-slate-800 text-xs sm:text-sm truncate">${escapeHtml(u.name)}</span>
+                <span class="text-[10px] font-mono text-emerald-800 bg-emerald-50 border border-emerald-100 px-1.5 py-0.2 rounded-md font-semibold shrink-0">@${escapeHtml(u.username)}</span>
                 ${isActive 
                   ? '<span class="text-[9px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.2 rounded-full shrink-0 flex items-center"><i class="fa-solid fa-circle-check mr-1 text-[8px]"></i>Hoạt động</span>' 
                   : '<span class="text-[9px] bg-rose-100 text-rose-700 font-bold px-1.5 py-0.2 rounded-full shrink-0 flex items-center"><i class="fa-solid fa-lock mr-1 text-[8px]"></i>Đã khóa</span>'
@@ -1531,6 +1585,188 @@ async function loadStaffAccounts(silent = false) {
         <p>Lỗi tải danh sách: ${escapeHtml(err.message)}</p>
       </div>
     `;
+  }
+}
+
+
+// -------------------------------------------------------------
+// THÊM TÀI KHOẢN NHÂN VIÊN MỚI & ĐỔI MẬT KHẨU NHÂN VIÊN
+// -------------------------------------------------------------
+function openAddStaffModal() {
+  const modal = document.getElementById('modalAddStaffUser');
+  if (!modal) return;
+  const nameInput = document.getElementById('newStaffNameInput');
+  const userInput = document.getElementById('newStaffUserInput');
+  const passInput = document.getElementById('newStaffPassInput');
+  const phoneInput = document.getElementById('newStaffPhoneInput');
+  const errBox = document.getElementById('addStaffErrorMsg');
+
+  if (nameInput) nameInput.value = '';
+  if (userInput) userInput.value = '';
+  if (passInput) passInput.value = '';
+  if (phoneInput) phoneInput.value = '';
+  if (errBox) errBox.classList.add('hidden');
+
+  modal.classList.remove('hidden');
+  if (nameInput) setTimeout(() => nameInput.focus(), 100);
+}
+
+function closeAddStaffModal() {
+  const modal = document.getElementById('modalAddStaffUser');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function submitCreateStaffUser() {
+  const nameInput = document.getElementById('newStaffNameInput');
+  const userInput = document.getElementById('newStaffUserInput');
+  const passInput = document.getElementById('newStaffPassInput');
+  const phoneInput = document.getElementById('newStaffPhoneInput');
+  const errBox = document.getElementById('addStaffErrorMsg');
+  const errText = document.getElementById('addStaffErrorText');
+  const submitBtn = document.getElementById('btnSubmitCreateStaff');
+
+  const name = nameInput ? nameInput.value.trim() : '';
+  const username = userInput ? userInput.value.trim().toLowerCase() : '';
+  const password = passInput ? passInput.value.trim() : '';
+  const phone = phoneInput ? phoneInput.value.trim() : '';
+
+  if (!name) {
+    if (errBox && errText) {
+      errText.textContent = 'Vui lòng nhập họ và tên nhân viên!';
+      errBox.classList.remove('hidden');
+    }
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  if (!username) {
+    if (errBox && errText) {
+      errText.textContent = 'Vui lòng nhập tên đăng nhập!';
+      errBox.classList.remove('hidden');
+    }
+    if (userInput) userInput.focus();
+    return;
+  }
+
+  if (!password) {
+    if (errBox && errText) {
+      errText.textContent = 'Vui lòng nhập mật khẩu cho nhân viên!';
+      errBox.classList.remove('hidden');
+    }
+    if (passInput) passInput.focus();
+    return;
+  }
+
+  if (errBox) errBox.classList.add('hidden');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.classList.add('opacity-70');
+  }
+
+  try {
+    await api('/api/users', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        username,
+        password,
+        phone,
+        role: 'staff'
+      })
+    });
+
+    closeAddStaffModal();
+    showToast(`Đã tạo tài khoản cho nhân viên "${name}" thành công!`, 'success');
+    loadStaffAccounts(true);
+  } catch (err) {
+    if (errBox && errText) {
+      errText.textContent = err.message || 'Lỗi tạo tài khoản nhân viên';
+      errBox.classList.remove('hidden');
+    } else {
+      showToast(err.message || 'Lỗi tạo tài khoản', 'error');
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('opacity-70');
+    }
+  }
+}
+
+function openResetStaffPassModal(userId, name, username) {
+  const modal = document.getElementById('modalResetStaffPass');
+  if (!modal) return;
+  const idInput = document.getElementById('resetStaffIdInput');
+  const nameDisplay = document.getElementById('resetStaffNameDisplay');
+  const userDisplay = document.getElementById('resetStaffUserDisplay');
+  const passInput = document.getElementById('resetStaffNewPassInput');
+  const errBox = document.getElementById('resetStaffErrorMsg');
+
+  if (idInput) idInput.value = userId;
+  if (nameDisplay) nameDisplay.textContent = name || 'Nhân viên';
+  if (userDisplay) userDisplay.textContent = '@' + (username || '');
+  if (passInput) passInput.value = '';
+  if (errBox) errBox.classList.add('hidden');
+
+  modal.classList.remove('hidden');
+  if (passInput) setTimeout(() => passInput.focus(), 100);
+}
+
+function closeResetStaffPassModal() {
+  const modal = document.getElementById('modalResetStaffPass');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function submitResetStaffPass() {
+  const idInput = document.getElementById('resetStaffIdInput');
+  const passInput = document.getElementById('resetStaffNewPassInput');
+  const errBox = document.getElementById('resetStaffErrorMsg');
+  const errText = document.getElementById('resetStaffErrorText');
+  const submitBtn = document.getElementById('btnSubmitResetStaffPass');
+
+  const userId = idInput ? idInput.value : null;
+  const password = passInput ? passInput.value.trim() : '';
+
+  if (!userId) {
+    showToast('Không xác định được tài khoản nhân viên!', 'error');
+    return;
+  }
+
+  if (!password) {
+    if (errBox && errText) {
+      errText.textContent = 'Vui lòng nhập mật khẩu mới!';
+      errBox.classList.remove('hidden');
+    }
+    if (passInput) passInput.focus();
+    return;
+  }
+
+  if (errBox) errBox.classList.add('hidden');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.classList.add('opacity-70');
+  }
+
+  try {
+    await api(`/api/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ password })
+    });
+
+    closeResetStaffPassModal();
+    showToast('Đã đổi mật khẩu nhân viên thành công!', 'success');
+  } catch (err) {
+    if (errBox && errText) {
+      errText.textContent = err.message || 'Lỗi cập nhật mật khẩu';
+      errBox.classList.remove('hidden');
+    } else {
+      showToast(err.message || 'Lỗi cập nhật mật khẩu', 'error');
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('opacity-70');
+    }
   }
 }
 
