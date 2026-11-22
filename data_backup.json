@@ -67,6 +67,11 @@
       "table_name": "Bàn 5",
       "order_data": "{\"source\":\"taicho\",\"startTime\":1795339579015,\"note\":\"\",\"items\":[{\"id\":3,\"name\":\"Bún mắm heo quay\",\"price\":55000,\"image\":\"\",\"quantity\":2}],\"confirmed\":true,\"hasPrintedKitchen\":true,\"subtotal\":110000,\"total\":110000,\"confirmedAt\":\"2026-11-22T09:26:21.894Z\",\"orderCode\":\"BEP-20261122-554\"}",
       "updated_at": "2026-11-22 09:26:22"
+    },
+    {
+      "table_name": "Bàn 6",
+      "order_data": "{\"source\":\"taicho\",\"startTime\":1795340050133,\"note\":\"\",\"items\":[{\"id\":1,\"name\":\"Hộp mang về\",\"price\":5000,\"image\":\"\",\"quantity\":2}],\"confirmed\":true,\"hasPrintedKitchen\":true,\"subtotal\":10000,\"total\":10000,\"confirmedAt\":\"2026-11-22T09:34:12.041Z\",\"orderCode\":\"BEP-20261122-846\"}",
+      "updated_at": "2026-11-22 09:34:10"
     }
   ],
   "table_definitions": [
@@ -161,5 +166,5 @@
       "value": "3906597427562388428"
     }
   ],
-  "saved_at": "2026-11-22T09:26:22.226Z"
+  "saved_at": "2026-11-22T09:34:10.221Z"
 }
