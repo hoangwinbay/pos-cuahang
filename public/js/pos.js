@@ -243,7 +243,7 @@ function connectTableEventSource() {
       updateSyncIndicator(true);
     };
 
-    tableEventSource.onmessage = (event) => {
+    tableEventSource.onmessage = async (event) => {
       try {
         const payload = JSON.parse(event.data);
         if (payload.tables) {
@@ -262,7 +262,7 @@ function connectTableEventSource() {
         const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
         const senderId = payload.sender_device_id || null;
         // Chỉ coi là thiết bị khác nếu CẢ HAI đều có ID VÀ KHÁC NHAU (tránh nhận nhầm chính thiết bị này)
-        const isFromOtherDevice = Boolean(myDevId && senderId && senderId !== myDevId);
+        const isFromOtherDevice = Boolean(senderId && (!myDevId || senderId !== myDevId));
 
         if (isPrintStationDevice()) {
           // 1. Trường hợp có bàn được XÁC NHẬN đặt món từ thiết bị khác
@@ -279,7 +279,7 @@ function connectTableEventSource() {
               if (printOrder && printOrder.items && printOrder.items.length > 0) {
                 window._explicitPrintAuthorized = true;
                 try {
-                  executeOrderPrint(printOrder, { isKitchen: true });
+                  await executeOrderPrint(printOrder, { isKitchen: true });
                 } finally {
                   window._explicitPrintAuthorized = false;
                 }
@@ -2401,6 +2401,63 @@ function loadHtml2CanvasScript() {
   });
 }
 
+// Gửi lệnh in trực tiếp qua WebSocket tới RawBT service (Chạy ngầm hoàn hảo, không cần User Gesture)
+function sendRawBtWebSocket(bytes) {
+  const tryHost = (host) => new Promise((resolve, reject) => {
+    let ws = null;
+    let timer = null;
+    try {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${proto}//${host}:40213/`);
+      ws.binaryType = 'arraybuffer';
+      timer = setTimeout(() => {
+        try { ws.close(); } catch (e) {}
+        reject(new Error('RawBT ws timeout'));
+      }, 700);
+
+      ws.onopen = () => {
+        clearTimeout(timer);
+        try {
+          const buffer = bytes instanceof Uint8Array ? bytes.buffer : bytes;
+          ws.send(buffer);
+          setTimeout(() => {
+            try { ws.close(); } catch (e) {}
+            resolve(true);
+          }, 80);
+        } catch (e) {
+          reject(e);
+        }
+      };
+
+      ws.onerror = (e) => {
+        clearTimeout(timer);
+        reject(e || new Error('RawBT ws error'));
+      };
+    } catch (e) {
+      if (timer) clearTimeout(timer);
+      reject(e);
+    }
+  });
+
+  return tryHost('127.0.0.1').catch(() => tryHost('localhost'));
+}
+
+// Lưu lệnh in từ xa khi chưa có User Gesture; giải phóng ngay khi thu ngân chạm màn hình
+let _pendingRawBtOrder = null;
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', () => {
+    if (_pendingRawBtOrder) {
+      const job = _pendingRawBtOrder;
+      _pendingRawBtOrder = null;
+      if (Date.now() - job.time < 60000) {
+        console.log('User gesture detected, flushing pending RawBT print');
+        dispatchRawBtIntent(job.targetUrl, job.fallbackUrl);
+      }
+    }
+  }, { capture: true });
+}
+
 function dispatchRawBtIntent(targetUrl, fallbackUrl) {
   try {
     const a = document.createElement('a');
@@ -2502,14 +2559,28 @@ async function printViaRawBt(order) {
 
     if (printMode === '0' || printMode === '2') {
       showToast('Đang gửi lệnh in siêu tốc tới RawBT...', 'info');
-      const base64Data = generateEscPosBase64(order);
+      const content = generateEscPosPayload(order);
+      const encoder = new TextEncoder();
+      const escPosBytes = encoder.encode(content);
+      const base64Data = uint8ArrayToBase64(escPosBytes);
       if (!base64Data) throw new Error('Không thể tạo dữ liệu in ESC/POS');
+
+      // 1. Thử gửi trực tiếp qua RawBT WebSocket service (Chạy ngầm không cần User Gesture)
+      try {
+        await sendRawBtWebSocket(escPosBytes);
+        _pendingRawBtOrder = null;
+        showToast('Đã gửi lệnh in siêu tốc tới máy in RawBT!', 'success');
+        return true;
+      } catch (wsErr) {
+        console.log('RawBT WebSocket unavailable, fallback to Intent scheme:', wsErr.message);
+      }
 
       const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
       const targetUrl = isChrome
         ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
         : 'rawbt:base64,' + base64Data;
 
+      _pendingRawBtOrder = { targetUrl, fallbackUrl: 'rawbt:base64,' + base64Data, time: Date.now() };
       dispatchRawBtIntent(targetUrl, 'rawbt:base64,' + base64Data);
       showToast('Đã gửi lệnh in siêu tốc tới máy in RawBT!', 'success');
       return true;
@@ -2573,12 +2644,23 @@ async function printViaRawBt(order) {
 
     if (!base64Data) throw new Error('Không thể tạo dữ liệu in ESC/POS');
 
-    // 6. Gửi qua RawBT bằng intent / scheme base64 chuẩn
+    // 1. Thử gửi trực tiếp qua RawBT WebSocket service (Chạy ngầm không cần User Gesture)
+    try {
+      await sendRawBtWebSocket(escPosBytes);
+      _pendingRawBtOrder = null;
+      showToast('Đã gửi hóa đơn in & cắt giấy qua RawBT!', 'success');
+      return true;
+    } catch (wsErr) {
+      console.log('RawBT WebSocket unavailable, fallback to Intent scheme:', wsErr.message);
+    }
+
+    // 2. Gửi qua RawBT bằng intent / scheme base64 chuẩn
     const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
     const targetUrl = isChrome
       ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
       : 'rawbt:base64,' + base64Data;
 
+    _pendingRawBtOrder = { targetUrl, fallbackUrl: 'rawbt:base64,' + base64Data, time: Date.now() };
     dispatchRawBtIntent(targetUrl, 'rawbt:base64,' + base64Data);
     showToast('Đã gửi hóa đơn in & cắt giấy qua RawBT!', 'success');
     return true;
@@ -3033,8 +3115,7 @@ function callRawBtPrint(order, isManual = false) {
   }
 
   // 2. Gọi RawBT Print Service trên máy POS Android
-  printViaRawBt(order);
-  return true;
+  return printViaRawBt(order);
 }
 
 async function sendPrintJobToServer(order) {
