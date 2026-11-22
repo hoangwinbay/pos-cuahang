@@ -23,6 +23,18 @@
       "phone": "0332105390",
       "email": null,
       "created_at": "2026-11-04 04:33:49"
+    },
+    {
+      "id": 9,
+      "username": "nv_84332105390",
+      "password": "scrypt:bc609c2c954a66585c44fd2ac62e8883:e272a1342856480b24166ccf28d13d07dc21fc678b45c71dfee2f8ce3cccf9bc089934a8154e91f94a4fb98dd660a4e6204b6fc4852c170851141afb81a9d608",
+      "name": "Trần Duy Hoàng",
+      "role": "staff",
+      "pin": "scrypt:a82cf86890f05903db0afed602db391a:97f5de38c5ccafae0d3a40458d2ded977c7edc4ac4249f8fc2b0249a9920f3e87494216dda7a74d9371841395127ad621667e5693ddb345a2e626cf735bbb578",
+      "active": 1,
+      "phone": "+84332105390",
+      "email": null,
+      "created_at": "2026-11-22 09:25:58"
     }
   ],
   "active_table_orders": [
@@ -45,6 +57,16 @@
       "table_name": "Bàn 7",
       "order_data": "{\"source\":\"taicho\",\"startTime\":1795338801057,\"note\":\"\",\"items\":[{\"id\":3,\"name\":\"Bún mắm heo quay\",\"price\":55000,\"image\":\"\",\"quantity\":1},{\"id\":4,\"name\":\"Bún mắm chả cá heo quay\",\"price\":60000,\"image\":\"\",\"quantity\":1}],\"confirmed\":true,\"hasPrintedKitchen\":true,\"subtotal\":115000,\"total\":115000,\"confirmedAt\":\"2026-11-22T09:13:25.790Z\",\"orderCode\":\"BEP-20261122-281\"}",
       "updated_at": "2026-11-22 09:13:26"
+    },
+    {
+      "table_name": "Bàn 4",
+      "order_data": "{\"source\":\"taicho\",\"startTime\":1795338955406,\"note\":\"\",\"items\":[{\"id\":3,\"name\":\"Bún mắm heo quay\",\"price\":55000,\"image\":\"\",\"quantity\":1}],\"confirmed\":true,\"hasPrintedKitchen\":true,\"subtotal\":55000,\"total\":55000,\"confirmedAt\":\"2026-11-22T09:15:58.391Z\",\"orderCode\":\"BEP-20261122-284\"}",
+      "updated_at": "2026-11-22 09:15:56"
+    },
+    {
+      "table_name": "Bàn 5",
+      "order_data": "{\"source\":\"taicho\",\"startTime\":1795339579015,\"note\":\"\",\"items\":[{\"id\":3,\"name\":\"Bún mắm heo quay\",\"price\":55000,\"image\":\"\",\"quantity\":2}],\"confirmed\":true,\"hasPrintedKitchen\":true,\"subtotal\":110000,\"total\":110000,\"confirmedAt\":\"2026-11-22T09:26:21.894Z\",\"orderCode\":\"BEP-20261122-554\"}",
+      "updated_at": "2026-11-22 09:26:22"
     }
   ],
   "table_definitions": [
@@ -139,5 +161,5 @@
       "value": "3906597427562388428"
     }
   ],
-  "saved_at": "2026-11-22T09:13:26.125Z"
+  "saved_at": "2026-11-22T09:26:22.226Z"
 }

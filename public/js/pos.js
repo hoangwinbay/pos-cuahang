@@ -1961,21 +1961,26 @@ function generateReceiptHtml(order, options = {}) {
   // Kích thước font chữ tự động tương thích:
   // Nếu là in raster 576 dots (80mm) -> Dùng font to đậm rõ nét, tràn viền giấy nhiệt
   // Nếu là in laptop qua hộp thoại in Chrome -> Dùng kích thước CSS chuẩn như mẫu gốc
-  const titleSize = isRaster ? (is58mm ? '26px' : '36px') : '18px';
-  const tableBoxSize = isRaster ? (is58mm ? '34px' : '48px') : '23px';
-  const tableBoxBorder = isRaster ? (is58mm ? '3px dashed #000' : '4px dashed #000') : '2px dashed #000';
-  const tableBoxPadding = isRaster ? '10px 4px' : '6px 4px';
-  const metaSize = isRaster ? (is58mm ? '18px' : '24px') : '13px';
-  const thSize = isRaster ? (is58mm ? '18px' : '24px') : '13px';
-  const itemSize = isRaster ? (is58mm ? '20px' : '28px') : '13.5px';
-  const summarySize = isRaster ? (is58mm ? '20px' : '28px') : '13.5px';
-  const totalSize = isRaster ? (is58mm ? '30px' : '44px') : '16px';
-  const paymentSize = isRaster ? (is58mm ? '18px' : '24px') : '13px';
-  const storeNameSize = isRaster ? (is58mm ? '22px' : '30px') : '15px';
+  const titleSize = isRaster ? (is58mm ? '24px' : '30px') : '18px';
+  const tableBoxSize = isRaster ? (is58mm ? '30px' : '38px') : '22px';
+  const tableBoxBorder = isRaster ? (is58mm ? '3px dashed #000' : '3px dashed #000') : '2px dashed #000';
+  const tableBoxPadding = isRaster ? '8px 4px' : '6px 4px';
+  const metaSize = isRaster ? (is58mm ? '18px' : '23px') : '13px';
+  const thSize = isRaster ? (is58mm ? '18px' : '23px') : '13px';
+  const itemSize = isRaster ? (is58mm ? '20px' : '25px') : '13.5px';
+  const summarySize = isRaster ? (is58mm ? '20px' : '25px') : '13.5px';
+  const totalSize = isRaster ? (is58mm ? '28px' : '36px') : '16px';
+  const paymentSize = isRaster ? (is58mm ? '18px' : '23px') : '13px';
+  const storeNameSize = isRaster ? (is58mm ? '22px' : '28px') : '15px';
   const storeAddrSize = isRaster ? (is58mm ? '17px' : '22px') : '12.5px';
   const footerNoticeSize = isRaster ? (is58mm ? '17px' : '22px') : '12.5px';
-  const paddingCell = isRaster ? '9px 4px' : '5px 2px';
-  const paddingCellSub = isRaster ? '9px 2px' : '5px 1px';
+  const paddingCell = isRaster ? '8px 4px' : '5px 2px';
+  const paddingCellSub = isRaster ? '8px 2px' : '5px 1px';
+
+  const colNameW = isRaster ? '40%' : '44%';
+  const colQtyW = isRaster ? '12%' : '14%';
+  const colPriceW = isRaster ? '24%' : '21%';
+  const colTotalW = isRaster ? '24%' : '21%';
 
   // Xác định hình thức: Mang về hay Tại chỗ
   let orderSource = order.source;
@@ -2016,10 +2021,10 @@ function generateReceiptHtml(order, options = {}) {
     const itemName = item.product_name || item.name || '';
     return `
       <tr>
-        <td style="text-align: left; vertical-align: top; padding: ${paddingCell}; word-break: break-word; font-size: ${itemSize};">${itemName}</td>
-        <td style="text-align: center; vertical-align: top; padding: ${paddingCellSub}; font-size: ${itemSize};">${qty}</td>
-        <td style="text-align: right; vertical-align: top; padding: ${paddingCellSub}; white-space: nowrap; font-size: ${itemSize};">${formatReceiptNum(price)}</td>
-        <td style="text-align: right; vertical-align: top; padding: ${paddingCellSub}; white-space: nowrap; font-size: ${itemSize};">${formatReceiptNum(total)}</td>
+        <td style="width: ${colNameW}; text-align: left; vertical-align: top; padding: ${paddingCell}; word-break: break-word; font-size: ${itemSize} !important;">${itemName}</td>
+        <td style="width: ${colQtyW}; text-align: center; vertical-align: top; padding: ${paddingCellSub}; font-size: ${itemSize} !important;">${qty}</td>
+        <td style="width: ${colPriceW}; text-align: right; vertical-align: top; padding: ${paddingCellSub}; padding-right: 8px; white-space: nowrap; font-size: ${itemSize} !important;">${formatReceiptNum(price)}</td>
+        <td style="width: ${colTotalW}; text-align: right; vertical-align: top; padding: ${paddingCellSub}; white-space: nowrap; font-size: ${itemSize} !important;">${formatReceiptNum(total)}</td>
       </tr>
     `;
   }).join('');
@@ -2067,11 +2072,11 @@ function generateReceiptHtml(order, options = {}) {
 
     <table class="receipt-table" style="width: 100%; border-collapse: collapse; margin: 6px 0;">
       <thead>
-        <tr style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-size: ${thSize};">
-          <th style="width: 48%; text-align: left; padding: ${paddingCell}; border-right: 1px solid #000; font-weight: bold;">Tên món</th>
-          <th style="width: 14%; text-align: center; padding: ${paddingCellSub}; border-right: 1px solid #000; font-weight: bold;">SL</th>
-          <th style="width: 19%; text-align: right; padding: ${paddingCellSub}; border-right: 1px solid #000; font-weight: bold;">Đơn giá</th>
-          <th style="width: 19%; text-align: right; padding: ${paddingCellSub}; font-weight: bold;">Thành tiền</th>
+        <tr style="border-top: 1px dashed #000; border-bottom: 1px dashed #000;">
+          <th style="width: ${colNameW}; text-align: left; padding: ${paddingCell}; border-right: 1px solid #000; font-weight: bold; font-size: ${thSize} !important;">Tên món</th>
+          <th style="width: ${colQtyW}; text-align: center; padding: ${paddingCellSub}; border-right: 1px solid #000; font-weight: bold; font-size: ${thSize} !important;">SL</th>
+          <th style="width: ${colPriceW}; text-align: right; padding: ${paddingCellSub}; padding-right: 8px; border-right: 1px solid #000; font-weight: bold; font-size: ${thSize} !important;">Đơn giá</th>
+          <th style="width: ${colTotalW}; text-align: right; padding: ${paddingCellSub}; font-weight: bold; font-size: ${thSize} !important;">Thành tiền</th>
         </tr>
       </thead>
       <tbody>
@@ -2081,31 +2086,31 @@ function generateReceiptHtml(order, options = {}) {
 
     <div class="receipt-divider" style="border-bottom: 1px dashed #000; margin: 5px 0 7px 0;"></div>
 
-    <table class="receipt-summary" style="width: 100%; border-collapse: collapse; font-size: ${summarySize}; margin-top: 2px; font-weight: bold;">
+    <table class="receipt-summary" style="width: 100%; border-collapse: collapse; margin-top: 4px; font-weight: bold;">
       <tr style="font-weight: bold;">
-        <td style="padding: 3px 0; font-weight: bold;">Thành tiền:</td>
-        <td style="padding: 3px 0; text-align: right; font-weight: bold;">${formatReceiptNum(subtotal)} đ</td>
+        <td style="padding: 4px 0; font-weight: bold; font-size: ${summarySize} !important;">Thành tiền:</td>
+        <td style="padding: 4px 0; text-align: right; font-weight: bold; font-size: ${summarySize} !important;">${formatReceiptNum(subtotal)} đ</td>
       </tr>
       ${discount > 0 ? `
       <tr style="font-weight: bold;">
-        <td style="padding: 3px 0; font-weight: bold;">Giảm giá:</td>
-        <td style="padding: 3px 0; text-align: right; font-weight: bold;">-${formatReceiptNum(discount)} đ</td>
+        <td style="padding: 4px 0; font-weight: bold; font-size: ${summarySize} !important;">Giảm giá:</td>
+        <td style="padding: 4px 0; text-align: right; font-weight: bold; font-size: ${summarySize} !important;">-${formatReceiptNum(discount)} đ</td>
       </tr>
       ` : ''}
-      <tr class="receipt-total" style="font-size: ${totalSize}; font-weight: 900;">
-        <td style="padding: 5px 0; font-weight: 900;">Tổng tiền:</td>
-        <td style="padding: 5px 0; text-align: right; font-weight: 900;">${formatReceiptNum(finalTotal)} đ</td>
+      <tr class="receipt-total">
+        <td style="padding: 6px 0; font-weight: 900; font-size: ${totalSize} !important;">Tổng tiền:</td>
+        <td style="padding: 6px 0; text-align: right; font-weight: 900; font-size: ${totalSize} !important;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
-      <tr class="receipt-payment-row" style="font-weight: normal; font-size: ${paymentSize}; color: #000000;">
-        <td style="padding: 3px 0; font-weight: normal; font-size: ${paymentSize}; color: #000000;">+ ${paymentMethodLabel}</td>
-        <td style="padding: 3px 0; text-align: right; font-weight: normal; font-size: ${paymentSize}; color: #000000;">${formatReceiptNum(finalTotal)} đ</td>
+      <tr class="receipt-payment-row" style="font-weight: normal; color: #000000;">
+        <td style="padding: 4px 0; font-weight: normal; font-size: ${paymentSize} !important; color: #000000;">+ ${paymentMethodLabel}</td>
+        <td style="padding: 4px 0; text-align: right; font-weight: normal; font-size: ${paymentSize} !important; color: #000000;">${formatReceiptNum(finalTotal)} đ</td>
       </tr>
     </table>
 
-    <div class="receipt-footer" style="text-align: center; margin-top: 16px; font-size: ${storeAddrSize}; line-height: 1.45;">
-      <div style="font-weight: bold; font-size: ${storeNameSize}; margin-bottom: 3px;">${storeName}</div>
-      <div style="margin-bottom: 8px;">Địa chỉ: ${storeAddress}</div>
-      <div style="margin-top: 6px; font-weight: bold; font-size: ${footerNoticeSize};">${footerNotice}</div>
+    <div class="receipt-footer" style="text-align: center; margin-top: 16px; line-height: 1.45;">
+      <div style="font-weight: bold; font-size: ${storeNameSize} !important; margin-bottom: 4px;">${storeName}</div>
+      <div style="margin-bottom: 8px; font-size: ${storeAddrSize} !important;">Địa chỉ: ${storeAddress}</div>
+      <div style="margin-top: 6px; font-weight: bold; font-size: ${footerNoticeSize} !important;">${footerNotice}</div>
     </div>
   `;
 }
@@ -2517,7 +2522,7 @@ async function printViaRawBt(order) {
     // 1 = Đồ Họa Bitmap (Có dấu)
     const printMode = localStorage.getItem('pos_print_accents') || '1';
 
-    if (printMode === '0') {
+    if (printMode === '0' || printMode === '2') {
       showToast('Đang gửi lệnh in siêu tốc tới RawBT...', 'info');
       const base64Data = generateEscPosBase64(order);
       if (!base64Data) throw new Error('Không thể tạo dữ liệu in ESC/POS');
@@ -2558,7 +2563,7 @@ async function printViaRawBt(order) {
       padding: 6px 4px 18px 4px;
       background: #ffffff !important;
       color: #000000 !important;
-      font-family: 'Courier New', Courier, monospace, sans-serif !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
       line-height: 1.35 !important;
       box-sizing: border-box !important;
       z-index: -9999;
