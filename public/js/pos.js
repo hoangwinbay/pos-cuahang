@@ -2234,7 +2234,7 @@ function htmlToBase64(html) {
 }
 
 function generateEscPosPayload(order) {
-  const printAccentsMode = localStorage.getItem('pos_print_accents') || '0';
+  const printAccentsMode = localStorage.getItem('pos_print_accents') || '1';
   const withAccents = printAccentsMode !== '2';
   const sanitize = withAccents ? (s) => (s ? String(s).normalize('NFC') : '') : removeVietnameseAccents;
 
@@ -2515,7 +2515,7 @@ async function printViaRawBt(order) {
   try {
     // 0 = ESC/POS Siêu Tốc (MẶC ĐỊNH - Cực nhanh < 10ms, không lag máy POS, chữ to rõ)
     // 1 = Đồ Họa Bitmap (Có dấu)
-    const printMode = localStorage.getItem('pos_print_accents') || '0';
+    const printMode = localStorage.getItem('pos_print_accents') || '1';
 
     if (printMode === '0') {
       showToast('Đang gửi lệnh in siêu tốc tới RawBT...', 'info');
@@ -3469,7 +3469,7 @@ function renderPrinterStatusUI() {
   }
 
   if (selectAccents) {
-    selectAccents.value = localStorage.getItem('pos_print_accents') || '0';
+    selectAccents.value = localStorage.getItem('pos_print_accents') || '1';
   }
 
   if (!card) return;

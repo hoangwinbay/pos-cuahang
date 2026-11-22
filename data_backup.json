@@ -25,7 +25,28 @@
       "created_at": "2026-11-04 04:33:49"
     }
   ],
-  "active_table_orders": [],
+  "active_table_orders": [
+    {
+      "table_name": "Bàn 1",
+      "order_data": "{\"source\":\"taicho\",\"startTime\":1795338217711,\"note\":\"\",\"items\":[{\"id\":1,\"name\":\"Hộp mang về\",\"price\":5000,\"image\":\"\",\"quantity\":1}],\"confirmed\":true,\"hasPrintedKitchen\":true,\"subtotal\":5000,\"total\":5000,\"confirmedAt\":\"2026-11-22T09:03:41.111Z\",\"orderCode\":\"BEP-20261122-458\"}",
+      "updated_at": "2026-11-22 09:03:39"
+    },
+    {
+      "table_name": "Bàn 2",
+      "order_data": "{\"source\":\"taicho\",\"startTime\":1795338564907,\"note\":\"\",\"items\":[{\"id\":2,\"name\":\"Bún mắm chả cá\",\"price\":45000,\"image\":\"\",\"quantity\":1}],\"confirmed\":true,\"hasPrintedKitchen\":true,\"subtotal\":45000,\"total\":45000,\"confirmedAt\":\"2026-11-22T09:09:26.874Z\",\"orderCode\":\"BEP-20261122-845\"}",
+      "updated_at": "2026-11-22 09:09:25"
+    },
+    {
+      "table_name": "Bàn 3",
+      "order_data": "{\"source\":\"taicho\",\"startTime\":1795338781309,\"note\":\"\",\"items\":[{\"id\":2,\"name\":\"Bún mắm chả cá\",\"price\":45000,\"image\":\"\",\"quantity\":2},{\"id\":3,\"name\":\"Bún mắm heo quay\",\"price\":55000,\"image\":\"\",\"quantity\":1}],\"confirmed\":true,\"hasPrintedKitchen\":true,\"subtotal\":145000,\"total\":145000,\"confirmedAt\":\"2026-11-22T09:13:05.921Z\",\"orderCode\":\"BEP-20261122-875\"}",
+      "updated_at": "2026-11-22 09:13:06"
+    },
+    {
+      "table_name": "Bàn 7",
+      "order_data": "{\"source\":\"taicho\",\"startTime\":1795338801057,\"note\":\"\",\"items\":[{\"id\":3,\"name\":\"Bún mắm heo quay\",\"price\":55000,\"image\":\"\",\"quantity\":1},{\"id\":4,\"name\":\"Bún mắm chả cá heo quay\",\"price\":60000,\"image\":\"\",\"quantity\":1}],\"confirmed\":true,\"hasPrintedKitchen\":true,\"subtotal\":115000,\"total\":115000,\"confirmedAt\":\"2026-11-22T09:13:25.790Z\",\"orderCode\":\"BEP-20261122-281\"}",
+      "updated_at": "2026-11-22 09:13:26"
+    }
+  ],
   "table_definitions": [
     {
       "table_name": "Bàn 1",
@@ -118,5 +139,5 @@
       "value": "3906597427562388428"
     }
   ],
-  "saved_at": "2026-11-22T08:20:56.093Z"
+  "saved_at": "2026-11-22T09:13:26.125Z"
 }
