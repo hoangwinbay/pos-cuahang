@@ -389,8 +389,8 @@ const DEFAULT_CLOUD_SERVER = 'https://pos-cuahang.onrender.com';
 // Server Base URL resolver (Mặc định liên thông 100% với https://pos-cuahang.onrender.com)
 function getApiBaseUrl() {
   let custom = localStorage.getItem('pos_server_url');
-  // Tự động dọn dẹp các đường link tunnel cũ để ưu tiên đồng bộ theo Render
-  if (custom && custom.includes('trycloudflare.com')) {
+  // Tu dong don dep cac duong link khong con kha dung hoac Render bi suspend
+  if (custom && (custom.includes('trycloudflare.com') || custom.includes('pos-cuahang.onrender.com'))) {
     localStorage.removeItem('pos_server_url');
     custom = null;
   }

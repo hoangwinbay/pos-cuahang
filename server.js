@@ -1434,7 +1434,7 @@ app.get('/api/server-info', requireAuth, (req, res) => {
     port: PORT,
     wifi_url: `http://${localIp}:${PORT}`,
     tunnel_url: tunnelUrl,
-    cloud_url: 'https://pos-cuahang.onrender.com'
+    cloud_url: tunnelUrl || 'https://pos-cuahang.onrender.com'
   });
 });
 
