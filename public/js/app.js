@@ -1252,10 +1252,6 @@ async function openConnectedDevicesModal() {
   if (modal) modal.classList.remove('hidden');
 
   const isAdmin = state.currentUser && state.currentUser.role === 'admin';
-  const btnQr = document.getElementById('btnFooterCreateStaffQr');
-  if (btnQr) {
-    btnQr.style.display = isAdmin ? 'inline-flex' : 'none';
-  }
   const btnAdd = document.getElementById('btnFooterAddStaffUser');
   if (btnAdd) {
     btnAdd.style.display = isAdmin ? 'inline-flex' : 'none';
@@ -1856,113 +1852,6 @@ function renderQrCodeHelper(containerId, imgId, text, size = 200) {
   }
 }
 
-// =============================================================
-// TẠO MÃ QR THÊM NHÂN VIÊN GỌI MÓN (ADMIN QUẢN LÝ THIẾT BỊ)
-// =============================================================
-let staffQrServerData = {
-  wifiUrl: '',
-  cloudUrl: ''
-};
-let currentStaffQrNet = 'wifi';
-
-async function openStaffQrModal() {
-  const modal = document.getElementById('modalStaffQr');
-  if (!modal) return;
-
-  let baseWifi = window.location.origin;
-  let baseCloud = window.location.origin;
-
-  try {
-    const info = await api('/api/server-info');
-    if (info) {
-      if (info.wifi_url) baseWifi = info.wifi_url;
-      if (info.tunnel_url) {
-        baseCloud = info.tunnel_url;
-      } else if (info.cloud_url) {
-        baseCloud = info.cloud_url;
-      } else {
-        baseCloud = baseWifi;
-      }
-    }
-  } catch (e) {
-    if (window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1')) {
-      baseCloud = window.location.origin;
-    }
-  }
-
-  // Nếu đang mở trên localhost/127.0.0.1 thì cố gắng lấy IP LAN nội bộ
-  if (baseWifi.includes('localhost') || baseWifi.includes('127.0.0.1')) {
-    try {
-      const info = await api('/api/server-info');
-      if (info?.wifi_url) baseWifi = info.wifi_url;
-    } catch (e) {}
-  }
-
-  staffQrServerData.wifiUrl = `${baseWifi.replace(/\/$/, '')}/`;
-  staffQrServerData.cloudUrl = `${baseCloud.replace(/\/$/, '')}/`;
-
-  // Mặc định chọn mạng phù hợp
-  if (window.location.hostname.includes('onrender.com') || window.location.hostname.includes('cloudflare')) {
-    currentStaffQrNet = 'cloud';
-  } else {
-    currentStaffQrNet = 'wifi';
-  }
-
-  updateStaffQrView();
-  modal.classList.remove('hidden');
-}
-
-function closeStaffQrModal() {
-  const modal = document.getElementById('modalStaffQr');
-  if (modal) modal.classList.add('hidden');
-}
-
-function switchStaffQrNetwork(net) {
-  currentStaffQrNet = net;
-  updateStaffQrView();
-}
-
-function updateStaffQrView() {
-  const tabWifi = document.getElementById('tabStaffQrWifi');
-  const tabCloud = document.getElementById('tabStaffQrCloud');
-  const inputUrl = document.getElementById('staffQrUrlInput');
-  const directLink = document.getElementById('staffQrDirectLink');
-
-  const isWifi = currentStaffQrNet === 'wifi';
-  const targetUrl = isWifi ? staffQrServerData.wifiUrl : staffQrServerData.cloudUrl;
-
-  if (tabWifi && tabCloud) {
-    if (isWifi) {
-      tabWifi.className = 'py-1.5 rounded-lg bg-white shadow-2xs text-emerald-700 font-bold transition-all';
-      tabCloud.className = 'py-1.5 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
-    } else {
-      tabCloud.className = 'py-1.5 rounded-lg bg-white shadow-2xs text-emerald-700 font-bold transition-all';
-      tabWifi.className = 'py-1.5 rounded-lg text-slate-500 hover:text-slate-800 font-bold transition-all';
-    }
-  }
-
-  if (inputUrl) inputUrl.value = targetUrl;
-  if (directLink) directLink.href = targetUrl;
-
-  renderQrCodeHelper('staffQrCanvasContainer', 'staffQrImg', targetUrl, 192);
-}
-
-// =============================================================
-// MODAL MỞ POS TRÊN ĐIỆN THOẠI (BACKWARD COMPATIBILITY)
-// =============================================================
-let currentMobileWebUrl = '';
-
-async function openMobileConnectModal() {
-  openStaffQrModal();
-}
-
-function closeMobileConnectModal() {
-  closeStaffQrModal();
-}
-
-const openZaloModal = openMobileConnectModal;
-const closeZaloModal = closeMobileConnectModal;
-
 async function testServerConnection() {
   const input = document.getElementById('inputServerUrl');
   const statusEl = document.getElementById('serverTestStatus');
@@ -2019,7 +1908,7 @@ function saveServerConfig() {
 
 // App Initialization
 async function startApp() {
-  const CURRENT_APP_BUILD = '20261124_auth_unified_v1';
+  const CURRENT_APP_BUILD = '20261124_auth_unified_v2';
   if (localStorage.getItem('pos_app_build') !== CURRENT_APP_BUILD) {
     localStorage.setItem('pos_app_build', CURRENT_APP_BUILD);
     if ('caches' in window) {
