@@ -9,7 +9,7 @@
         android:allowBackup="true"
         android:label="POS Quầy In"
         android:theme="@android:style/Theme.NoTitleBar"
-        android:usesHardwareAccelerated="true"
+        android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true">
 
         <activity
