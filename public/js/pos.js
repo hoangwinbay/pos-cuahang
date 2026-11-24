@@ -2552,6 +2552,7 @@ function convertCanvasToEscPosRaster(canvas, targetDots = 576) {
 }
 
 async function printViaRawBt(order) {
+  if (!/Android/i.test(navigator.userAgent)) return false;
   try {
     // 0 = ESC/POS Siêu Tốc (MẶC ĐỊNH - Cực nhanh < 10ms, không lag máy POS, chữ to rõ)
     // 1 = Đồ Họa Bitmap (Có dấu)
@@ -2575,13 +2576,13 @@ async function printViaRawBt(order) {
         console.log('RawBT WebSocket unavailable, fallback to Intent scheme:', wsErr.message);
       }
 
-      const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
-      const targetUrl = isChrome
-        ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
-        : 'rawbt:base64,' + base64Data;
-
-      _pendingRawBtOrder = { targetUrl, fallbackUrl: 'rawbt:base64,' + base64Data, time: Date.now() };
-      dispatchRawBtIntent(targetUrl, 'rawbt:base64,' + base64Data);
+      const rawbtUrl = 'rawbt:base64,' + base64Data;
+      if (!navigator.userActivation || !navigator.userActivation.isActive) {
+        _pendingRawBtOrder = { targetUrl: rawbtUrl, fallbackUrl: rawbtUrl, time: Date.now() };
+      } else {
+        _pendingRawBtOrder = null;
+      }
+      dispatchRawBtIntent(rawbtUrl, rawbtUrl);
       showToast('Đã gửi lệnh in siêu tốc tới máy in RawBT!', 'success');
       return true;
     }
@@ -2654,14 +2655,14 @@ async function printViaRawBt(order) {
       console.log('RawBT WebSocket unavailable, fallback to Intent scheme:', wsErr.message);
     }
 
-    // 2. Gửi qua RawBT bằng intent / scheme base64 chuẩn
-    const isChrome = /Chrome|CriOS/i.test(navigator.userAgent);
-    const targetUrl = isChrome
-      ? 'intent:base64,' + base64Data + '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dru.a402d.rawbtprinter;end;'
-      : 'rawbt:base64,' + base64Data;
-
-    _pendingRawBtOrder = { targetUrl, fallbackUrl: 'rawbt:base64,' + base64Data, time: Date.now() };
-    dispatchRawBtIntent(targetUrl, 'rawbt:base64,' + base64Data);
+    // 2. Gửi qua RawBT bằng scheme rawbt:base64 trực tiếp (không kèm package/browser_fallback_url để tránh nhảy sang Play Store)
+    const rawbtUrl = 'rawbt:base64,' + base64Data;
+    if (!navigator.userActivation || !navigator.userActivation.isActive) {
+      _pendingRawBtOrder = { targetUrl: rawbtUrl, fallbackUrl: rawbtUrl, time: Date.now() };
+    } else {
+      _pendingRawBtOrder = null;
+    }
+    dispatchRawBtIntent(rawbtUrl, rawbtUrl);
     showToast('Đã gửi hóa đơn in & cắt giấy qua RawBT!', 'success');
     return true;
   } catch (err) {
