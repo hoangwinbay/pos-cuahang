@@ -2403,17 +2403,16 @@ function loadHtml2CanvasScript() {
 
 // Gửi lệnh in trực tiếp qua WebSocket tới RawBT service (Chạy ngầm hoàn hảo, không cần User Gesture)
 function sendRawBtWebSocket(bytes) {
-  const tryHost = (host) => new Promise((resolve, reject) => {
+  const tryUrl = (url) => new Promise((resolve, reject) => {
     let ws = null;
     let timer = null;
     try {
-      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(`${proto}//${host}:40213/`);
+      ws = new WebSocket(url);
       ws.binaryType = 'arraybuffer';
       timer = setTimeout(() => {
         try { ws.close(); } catch (e) {}
         reject(new Error('RawBT ws timeout'));
-      }, 700);
+      }, 400);
 
       ws.onopen = () => {
         clearTimeout(timer);
@@ -2439,7 +2438,9 @@ function sendRawBtWebSocket(bytes) {
     }
   });
 
-  return tryHost('127.0.0.1').catch(() => tryHost('localhost'));
+  // Chrome cho phép ws:// tới loopback (localhost / 127.0.0.1) ngay cả từ trang https://
+  return tryUrl('ws://localhost:40213/')
+    .catch(() => tryUrl('ws://127.0.0.1:40213/'));
 }
 
 // Lưu lệnh in từ xa khi chưa có User Gesture; giải phóng ngay khi thu ngân chạm màn hình
