@@ -1,0 +1,51 @@
+name: Build POS Android APK
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'android-pos/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2'
+
+      - name: Build Debug APK
+        working-directory: android-pos
+        run: gradle assembleDebug --no-daemon
+
+      - name: Copy APK
+        run: cp android-pos/app/build/outputs/apk/debug/app-debug.apk pos-quay-in-usb.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-quay-in-usb-apk
+          path: pos-quay-in-usb.apk
+
+      - name: Publish APK Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: POS Quầy In USB (APK)
+          body: "Bản cài đặt APK cho máy POS Android 7+ in trực tiếp qua máy in nhiệt USB (SPR02), không cần RawBT."
+          files: pos-quay-in-usb.apk
+          make_latest: true
