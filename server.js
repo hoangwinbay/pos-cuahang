@@ -239,8 +239,11 @@ app.post('/api/auth/login', (req, res) => {
       // 1. Đăng nhập bằng Tên đăng nhập & Mật khẩu
       const cleanUser = String(username).trim().toLowerCase();
       const cleanPass = String(password).trim();
-      const candidate = db.prepare('SELECT * FROM users WHERE LOWER(username) = ? AND active = 1').get(cleanUser);
+      const candidate = db.prepare('SELECT * FROM users WHERE LOWER(username) = ?').get(cleanUser);
       if (candidate && (verifySecret(cleanPass, candidate.password) || (candidate.pin && verifySecret(cleanPass, candidate.pin)))) {
+        if (!candidate.active) {
+          return res.status(403).json({ error: 'Tài khoản này đã bị khóa. Vui lòng liên hệ Chủ Quán!' });
+        }
         user = candidate;
       }
     } else if (pin) {
@@ -279,93 +282,9 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
-// POST /api/auth/staff-join: Nhân viên quét mã QR trên điện thoại nhập tên & số điện thoại
+// Vô hiệu hóa cơ chế tự đăng ký không cần mật khẩu; mọi tài khoản do Admin quản lý
 app.post('/api/auth/staff-join', (req, res) => {
-  try {
-    const { name, phone, deviceId, deviceName, platform, deviceType } = req.body || {};
-
-    if (!name || !String(name).trim()) {
-      return res.status(400).json({ error: 'Vui lòng nhập họ và tên nhân viên!' });
-    }
-    if (!phone || !String(phone).trim()) {
-      return res.status(400).json({ error: 'Vui lòng nhập số điện thoại!' });
-    }
-
-    const cleanName = String(name).trim();
-    const cleanPhone = String(phone).trim().replace(/\s+/g, '');
-
-    if (cleanPhone.length < 8) {
-      return res.status(400).json({ error: 'Số điện thoại không hợp lệ (tối thiểu 8 chữ số)!' });
-    }
-
-    // 1. Tìm hoặc tạo tài khoản nhân viên trong bảng users
-    let user = db.prepare("SELECT * FROM users WHERE (phone = ? OR username = ?) AND role = 'staff'").get(cleanPhone, 'nv_' + cleanPhone);
-
-    if (user) {
-      if (user.active === 0) {
-        return res.status(403).json({ error: 'Tài khoản nhân viên này đã bị Chủ Quán khóa. Vui lòng liên hệ Chủ Quán để mở lại!' });
-      }
-      db.prepare('UPDATE users SET name = ?, phone = ? WHERE id = ?').run(cleanName, cleanPhone, user.id);
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
-    } else {
-      const username = 'nv_' + cleanPhone.replace(/[^0-9]/g, '');
-      const defaultPass = hashSecret('123456');
-      const defaultPin = hashSecret('1234');
-      const stmt = db.prepare(`
-        INSERT INTO users (username, password, name, role, pin, phone, active)
-        VALUES (?, ?, ?, 'staff', ?, ?, 1)
-      `);
-      const insertResult = stmt.run(username, defaultPass, cleanName, defaultPin, cleanPhone);
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(insertResult.lastInsertRowid);
-    }
-
-    // 2. Ghi nhận/cập nhật thiết bị của nhân viên
-    const devId = deviceId || ('device_' + (req.ip || 'unknown').replace(/[^a-zA-Z0-9]/g, '_'));
-    const cleanPlatform = platform || 'Mobile (Web)';
-    const staffDeviceName = deviceName && deviceName !== 'Thiết Bị' && !deviceName.startsWith('Điện Thoại')
-      ? deviceName 
-      : `${cleanName} (${cleanPlatform.includes('iOS') ? 'iPhone' : cleanPlatform.includes('Android') ? 'Android' : 'Điện thoại'})`;
-
-    const dev = trackDeviceActivity(req, {
-      deviceId: devId,
-      deviceName: staffDeviceName,
-      platform: cleanPlatform,
-      deviceType: deviceType || 'mobile',
-      role: 'staff',
-      userName: cleanName,
-      phone: cleanPhone
-    });
-
-    // 3. Tạo Token phiên làm việc cho nhân viên
-    const token = generateToken(user);
-
-    // 4. Báo qua SSE để cập nhật danh sách thiết bị
-    if (typeof broadcastTableChange === 'function') {
-      broadcastTableChange({
-        type: 'device_joined',
-        userName: cleanName,
-        phone: cleanPhone,
-        deviceId: devId
-      });
-    }
-
-    saveDataBackup(db);
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        phone: user.phone
-      },
-      device: dev
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  return res.status(403).json({ error: 'Vui lòng đăng nhập bằng tên đăng nhập và mật khẩu do Chủ Quán cấp!' });
 });
 
 app.get('/api/auth/me', (req, res) => {
