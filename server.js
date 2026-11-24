@@ -1438,12 +1438,33 @@ app.get('/api/server-info', requireAuth, (req, res) => {
   });
 });
 
+// Hàng đợi lệnh in gần đây (TTL 90s) làm kênh dự phòng khi SSE bị ngắt trên Render/WebView
+const recentPrintJobs = [];
+function getActiveRecentPrintJobs() {
+  const cutoff = Date.now() - 90000;
+  while (recentPrintJobs.length > 0 && recentPrintJobs[0].created_at < cutoff) {
+    recentPrintJobs.shift();
+  }
+  return recentPrintJobs;
+}
+function enqueueRemotePrintJob(job) {
+  getActiveRecentPrintJobs();
+  const entry = {
+    id: 'pj_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    created_at: Date.now(),
+    ...job
+  };
+  recentPrintJobs.push(entry);
+  return entry.id;
+}
+
 // 1. GET /api/tables/sync: Lấy dữ liệu tất cả bàn và trạng thái đơn bàn
 app.get('/api/tables/sync', requireAuth, (req, res) => {
   try {
     res.json({
       tables: getAllTableDefinitions(),
-      tableOrders: getAllActiveTableOrders()
+      tableOrders: getAllActiveTableOrders(),
+      pendingPrintJobs: getActiveRecentPrintJobs()
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1612,15 +1633,28 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
     const isConfirmed = isConfirmAction;
     const triggerPrint = isConfirmAction && Boolean(req.body.trigger_print);
 
+    const senderDeviceId = req.body.sender_device_id || null;
+    const senderName = req.body.sender_name || (req.user && req.user.name) || 'Nhân viên';
+    const printJobId = triggerPrint
+      ? enqueueRemotePrintJob({
+          type: 'table_order_confirmed',
+          table_name,
+          order_data: finalOrder,
+          sender_device_id: senderDeviceId,
+          sender_name: senderName
+        })
+      : null;
+
     broadcastTableUpdate({
       type: isConfirmAction ? 'table_order_confirmed' : 'table_order_updated',
       table_name,
       order_data: finalOrder,
       is_confirmed: isConfirmed,
       trigger_print: triggerPrint,
+      print_job_id: printJobId,
       action: req.body.action || 'sync',
-      sender_device_id: req.body.sender_device_id || null,
-      sender_name: req.body.sender_name || (req.user && req.user.name) || 'Nhân viên',
+      sender_device_id: senderDeviceId,
+      sender_name: senderName,
       all_table_orders: allOrders
     });
 
@@ -1728,10 +1762,20 @@ app.post('/api/print-job', requireAuth, (req, res) => {
   try {
     const { order, sender_device_id, sender_name, print_type } = req.body;
     if (!order) return res.status(400).json({ error: 'Thiếu thông tin đơn hàng để in!' });
+    const senderDeviceId = sender_device_id || null;
+    const senderName = sender_name || (req.user && req.user.name) || 'Nhân viên';
+    const printJobId = enqueueRemotePrintJob({
+      type: 'print_job',
+      sender_device_id: senderDeviceId,
+      sender_name: senderName,
+      print_type: print_type || 'receipt',
+      print_order: order
+    });
     broadcastTableUpdate({
       type: 'print_job',
-      sender_device_id: sender_device_id || null,
-      sender_name: sender_name || (req.user && req.user.name) || 'Nhân viên',
+      print_job_id: printJobId,
+      sender_device_id: senderDeviceId,
+      sender_name: senderName,
       print_type: print_type || 'receipt',
       print_order: order
     });

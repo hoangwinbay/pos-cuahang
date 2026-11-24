@@ -159,6 +159,55 @@ async function deleteTableOrderOnServer(tableName) {
   }
 }
 
+const _handledPrintJobIds = new Set();
+const _posSessionStartedAt = Date.now();
+
+async function handleIncomingRemotePrintJob(job, fromPolling = false) {
+  if (!job || !isPrintStationDevice()) return;
+  const jobId = job.id || job.print_job_id || null;
+  if (jobId && _handledPrintJobIds.has(jobId)) return;
+  // Khi polling dự phòng, bỏ qua các lệnh in cũ sinh ra trước lúc mở app POS để tránh in lại đơn cũ
+  if (fromPolling && job.created_at && job.created_at < _posSessionStartedAt - 3000) {
+    if (jobId) _handledPrintJobIds.add(jobId);
+    return;
+  }
+
+  const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+  const senderId = job.sender_device_id || null;
+  const isFromOtherDevice = Boolean(senderId && (!myDevId || senderId !== myDevId));
+  if (!isFromOtherDevice) return;
+
+  if (jobId) _handledPrintJobIds.add(jobId);
+
+  if (job.type === 'table_order_confirmed' && job.table_name && job.order_data) {
+    console.log('Trạm in quầy nhận đơn xác nhận từ thiết bị khác:', job.table_name);
+    playOrderNotificationSound();
+    const senderTag = job.sender_name ? ` (${job.sender_name})` : '';
+    showToast(`🔔 Bàn ${job.table_name} vừa xác nhận đặt món${senderTag}!`, 'success');
+
+    const printOrder = formatTableOrderForPrint(job.table_name, job.order_data);
+    if (printOrder && printOrder.items && printOrder.items.length > 0) {
+      window._explicitPrintAuthorized = true;
+      try {
+        await executeOrderPrint(printOrder, { isKitchen: true });
+      } finally {
+        window._explicitPrintAuthorized = false;
+      }
+    }
+  } else if (job.type === 'print_job' && job.print_order) {
+    console.log('Trạm in quầy nhận yêu cầu in thủ công:', job.print_order);
+    playOrderNotificationSound();
+    const senderTag = job.sender_name ? ` (${job.sender_name})` : '';
+    showToast(`🔔 Yêu cầu in từ ${job.sender_name || 'nhân viên'}: ${job.print_order.table_name || 'Bàn'}${senderTag}!`, 'success');
+    window._explicitPrintAuthorized = true;
+    try {
+      await executeOrderPrint(job.print_order, { isManual: true });
+    } finally {
+      window._explicitPrintAuthorized = false;
+    }
+  }
+}
+
 async function fetchAndApplyTableSync(silent = false) {
   // Tránh gọi sync định kỳ nếu chưa có token để không sinh lỗi 401
   const hasToken = !!((state && state.token) || (typeof localStorage !== 'undefined' && localStorage.getItem('pos_token')));
@@ -174,6 +223,11 @@ async function fetchAndApplyTableSync(silent = false) {
     }
     if (data && data.tableOrders !== undefined) {
       applyIncomingTableOrders(data.tableOrders);
+    }
+    if (data && Array.isArray(data.pendingPrintJobs) && data.pendingPrintJobs.length > 0) {
+      for (const job of data.pendingPrintJobs) {
+        await handleIncomingRemotePrintJob(job, true);
+      }
     }
     updateSyncIndicator(true);
   } catch (err) {
@@ -269,23 +323,7 @@ function connectTableEventSource() {
           // CHÚ Ý: CHỈ IN KHI type = 'table_order_confirmed', action = 'confirm_order', VÀ trigger_print = true
           // TUYỆT ĐỐI KHÔNG IN KHI CẬP NHẬT MÓN, BẤM CỘNG/TRỪ MÓN (table_order_updated)
           if (payload.type === 'table_order_confirmed' && payload.action === 'confirm_order' && payload.trigger_print === true) {
-            if (isFromOtherDevice && payload.table_name && payload.order_data) {
-              console.log('Trạm in quầy nhận đơn xác nhận từ thiết bị khác:', payload.table_name);
-              playOrderNotificationSound();
-              const senderTag = payload.sender_name ? ` (${payload.sender_name})` : '';
-              showToast(`🔔 Bàn ${payload.table_name} vừa xác nhận đặt món${senderTag}!`, 'success');
-
-              const printOrder = formatTableOrderForPrint(payload.table_name, payload.order_data);
-              if (printOrder && printOrder.items && printOrder.items.length > 0) {
-                window._explicitPrintAuthorized = true;
-                try {
-                  await executeOrderPrint(printOrder, { isKitchen: true });
-                } finally {
-                  window._explicitPrintAuthorized = false;
-                }
-                // showRemotePrintAlert(printOrder, payload.sender_name);
-              }
-            }
+            await handleIncomingRemotePrintJob(payload, false);
           }
 
           // 2. Trường hợp có bàn thanh toán thành công từ thiết bị khác
@@ -298,14 +336,7 @@ function connectTableEventSource() {
 
           // 3. Nhận yêu cầu in thủ công (In bill tạm tính / in lại)
           if (payload.type === 'print_job' && payload.print_order) {
-            if (isFromOtherDevice) {
-              console.log('Trạm in quầy nhận yêu cầu in thủ công:', payload.print_order);
-              playOrderNotificationSound();
-              const senderTag = payload.sender_name ? ` (${payload.sender_name})` : '';
-              showToast(`🔔 Yêu cầu in từ ${payload.sender_name || 'nhân viên'}: ${payload.print_order.table_name || 'Bàn'}${senderTag}!`, 'success');
-              executeOrderPrint(payload.print_order, { isManual: true });
-              // showRemotePrintAlert(payload.print_order, payload.sender_name);
-            }
+            await handleIncomingRemotePrintJob(payload, false);
           }
         }
         updateSyncIndicator(true);
@@ -327,11 +358,14 @@ function initRealtimeTableSync() {
     connectTableEventSource();
   }
 
-  // Polling dự phòng định kỳ mỗi 2.5 giây cho thiết bị ĐÃ ĐĂNG NHẬP
+  // Polling dự phòng định kỳ mỗi 2.5 giây cho thiết bị ĐÃ ĐĂNG NHẬP + tự nối lại SSE nếu bị đứt
   setInterval(() => {
     const isAuthed = !!((state && state.token) || (typeof localStorage !== 'undefined' && localStorage.getItem('pos_token')));
     if (isAuthed) {
       fetchAndApplyTableSync(true);
+      if (!tableEventSource || tableEventSource.readyState === EventSource.CLOSED) {
+        connectTableEventSource();
+      }
     }
   }, 2500);
 
@@ -1398,7 +1432,7 @@ function printKitchenSlip() {
   const kitchenNoteInput = document.getElementById('kitchenConfirmNote');
   const clearBtn = document.getElementById('btnClearKitchenNote');
   if (kitchenNoteInput) {
-    const existingNote = tableOrder?.note || document.getElementById('orderNoteInput')?.value.trim() || '';
+    const existingNote = document.getElementById('orderNoteInput')?.value.trim() || tableOrder?.note || '';
     kitchenNoteInput.value = existingNote;
     if (clearBtn) clearBtn.classList.toggle('hidden', !existingNote);
 
@@ -2043,7 +2077,7 @@ function generateReceiptHtml(order) {
       <span><strong>Giờ vào:</strong> ${timeStr}</span>
       <span><strong>Ngày:</strong> ${dateStr}</span>
     </div>
-    ${order.note ? `<div style="margin: 0 0 10px 0; font-size: 13px; line-height: 1.4;"><strong>Ghi chú:</strong> ${order.note}</div>` : ''}
+    ${order.note && String(order.note).trim() ? `<div style="margin: 0 0 10px 0; padding: 5px 6px; border: 1px dashed #000000; font-size: 13px; font-weight: 700; line-height: 1.4;">Ghi chú: ${String(order.note).trim()}</div>` : ''}
 
     <!-- Bảng món ăn (4 cột) -->
     <table style="width: 100%; border-collapse: collapse; margin: 0 0 6px 0;">
@@ -2625,15 +2659,27 @@ function renderReceiptToCanvas(order, targetDots = 576) {
     y += px(36);
 
     // Ghi chú (nếu có)
-    if (order.note) {
-      ctx.font = `600 ${metaFontSize}px ${FONT}`;
-      const noteLines = wrapCanvasText(ctx, `Ghi chú: ${order.note}`, W);
-      ctx.textAlign = 'left';
-      for (const line of noteLines) {
-        if (!measureOnly) ctx.fillText(line, padX, y);
-        y += px(30);
+    const cleanNote = order.note ? String(order.note).trim() : '';
+    if (cleanNote) {
+      ctx.font = `700 ${metaFontSize}px ${FONT}`;
+      const notePadX = px(10);
+      const notePadY = px(8);
+      const noteLineH = px(30);
+      const noteLines = wrapCanvasText(ctx, `Ghi chú: ${cleanNote}`, W - notePadX * 2);
+      const noteBoxH = noteLines.length * noteLineH + notePadY * 2 - px(6);
+      if (!measureOnly) {
+        ctx.save();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(1, px(1.5));
+        ctx.setLineDash([px(6), px(4)]);
+        ctx.strokeRect(padX, y, W, noteBoxH);
+        ctx.restore();
+
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        noteLines.forEach((line, idx) => ctx.fillText(line, padX + notePadX, y + notePadY + idx * noteLineH));
       }
-      y += px(6);
+      y += noteBoxH + px(10);
     }
     y += px(6);
 
@@ -3942,6 +3988,7 @@ function testPrintSample() {
     created_at: new Date().toISOString(),
     table_name: 'Bàn 5',
     source: 'taicho',
+    note: 'Không hành, ít cay',
     cashier_name: (state.currentUser && state.currentUser.name) || 'Thu ngân',
     payment_method: 'cash',
     subtotal: 70000,
