@@ -179,13 +179,16 @@ async function handleIncomingRemotePrintJob(job, fromPolling = false) {
 
   if (jobId) _handledPrintJobIds.add(jobId);
 
-  if (job.type === 'table_order_confirmed' && job.table_name && job.order_data) {
+  if (job.type === 'table_order_confirmed' && job.table_name && (job.print_order || job.order_data)) {
     console.log('Trạm in quầy nhận đơn xác nhận từ thiết bị khác:', job.table_name);
     playOrderNotificationSound();
     const senderTag = job.sender_name ? ` (${job.sender_name})` : '';
-    showToast(`🔔 Bàn ${job.table_name} vừa xác nhận đặt món${senderTag}!`, 'success');
+    const printOrder = (job.print_order && Array.isArray(job.print_order.items) && job.print_order.items.length > 0)
+      ? job.print_order
+      : formatTableOrderForPrint(job.table_name, job.order_data);
+    const extraTag = printOrder?.is_additional ? ' (GỌI THÊM)' : '';
+    showToast(`🔔 Bàn ${job.table_name}${extraTag} vừa xác nhận đặt món${senderTag}!`, 'success');
 
-    const printOrder = formatTableOrderForPrint(job.table_name, job.order_data);
     if (printOrder && printOrder.items && printOrder.items.length > 0) {
       window._explicitPrintAuthorized = true;
       try {
@@ -1385,6 +1388,38 @@ function appendKitchenNote(tag) {
 window.clearKitchenConfirmNote = clearKitchenConfirmNote;
 window.appendKitchenNote = appendKitchenNote;
 
+function getItemPrintKey(item) {
+  return String(item?.id ?? item?.product_id ?? item?.product_name ?? item?.name ?? '');
+}
+
+function buildPrintedQuantitiesMap(items) {
+  const map = {};
+  for (const it of (items || [])) {
+    const key = getItemPrintKey(it);
+    const qty = Number(it.quantity) || 0;
+    if (key && qty > 0) map[key] = (map[key] || 0) + qty;
+  }
+  return map;
+}
+
+function getPendingKitchenPrint(tableOrder) {
+  const allItems = tableOrder?.items || [];
+  const printedMap = tableOrder?.printedQuantities;
+  const hasPrintedBefore = Boolean(tableOrder?.hasPrintedKitchen && printedMap && Object.keys(printedMap).length > 0);
+  if (!hasPrintedBefore) {
+    return { isAdditional: false, items: allItems };
+  }
+  const deltaItems = [];
+  for (const it of allItems) {
+    const key = getItemPrintKey(it);
+    const diff = (Number(it.quantity) || 0) - (Number(printedMap[key]) || 0);
+    if (diff > 0) {
+      deltaItems.push({ ...it, quantity: diff });
+    }
+  }
+  return { isAdditional: true, items: deltaItems };
+}
+
 // Mở popup xác nhận in phiếu báo bếp & đặt bàn
 function printKitchenSlip() {
   const currentTable = state.currentTable;
@@ -1396,8 +1431,25 @@ function printKitchenSlip() {
     return;
   }
 
-  const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const totalCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  const { isAdditional, items: pendingItems } = getPendingKitchenPrint(tableOrder);
+  if (isAdditional && pendingItems.length === 0) {
+    if (!tableOrder.confirmed) {
+      tableOrder.confirmed = true;
+      tableOrder.printedQuantities = buildPrintedQuantitiesMap(items);
+      localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
+      syncTableOrderToServer(currentTable);
+      closeTableCartDrawer();
+      showToast(`Đã cập nhật ${currentTable} (không có món gọi thêm để in)!`, 'info');
+      if (state.activeScreen !== 'tables') showTableFloor();
+    } else {
+      showToast('Các món trên bàn đã được in báo bếp rồi!', 'info');
+    }
+    return;
+  }
+
+  const fullAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const totalAmount = pendingItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const totalCount = pendingItems.reduce((sum, item) => sum + item.quantity, 0);
 
   const source = tableOrder?.source || state.currentSource || 'taicho';
   const sourceLabel = source === 'mangve' ? 'MANG VỀ' : 'TẠI CHỖ';
@@ -1406,17 +1458,17 @@ function printKitchenSlip() {
   const totalEl = document.getElementById('kitchenConfirmTotal');
   const countEl = document.getElementById('kitchenConfirmCount');
 
-  if (tableEl) tableEl.textContent = `${currentTable} • ${sourceLabel}`;
+  if (tableEl) tableEl.textContent = isAdditional ? `${currentTable} (GỌI THÊM) • ${sourceLabel}` : `${currentTable} • ${sourceLabel}`;
   if (totalEl) totalEl.textContent = formatMoney(totalAmount);
-  if (countEl) countEl.textContent = `${totalCount} món`;
+  if (countEl) countEl.textContent = isAdditional ? `Gọi thêm ${totalCount} món • Tổng bàn: ${formatMoney(fullAmount)}` : `${totalCount} món`;
 
-  // Render danh sách đầy đủ các món để nhân viên xác định
+  // Render danh sách món sắp in (nếu gọi thêm thì chỉ hiện phần món mới thêm)
   const itemsListEl = document.getElementById('kitchenConfirmItemsList');
   if (itemsListEl) {
-    itemsListEl.innerHTML = items.map((it, idx) => `
+    itemsListEl.innerHTML = pendingItems.map((it, idx) => `
       <div class="py-2 flex items-center justify-between text-xs">
         <div class="truncate pr-2">
-          <div class="font-bold text-slate-800 truncate">${idx + 1}. ${it.name}</div>
+          <div class="font-bold text-slate-800 truncate">${idx + 1}. ${it.name}${isAdditional ? ' <span class="text-amber-600">(+thêm)</span>' : ''}</div>
           <div class="text-[11px] text-slate-500 font-semibold">
             SL: ${it.quantity} phần x ${formatMoney(it.price)}
           </div>
@@ -1432,7 +1484,8 @@ function printKitchenSlip() {
   const kitchenNoteInput = document.getElementById('kitchenConfirmNote');
   const clearBtn = document.getElementById('btnClearKitchenNote');
   if (kitchenNoteInput) {
-    const existingNote = document.getElementById('orderNoteInput')?.value.trim() || tableOrder?.note || '';
+    // Gọi thêm để trống ô ghi chú để tránh lặp lại ghi chú của lượt đặt trước
+    const existingNote = isAdditional ? '' : (document.getElementById('orderNoteInput')?.value.trim() || tableOrder?.note || '');
     kitchenNoteInput.value = existingNote;
     if (clearBtn) clearBtn.classList.toggle('hidden', !existingNote);
 
@@ -1479,27 +1532,36 @@ function executePrintKitchenSlip() {
     return;
   }
 
+  const { isAdditional, items: printItems } = getPendingKitchenPrint(tableOrder);
+  if (printItems.length === 0) {
+    closeKitchenConfirmModal();
+    showToast('Không có món gọi thêm mới để in!', 'info');
+    return;
+  }
+
   const totalAmount = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const printAmount = printItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   
   // Lấy ghi chú từ modal xác nhận (nếu có nhập) hoặc từ giỏ hàng / order cũ
   const modalNoteInput = document.getElementById('kitchenConfirmNote');
-  const note = modalNoteInput ? modalNoteInput.value.trim() : (document.getElementById('orderNoteInput')?.value.trim() || tableOrder.note || '');
+  const note = modalNoteInput ? modalNoteInput.value.trim() : (isAdditional ? '' : (document.getElementById('orderNoteInput')?.value.trim() || tableOrder.note || ''));
 
   // Đảm bảo bàn đã có thời gian bắt đầu và ghi chú
   if (!tableOrder.startTime) {
     tableOrder.startTime = Date.now();
   }
-  tableOrder.note = note;
+  tableOrder.note = isAdditional ? [tableOrder.note, note].filter(Boolean).join(' | ') : note;
   tableOrder.hasPrintedKitchen = true;
   tableOrder.confirmed = true;
   tableOrder.confirmedAt = new Date().toISOString();
   tableOrder.subtotal = totalAmount;
   tableOrder.total = totalAmount;
+  tableOrder.printedQuantities = buildPrintedQuantitiesMap(items);
 
   // Đồng bộ lại ô ghi chú trong giỏ hàng nếu có
   const cartNoteInput = document.getElementById('orderNoteInput');
-  if (cartNoteInput) cartNoteInput.value = note;
-  if (typeof updateOrderNoteDisplay === 'function') updateOrderNoteDisplay(note);
+  if (cartNoteInput) cartNoteInput.value = tableOrder.note;
+  if (typeof updateOrderNoteDisplay === 'function') updateOrderNoteDisplay(tableOrder.note);
 
   const now = new Date();
   const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
@@ -1510,17 +1572,18 @@ function executePrintKitchenSlip() {
   localStorage.setItem('pos_table_orders', JSON.stringify(state.tableOrders));
 
   const orderForPrint = {
-    order_code: kitchenCode,
+    order_code: isAdditional ? `${kitchenCode}-THEM` : kitchenCode,
     created_at: new Date().toISOString(),
     table_name: currentTable,
     source: tableOrder.source || state.currentSource || 'taicho',
     cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
     note: note,
     payment_method: 'cash',
-    subtotal: totalAmount,
+    is_additional: isAdditional,
+    subtotal: printAmount,
     discount: 0,
-    total: totalAmount,
-    items: items.map(item => ({
+    total: printAmount,
+    items: printItems.map(item => ({
       product_name: item.name,
       quantity: item.quantity,
       price: item.price,
@@ -1544,7 +1607,7 @@ function executePrintKitchenSlip() {
     printEscPosBluetooth(orderForPrint);
   } else {
     // Điện thoại nhân viên: Không gọi in cục bộ
-    showToast(`Đã gửi đơn ${currentTable} thành công!`, 'success');
+    showToast(`Đã gửi đơn ${isAdditional ? 'gọi thêm ' : ''}${currentTable} thành công!`, 'success');
   }
 
   // 3. ĐỒNG BỘ NỀN LÊN SERVER (NON-BLOCKING) VỚI CỜ XÁC NHẬN ĐƠN (TRIGGER PRINT TẠI QUẦY)
@@ -1556,6 +1619,7 @@ function executePrintKitchenSlip() {
     body: JSON.stringify({
       table_name: currentTable,
       order_data: tableOrder,
+      print_order: orderForPrint,
       sender_device_id: myDevId,
       sender_name: staffName,
       check_conflict: true,
@@ -1573,7 +1637,7 @@ function executePrintKitchenSlip() {
   });
 
   // 4. CHUYỂN VỀ SƠ ĐỒ BÀN (LÚC NÀY BÀN HIỆN XANH)
-  showToast(`Đã xác nhận món ${currentTable}!`, 'success');
+  showToast(`Đã xác nhận ${isAdditional ? 'gọi thêm ' : 'món '}${currentTable}!`, 'success');
   if (state.activeScreen !== 'tables') showTableFloor();
 }
 
@@ -1642,12 +1706,42 @@ async function resolveConflictMerge() {
   const incomingOrder = pendingConflictData.incoming_order || state.tableOrders[tableName];
 
   try {
+    const incItems = incomingOrder.items || [];
+    const incTotal = incItems.reduce((s, it) => s + (it.price * it.quantity), 0);
+    const orderForPrint = {
+      order_code: (state.tableOrders[tableName]?.orderCode || 'BEP-GOP') + '-THEM',
+      created_at: new Date().toISOString(),
+      table_name: tableName,
+      source: incomingOrder.source || state.tableOrders[tableName]?.source || 'taicho',
+      cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
+      note: incomingOrder.note || 'Gọi thêm',
+      payment_method: 'cash',
+      is_additional: true,
+      subtotal: incTotal,
+      discount: 0,
+      total: incTotal,
+      items: incItems.map(item => ({
+        product_name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.price * item.quantity
+      }))
+    };
+
+    const myDevId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+    const staffName = (state.currentUser && state.currentUser.name) || (state.user && state.user.name) || localStorage.getItem('pos_staff_name') || 'Nhân viên';
+
     const res = await api('/api/tables/order', {
       method: 'POST',
       body: JSON.stringify({
         table_name: tableName,
         order_data: incomingOrder,
-        merge: true
+        print_order: orderForPrint,
+        merge: true,
+        action: 'confirm_order',
+        trigger_print: incItems.length > 0,
+        sender_device_id: myDevId,
+        sender_name: staffName
       })
     });
 
@@ -1659,27 +1753,6 @@ async function resolveConflictMerge() {
     closeTableConflictModal();
     closeTableCartDrawer();
 
-    // In phiếu các món gọi thêm cho bếp
-    const incItems = incomingOrder.items || [];
-    const incTotal = incItems.reduce((s, it) => s + (it.price * it.quantity), 0);
-    const orderForPrint = {
-      order_code: (state.tableOrders[tableName]?.orderCode || 'BEP-GOP') + '-THEM',
-      created_at: new Date().toISOString(),
-      table_name: tableName + ' (GỘP THÊM)',
-      source: incomingOrder.source || state.tableOrders[tableName]?.source || 'taicho',
-      cashier_name: state.currentUser ? state.currentUser.name : 'Nhân Viên',
-      note: incomingOrder.note || 'Gọi thêm',
-      payment_method: 'cash',
-      subtotal: incTotal,
-      discount: 0,
-      total: incTotal,
-      items: incItems.map(item => ({
-        product_name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        total: item.price * item.quantity
-      }))
-    };
     if (isPrintStationDevice()) {
       window._explicitPrintAuthorized = true;
       try {
@@ -1691,7 +1764,7 @@ async function resolveConflictMerge() {
       printEscPosBluetooth(orderForPrint);
     }
 
-    showToast(`Đã gộp món vào ${tableName} và in phiếu báo bếp thành công!`);
+    showToast(`Đã gộp món vào ${tableName} và in phiếu gọi thêm thành công!`);
     showTableFloor();
   } catch (err) {
     showToast('Lỗi khi gộp món: ' + (err.message || 'Vui lòng thử lại'), 'error');
@@ -2059,10 +2132,12 @@ function generateReceiptHtml(order) {
                         order.payment_method === 'chuyenkhoan';
   const paymentMethodLabel = isChuyenKhoan ? 'Thanh toán chuyển khoản' : 'Thanh toán tiền mặt';
 
+  const receiptTitle = order.is_additional ? 'PHIẾU GỌI THÊM' : 'HÓA ĐƠN THANH TOÁN';
+
   return `
     <!-- Tiêu đề -->
     <div style="font-size: 17px; font-weight: 900; text-align: center; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.4px;">
-      HÓA ĐƠN THANH TOÁN
+      ${receiptTitle}
     </div>
 
     <!-- Khung Bàn & Nguồn -->
@@ -2291,9 +2366,12 @@ function generateEscPosPayload(order) {
   const timeStr = String(createdAt.getHours()).padStart(2, '0') + ':' + 
                   String(createdAt.getMinutes()).padStart(2, '0');
 
+  const escTitle = order.is_additional
+    ? (withAccents ? 'PHIẾU GỌI THÊM\n\n' : 'PHIEU GOI THEM\n\n')
+    : (withAccents ? 'HÓA ĐƠN THANH TOÁN\n\n' : 'HOA DON THANH TOAN\n\n');
   let content = '\x1B\x40'; // Reset / Khởi tạo máy in
   content += '\x1B\x61\x01'; // Canh giữa
-  content += '\x1B\x45\x01\x1D\x21\x01' + (withAccents ? 'HÓA ĐƠN THANH TOÁN\n\n' : 'HOA DON THANH TOAN\n\n') + '\x1D\x21\x00\x1B\x45\x00';
+  content += '\x1B\x45\x01\x1D\x21\x01' + escTitle + '\x1D\x21\x00\x1B\x45\x00';
   
   // Khung viền bàn ăn chuẩn như mẫu Windows (Đường kẻ đứt trên dưới, chữ bàn to đậm gấp đôi)
   content += '\x1B\x61\x00'; // Canh trái để viền chuẩn
@@ -2617,7 +2695,8 @@ function renderReceiptToCanvas(order, targetDots = 576) {
     ctx.font = `900 ${px(30)}px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    if (!measureOnly) ctx.fillText('HÓA ĐƠN THANH TOÁN', targetDots / 2, y);
+    const canvasTitle = order.is_additional ? 'PHIẾU GỌI THÊM' : 'HÓA ĐƠN THANH TOÁN';
+    if (!measureOnly) ctx.fillText(canvasTitle, targetDots / 2, y);
     y += px(42);
 
     // 2. Khung Bàn & Nguồn (căn giữa tuyệt đối theo chiều dọc)
@@ -2633,7 +2712,7 @@ function renderReceiptToCanvas(order, targetDots = 576) {
       ctx.font = `900 ${px(36)}px ${FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${tableDisplay} - ${sourceLabel}`, targetDots / 2, y + boxH / 2 + px(1));
+      ctx.fillText(`${tableDisplay} - ${sourceLabel}`, targetDots / 2, y + boxH / 2 + px(1), W - px(16));
     }
     y += boxH + px(20);
 

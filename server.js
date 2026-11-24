@@ -1515,7 +1515,7 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
 
     // 2. Xử lý gộp món khi nhân viên xác nhận Gộp (merge: true)
     if (merge && existingOrder && existingOrder.items && Array.isArray(existingOrder.items)) {
-      const mergedItems = [...existingOrder.items];
+      const mergedItems = existingOrder.items.map(it => ({ ...it }));
       if (incomingOrder.items && Array.isArray(incomingOrder.items)) {
         for (const incItem of incomingOrder.items) {
           const found = mergedItems.find(it => it.id === incItem.id);
@@ -1526,9 +1526,21 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
           }
         }
       }
+      const mergedPrinted = {};
+      for (const it of mergedItems) {
+        const key = String(it.id ?? it.product_id ?? it.product_name ?? it.name ?? '');
+        const qty = Number(it.quantity) || 0;
+        if (key && qty > 0) mergedPrinted[key] = (mergedPrinted[key] || 0) + qty;
+      }
+      const mergedTotal = mergedItems.reduce((s, it) => s + ((Number(it.price) || 0) * (Number(it.quantity) || 0)), 0);
       finalOrder = {
         ...existingOrder,
         items: mergedItems,
+        subtotal: mergedTotal,
+        total: mergedTotal,
+        hasPrintedKitchen: true,
+        confirmed: true,
+        printedQuantities: mergedPrinted,
         note: [existingOrder.note, incomingOrder.note].filter(Boolean).join(' | '),
         updated_at: new Date().toISOString()
       };
@@ -1551,6 +1563,7 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
     const isConfirmAction = req.body.action === 'confirm_order';
     const isConfirmed = isConfirmAction;
     const triggerPrint = isConfirmAction && Boolean(req.body.trigger_print);
+    const printOrder = req.body.print_order || null;
 
     const senderDeviceId = req.body.sender_device_id || null;
     const senderName = req.body.sender_name || (req.user && req.user.name) || 'Nhân viên';
@@ -1559,6 +1572,7 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
           type: 'table_order_confirmed',
           table_name,
           order_data: finalOrder,
+          print_order: printOrder,
           sender_device_id: senderDeviceId,
           sender_name: senderName
         })
@@ -1568,6 +1582,7 @@ app.post('/api/tables/order', requireAuth, (req, res) => {
       type: isConfirmAction ? 'table_order_confirmed' : 'table_order_updated',
       table_name,
       order_data: finalOrder,
+      print_order: printOrder,
       is_confirmed: isConfirmed,
       trigger_print: triggerPrint,
       print_job_id: printJobId,
